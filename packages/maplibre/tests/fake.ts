@@ -7,6 +7,7 @@ export class FakeMap implements Renderer {
   calls: Call[] = [];
   order: string[] = [];
   sources = new Set<string>();
+  layerSources = new Map<string, string>();
 
   private log(name: string, ...args: unknown[]) {
     this.calls.push([name, ...args]);
@@ -21,16 +22,29 @@ export class FakeMap implements Renderer {
     this.log("addSource", id, source);
   }
   removeSource(id: string) {
+    // MapLibre throws here, so the fake has to as well or the tests prove nothing.
+    const user = [...this.layerSources].find(([, source]) => source === id);
+    if (user) {
+      throw new Error(`Source "${id}" cannot be removed while ${user[0]} is using it.`);
+    }
     this.sources.delete(id);
     this.log("removeSource", id);
   }
   addLayer(spec: Record<string, unknown>, before?: string) {
     const id = spec["id"] as string;
+    const source = spec["source"] as string | undefined;
+    if (source) {
+      if (!this.sources.has(source)) {
+        throw new Error(`Layer ${id} was added before its source ${source}.`);
+      }
+      this.layerSources.set(id, source);
+    }
     const at = before ? this.order.indexOf(before) : this.order.length;
     this.order.splice(at === -1 ? this.order.length : at, 0, id);
     this.log("addLayer", spec, before);
   }
   removeLayer(id: string) {
+    this.layerSources.delete(id);
     this.order = this.order.filter((l) => l !== id);
     this.log("removeLayer", id);
   }
@@ -69,5 +83,6 @@ export class FakeMap implements Renderer {
   wipe() {
     this.order = [];
     this.sources.clear();
+    this.layerSources.clear();
   }
 }

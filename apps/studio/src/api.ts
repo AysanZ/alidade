@@ -25,6 +25,16 @@ export async function uploadFile(file: File): Promise<RegisteredLayer> {
   return json<RegisteredLayer>(await fetch("/api/layers/upload", { method: "POST", body }));
 }
 
+export async function addFromUrl(url: string, name?: string): Promise<RegisteredLayer> {
+  return json<RegisteredLayer>(
+    await fetch("/api/layers/from-url", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url, name }),
+    }),
+  );
+}
+
 export async function listLayers(): Promise<RegisteredLayer[]> {
   const { layers } = await json<{ layers: RegisteredLayer[] }>(await fetch("/api/layers"));
   return layers;

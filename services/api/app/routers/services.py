@@ -1,24 +1,18 @@
-from urllib.parse import urlparse
-
 import httpx
 from fastapi import APIRouter, HTTPException
 
 from ..capabilities import parse
+from ..net import UnsafeUrl, check_public_url
 
 router = APIRouter(prefix="/api/services", tags=["services"])
-
-# The server fetches a URL the user typed, so keep the door narrow.
-ALLOWED_SCHEMES = {"http", "https"}
-BLOCKED_HOSTS = {"169.254.169.254", "metadata.google.internal"}
 
 
 @router.get("/wms/capabilities")
 async def wms_capabilities(url: str, version: str = "1.3.0") -> dict:
-    parsed = urlparse(url)
-    if parsed.scheme not in ALLOWED_SCHEMES or not parsed.hostname:
-        raise HTTPException(400, "A WMS URL has to be http or https.")
-    if parsed.hostname in BLOCKED_HOSTS:
-        raise HTTPException(400, "That host is not reachable from here.")
+    try:
+        check_public_url(url)
+    except UnsafeUrl as error:
+        raise HTTPException(400, str(error)) from error
 
     params = {"service": "WMS", "request": "GetCapabilities", "version": version}
     try:

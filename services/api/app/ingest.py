@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .config import settings
 from .naming import check_identifier, table_name
+from .net import check_public_url
 
 # What ogr2ogr will read. Anything else is refused before it touches the disk.
 EXTENSIONS = {".geojson", ".json", ".zip", ".gpkg", ".kml", ".gpx", ".shp"}
@@ -24,7 +25,6 @@ class Imported:
     source_crs: str
     feature_count: int
     fields: list[str]
-    extent: dict[str, float]
 
 
 async def run(*args: str) -> str:
@@ -42,8 +42,14 @@ def ogr_path(path: Path) -> str:
     return f"/vsizip/{path}" if path.suffix.lower() == ".zip" else str(path)
 
 
-async def describe_source(path: Path) -> dict:
-    raw = await run("ogrinfo", "-json", "-so", ogr_path(path))
+def ogr_url(url: str) -> str:
+    """The same virtual file system reads over HTTP, and over HTTP into a zip."""
+    checked = check_public_url(url)
+    return f"/vsizip/vsicurl/{checked}" if checked.lower().endswith(".zip") else f"/vsicurl/{checked}"
+
+
+async def describe(source_path: str) -> dict:
+    raw = await run("ogrinfo", "-json", "-so", source_path)
     info = json.loads(raw)
     layers = info.get("layers") or []
     if not layers:
@@ -61,8 +67,16 @@ def crs_of(layer: dict) -> str:
 async def import_file(path: Path, original_name: str) -> Imported:
     if path.suffix.lower() not in EXTENSIONS:
         raise IngestError(f"Alidade cannot read {path.suffix} files.")
+    return await _import(ogr_path(path), original_name)
 
-    source = await describe_source(path)
+
+async def import_url(url: str, name: str) -> Imported:
+    """Import straight from a link, without the file ever touching our disk."""
+    return await _import(ogr_url(url), name)
+
+
+async def _import(source_path: str, original_name: str) -> Imported:
+    source = await describe(source_path)
     table = check_identifier(table_name(original_name, secrets.token_hex(3)))
 
     await run(
@@ -70,7 +84,7 @@ async def import_file(path: Path, original_name: str) -> Imported:
         "-f",
         "PostgreSQL",
         settings.ogr_dsn,
-        ogr_path(path),
+        source_path,
         "-nln",
         table,
         "-overwrite",
@@ -92,5 +106,4 @@ async def import_file(path: Path, original_name: str) -> Imported:
         source_crs=crs_of(source),
         feature_count=int(source.get("featureCount") or 0),
         fields=[f["name"] for f in source.get("fields", [])],
-        extent={},
     )

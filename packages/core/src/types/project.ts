@@ -141,7 +141,12 @@ export interface LayerNode {
   labels?: LabelStyle;
   filter?: FilterNode;
   /** Kept for the interface, never used for rendering. */
-  metadata?: { sourceCrs?: string; featureCount?: number; fields?: string[] };
+  metadata?: {
+    sourceCrs?: string;
+    featureCount?: number;
+    fields?: string[];
+    extent?: { west: number; south: number; east: number; north: number };
+  };
 }
 
 export interface GroupNode {
@@ -176,8 +181,11 @@ export interface BasemapTiles {
 export interface Basemap {
   id: string;
   name: string;
+  /** A heading in the gallery. Carries no meaning to the renderer. */
+  group?: string;
   /** Shows through wherever the tiles have not loaded, so it is never optional. */
   background: string;
+  opacity?: number;
   raster?: BasemapTiles;
   /**
    * A labels-only overlay. It is compiled into the labels slot, above the user's

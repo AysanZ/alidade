@@ -13,9 +13,10 @@ Working now: a table of contents grouped by slot, a basemap gallery on open tile
 a scale bar in three unit systems, and a coordinate readout in decimal degrees, DMS
 or UTM.
 
-Data goes in two ways. Upload a GeoJSON, zipped Shapefile, GeoPackage, KML or GPX
+Data goes in three ways. Upload a GeoJSON, zipped Shapefile, GeoPackage, KML or GPX
 and it is reprojected by ogr2ogr, written to PostGIS and served back as vector tiles
-in the same request. Or point Alidade at a WMS and pick a layer, style and format
+in the same request. Paste a link and GDAL reads it over HTTP without it ever
+touching your disk. Or point Alidade at a WMS and pick a layer, style and format
 from what the server advertises in GetCapabilities.
 
 Nothing here needs an API key. The basemaps are CARTO and Esri tiles and the
@@ -74,7 +75,7 @@ not a published package.
 
 ```bash
 pnpm install
-pnpm test        # 65 tests, Node only: no browser, no WebGL
+pnpm test        # 76 tests, Node only: no browser, no WebGL
 pnpm typecheck
 ```
 

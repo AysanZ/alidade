@@ -57,7 +57,11 @@ export const demoProject: MapProject = {
             noDataColor: "#3a3a40",
             stroke: { color: "#0a0a0b", width: 0.6 },
           },
-          metadata: { sourceCrs: "EPSG:32639", fields: ["ward_id", "name", "density"] },
+          metadata: {
+            sourceCrs: "EPSG:32639",
+            fields: ["ward_id", "name", "density"],
+            extent: { west: 51.2, south: 35.6, east: 51.6, north: 35.83 },
+          },
         },
       ],
     },

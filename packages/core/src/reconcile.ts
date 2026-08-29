@@ -1,6 +1,6 @@
 import { compile } from "./compile";
 import type { EngineLayer, Op } from "./types/ops";
-import type { MapProject } from "./types/project";
+import type { MapProject, Source } from "./types/project";
 
 /**
  * Diff two project states and produce the operations between them.
@@ -10,58 +10,73 @@ import type { MapProject } from "./types/project";
  */
 export function reconcile(prev: MapProject | null, next: MapProject): Op[] {
   const ops: Op[] = [];
-  const a = prev
-    ? compile(prev)
-    : { sources: {} as Record<string, never>, layers: [] as EngineLayer[] };
+  const empty = { sources: {} as Record<string, Source>, layers: [] as EngineLayer[] };
+  const a = prev ? compile(prev) : empty;
   const b = compile(next);
 
-  /* sources: additions first, removals only once nothing reads them any more */
-  const orphaned = Object.keys(a.sources).filter((id) => !(id in b.sources));
+  /* which sources are new, gone, or the same name holding different tiles */
+  const gone = Object.keys(a.sources).filter((id) => !(id in b.sources));
+  const added: string[] = [];
+  const changed: string[] = [];
   for (const [id, source] of Object.entries(b.sources)) {
-    const before = (a.sources as Record<string, unknown>)[id];
-    if (before === undefined) ops.push({ t: "source.add", id, source });
-    else if (!same(before, source)) {
-      ops.push({ t: "source.remove", id });
-      ops.push({ t: "source.add", id, source });
-    }
+    if (!(id in a.sources)) added.push(id);
+    else if (!same(a.sources[id], source)) changed.push(id);
   }
+  const replaced = new Set(changed);
 
   const was = new Map(a.layers.map((l) => [l.id, l]));
   const will = new Map(b.layers.map((l) => [l.id, l]));
 
-  /* removed */
-  for (const l of a.layers) if (!will.has(l.id)) ops.push({ t: "layer.remove", id: l.id });
-  for (const id of orphaned) ops.push({ t: "source.remove", id });
+  /*
+   * A renderer will not let a source be removed while a layer still reads it, so
+   * anything pointing at a replaced source comes down first and goes back up
+   * afterwards, even when the layer itself did not change. This is what a basemap
+   * swap looks like from here.
+   */
+  const takenDown = a.layers.filter(
+    (l) => !will.has(l.id) || (l.source !== undefined && replaced.has(l.source)),
+  );
+  const down = new Set(takenDown.map((l) => l.id));
+  for (const l of takenDown) ops.push({ t: "layer.remove", id: l.id });
 
-  /* added, each placed under the first layer above it that already exists */
+  for (const id of [...gone, ...changed]) ops.push({ t: "source.remove", id });
+  for (const id of [...added, ...changed]) {
+    ops.push({ t: "source.add", id, source: b.sources[id]! });
+  }
+
+  /* back up, each placed under the first layer above it that is already there */
+  const missing = (id: string) => !was.has(id) || down.has(id);
   for (let i = 0; i < b.layers.length; i++) {
-    const l = b.layers[i]!;
-    if (was.has(l.id)) continue;
+    const layer = b.layers[i]!;
+    if (!missing(layer.id)) continue;
     let before: string | undefined;
     for (let j = i + 1; j < b.layers.length; j++) {
       const above = b.layers[j]!.id;
-      if (was.has(above)) {
+      if (!missing(above)) {
         before = above;
         break;
       }
     }
-    ops.push(before ? { t: "layer.add", spec: l, before } : { t: "layer.add", spec: l });
+    ops.push(before ? { t: "layer.add", spec: layer, before } : { t: "layer.add", spec: layer });
   }
 
-  /* changed */
-  for (const l of b.layers) {
-    const old = was.get(l.id);
-    if (!old) continue;
-    ops.push(...diffProps(l.id, "layer.paint", old.paint, l.paint));
-    ops.push(...diffProps(l.id, "layer.layout", old.layout, l.layout));
-    if (!same(old.filter, l.filter)) ops.push({ t: "layer.filter", id: l.id, value: l.filter ?? null });
-    if (old.minzoom !== l.minzoom || old.maxzoom !== l.maxzoom) {
-      ops.push({ t: "layer.zoom", id: l.id, minzoom: l.minzoom, maxzoom: l.maxzoom });
+  /* properties, for the layers that stayed put */
+  for (const layer of b.layers) {
+    const old = was.get(layer.id);
+    if (!old || down.has(layer.id)) continue;
+    ops.push(...diffProps(layer.id, "layer.paint", old.paint, layer.paint));
+    ops.push(...diffProps(layer.id, "layer.layout", old.layout, layer.layout));
+    if (!same(old.filter, layer.filter)) {
+      ops.push({ t: "layer.filter", id: layer.id, value: layer.filter ?? null });
+    }
+    if (old.minzoom !== layer.minzoom || old.maxzoom !== layer.maxzoom) {
+      ops.push({ t: "layer.zoom", id: layer.id, minzoom: layer.minzoom, maxzoom: layer.maxzoom });
     }
   }
 
   /* order: reordering never destroys and rebuilds a layer */
-  ops.push(...moves(orderAfterAddsAndRemoves(a.layers, b.layers), b.layers.map((l) => l.id)));
+  const standing = a.layers.filter((l) => !down.has(l.id)).map((l) => l.id);
+  ops.push(...moves(orderAfterAddsAndRemoves(standing, b.layers, missing), b.layers.map((l) => l.id)));
 
   /* camera and environment */
   if (!prev || !same(prev.view, next.view)) ops.push({ t: "camera.set", view: next.view });
@@ -94,23 +109,25 @@ function diffProps(
   return ops;
 }
 
-/** Where the renderer stands once adds and removes have been applied. */
-function orderAfterAddsAndRemoves(a: EngineLayer[], b: EngineLayer[]): string[] {
-  const will = new Set(b.map((l) => l.id));
-  const order = a.filter((l) => will.has(l.id)).map((l) => l.id);
-  const was = new Set(a.map((l) => l.id));
-  for (let i = 0; i < b.length; i++) {
-    const l = b[i]!;
-    if (was.has(l.id)) continue;
+/** Where the renderer stands once the adds and removes have been applied. */
+function orderAfterAddsAndRemoves(
+  standing: string[],
+  target: EngineLayer[],
+  missing: (id: string) => boolean,
+): string[] {
+  const order = [...standing];
+  for (let i = 0; i < target.length; i++) {
+    const id = target[i]!.id;
+    if (!missing(id)) continue;
     let at = order.length;
-    for (let j = i + 1; j < b.length; j++) {
-      const idx = order.indexOf(b[j]!.id);
-      if (idx !== -1) {
-        at = idx;
+    for (let j = i + 1; j < target.length; j++) {
+      const index = order.indexOf(target[j]!.id);
+      if (index !== -1) {
+        at = index;
         break;
       }
     }
-    order.splice(at, 0, l.id);
+    order.splice(at, 0, id);
   }
   return order;
 }

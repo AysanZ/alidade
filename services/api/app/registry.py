@@ -60,17 +60,49 @@ async def get(layer_id: str) -> Layer | None:
     return _row_to_layer(row) if row else None
 
 
+# Columns ogr2ogr adds for its own bookkeeping, which nobody wants in a popup.
+INTERNAL = {"geom", "fid", "ogc_fid", "gid", "wkb_geometry"}
+
+
+async def columns_of(table: str) -> list[str]:
+    """The column names as PostGIS spells them after ogr2ogr laundered them."""
+    table = check_identifier(table)
+    async with pool().acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = $1
+            ORDER BY ordinal_position
+            """,
+            table,
+        )
+    return [r["column_name"] for r in rows if r["column_name"] not in INTERNAL]
+
+
+async def geometry_type_of(table: str) -> str | None:
+    table = check_identifier(table)
+    async with pool().acquire() as conn:
+        return await conn.fetchval(
+            "SELECT type FROM geometry_columns WHERE f_table_name = $1 LIMIT 1", table
+        )
+
+
 async def register(
     layer_id: str,
     title: str,
     table: str,
     geometry_type: str,
     source_crs: str,
-    fields: list[str],
+    fields: list[str] | None = None,
 ) -> Layer:
     import json
 
     table = check_identifier(table)
+    # Read the shape of what actually landed, rather than what the file promised.
+    fields = await columns_of(table)
+    geometry_type = await geometry_type_of(table) or geometry_type
+
     async with pool().acquire() as conn:
         # Count and extent come from the table itself, not from what the file claimed.
         stats = await conn.fetchrow(

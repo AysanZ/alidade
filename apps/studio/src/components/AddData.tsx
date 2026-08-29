@@ -2,14 +2,22 @@ import { useState } from "react";
 import type { Geometry, LayerNode, MapProject, WmsLayerChoice } from "@alidade/core";
 import { wmsSource } from "@alidade/core";
 
-import { readCapabilities, uploadFile, type RegisteredLayer } from "../api";
+import { addFromUrl, readCapabilities, uploadFile, type RegisteredLayer } from "../api";
 
-type Tab = "file" | "wms";
+type Tab = "file" | "url" | "wms";
+
+export interface Extent {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+}
 
 interface Props {
   edit: (change: (draft: MapProject) => MapProject) => void;
   onClose: () => void;
   onAdded: (id: string) => void;
+  onFlyTo: (extent: Extent) => void;
 }
 
 const GEOMETRY: Record<string, Geometry> = {
@@ -21,7 +29,8 @@ const GEOMETRY: Record<string, Geometry> = {
   MultiPolygon: "polygon",
 };
 
-export function AddData({ edit, onClose, onAdded }: Props) {
+export function AddData(props: Props) {
+  const { onClose } = props;
   const [tab, setTab] = useState<Tab>("file");
 
   return (
@@ -34,26 +43,23 @@ export function AddData({ edit, onClose, onAdded }: Props) {
           </button>
         </div>
         <div className="mtabs">
-          <button className={tab === "file" ? "on" : ""} onClick={() => setTab("file")}>
-            File
-          </button>
-          <button className={tab === "wms" ? "on" : ""} onClick={() => setTab("wms")}>
-            WMS
-          </button>
+          {(["file", "url", "wms"] as Tab[]).map((id) => (
+            <button key={id} className={tab === id ? "on" : ""} onClick={() => setTab(id)}>
+              {id === "file" ? "File" : id === "url" ? "Link" : "WMS"}
+            </button>
+          ))}
         </div>
         <div className="mbody">
-          {tab === "file" ? (
-            <FileTab edit={edit} onClose={onClose} onAdded={onAdded} />
-          ) : (
-            <WmsTab edit={edit} onClose={onClose} onAdded={onAdded} />
-          )}
+          {tab === "file" && <FileTab {...props} />}
+          {tab === "url" && <UrlTab {...props} />}
+          {tab === "wms" && <WmsTab {...props} />}
         </div>
       </div>
     </div>
   );
 }
 
-function FileTab({ edit, onClose, onAdded }: Props) {
+function FileTab({ edit, onClose, onAdded, onFlyTo }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<RegisteredLayer | null>(null);
@@ -64,17 +70,8 @@ function FileTab({ edit, onClose, onAdded }: Props) {
     try {
       const layer = await uploadFile(file);
       setDone(layer);
-      edit((draft) => {
-        draft.sources[layer.id] = {
-          type: "vector",
-          tiles: [`${location.origin}/api/tiles/${layer.id}/{z}/{x}/{y}.mvt`],
-          maxzoom: 16,
-        };
-        draft.tree.unshift(vectorLayer(layer));
-        return draft;
-      });
-      onAdded(layer.id);
-      setTimeout(onClose, 700);
+      place(layer, edit, onAdded, onFlyTo);
+      setTimeout(onClose, 900);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -112,26 +109,96 @@ function FileTab({ edit, onClose, onAdded }: Props) {
       </p>
 
       {error && <p className="error">{error}</p>}
-      {done && (
-        <dl className="facts">
-          <div>
-            <dt>Table</dt>
-            <dd>{done.table}</dd>
-          </div>
-          <div>
-            <dt>Geometry</dt>
-            <dd>{done.geometryType ?? "unknown"}</dd>
-          </div>
-          <div>
-            <dt>Source CRS</dt>
-            <dd>{done.sourceCrs ?? "unknown"}</dd>
-          </div>
-          <div>
-            <dt>Features</dt>
-            <dd>{done.featureCount ?? "—"}</dd>
-          </div>
-        </dl>
-      )}
+      {done && <Facts layer={done} />}
+    </>
+  );
+}
+
+function Facts({ layer }: { layer: RegisteredLayer }) {
+  return (
+    <dl className="facts">
+      <div>
+        <dt>Table</dt>
+        <dd>{layer.table}</dd>
+      </div>
+      <div>
+        <dt>Geometry</dt>
+        <dd>{layer.geometryType ?? "unknown"}</dd>
+      </div>
+      <div>
+        <dt>Source CRS</dt>
+        <dd>{layer.sourceCrs ?? "unknown"}</dd>
+      </div>
+      <div>
+        <dt>Features</dt>
+        <dd>{layer.featureCount ?? "—"}</dd>
+      </div>
+    </dl>
+  );
+}
+
+/** Put an imported layer in the project and take the map to it. */
+function place(
+  layer: RegisteredLayer,
+  edit: Props["edit"],
+  onAdded: Props["onAdded"],
+  onFlyTo: Props["onFlyTo"],
+) {
+  edit((draft) => {
+    draft.sources[layer.id] = {
+      type: "vector",
+      tiles: [`${location.origin}/api/tiles/${layer.id}/{z}/{x}/{y}.mvt`],
+      maxzoom: 16,
+    };
+    draft.tree.unshift(vectorLayer(layer));
+    return draft;
+  });
+  onAdded(layer.id);
+  if (layer.extent) onFlyTo(layer.extent);
+}
+
+function UrlTab({ edit, onClose, onAdded, onFlyTo }: Props) {
+  const [url, setUrl] = useState(
+    "https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_50m_populated_places_simple.geojson",
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<RegisteredLayer | null>(null);
+
+  const send = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const layer = await addFromUrl(url);
+      setDone(layer);
+      place(layer, edit, onAdded, onFlyTo);
+      setTimeout(onClose, 900);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="row">
+        <input
+          className="text"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://example.org/places.geojson"
+        />
+        <button className="primary" onClick={() => void send()} disabled={busy || !url}>
+          {busy ? "Importing…" : "Import"}
+        </button>
+      </div>
+      <p className="hint">
+        GDAL reads the link over HTTP and writes straight into PostGIS, so the file is never
+        downloaded to your machine. A link ending in .zip is treated as a zipped Shapefile.
+      </p>
+      {error && <p className="error">{error}</p>}
+      {done && <Facts layer={done} />}
     </>
   );
 }
@@ -256,6 +323,7 @@ function vectorLayer(layer: RegisteredLayer): LayerNode {
       sourceCrs: layer.sourceCrs ?? undefined,
       featureCount: layer.featureCount ?? undefined,
       fields: layer.fields,
+      extent: layer.extent ?? undefined,
     },
   };
 }

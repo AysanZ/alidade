@@ -1,16 +1,30 @@
 import type { GraduatedSymbol, LayerNode, MapProject } from "@alidade/core";
+import { hiddenBecause } from "@alidade/core";
 
-import { findLayer, withNode } from "../tree";
+import { findLayer, removeNode, withNode } from "../tree";
 import { Field, Section, Switch } from "./Field";
+
+export interface Extent {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+}
 
 export function Inspector({
   project,
   selected,
   edit,
+  denominator,
+  onFlyTo,
+  onRemoved,
 }: {
   project: MapProject;
   selected: string | null;
   edit: (change: (draft: MapProject) => MapProject) => void;
+  denominator: number;
+  onFlyTo: (extent: Extent) => void;
+  onRemoved: () => void;
 }) {
   const layer = selected ? findLayer(project, selected) : undefined;
 
@@ -28,6 +42,8 @@ export function Inspector({
     edit((d) => withNode(d, id, (n) => change(n as LayerNode)));
 
   const graduated = layer.symbology.kind === "graduated" ? (layer.symbology as GraduatedSymbol) : null;
+  const hidden = hiddenBecause(layer, denominator);
+  const extent = layer.metadata?.extent;
 
   return (
     <aside className="inspector">
@@ -36,7 +52,28 @@ export function Inspector({
         <span className="tag">{layer.geometry}</span>
       </div>
 
+      {hidden === "scale" && (
+        <p className="warn">
+          Not drawn at this scale. The layer is set to appear between 1:
+          {layer.scale!.maxDenominator.toLocaleString("en-US").replace(/,/g, " ")} and 1:
+          {layer.scale!.minDenominator.toLocaleString("en-US").replace(/,/g, " ")}, and the map is at
+          1:{Math.round(denominator).toLocaleString("en-US").replace(/,/g, " ")}.
+        </p>
+      )}
+
       <Section title="Layer">
+        <div className="row buttons">
+          {extent && <button onClick={() => onFlyTo(extent)}>Zoom to layer</button>}
+          <button
+            className="danger"
+            onClick={() => {
+              edit((d) => removeNode(d, id));
+              onRemoved();
+            }}
+          >
+            Remove
+          </button>
+        </div>
         <Switch label="Visible" on={layer.visible} onChange={(on) => editLayer((n) => void (n.visible = on))} />
         <Field label="Opacity" value={`${Math.round(layer.opacity * 100)}%`}>
           <input

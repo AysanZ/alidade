@@ -1,14 +1,47 @@
+import type { JSX } from "react";
+
 export type PaneId = "layers" | "basemaps" | "scene" | "project";
 
-const PANES: { id: PaneId; label: string; icon: string }[] = [
-  { id: "layers", label: "Layers", icon: "M12 3 3 8l9 5 9-5-9-5ZM3 14l9 5 9-5" },
-  {
-    id: "basemaps",
-    label: "Basemaps",
-    icon: "M3.5 12h17M12 3.5c2.4 2.3 3.6 5.3 3.6 8.5s-1.2 6.2-3.6 8.5c-2.4-2.3-3.6-5.3-3.6-8.5S9.6 5.8 12 3.5Z",
-  },
-  { id: "scene", label: "Scene", icon: "M2 19h20L15 8l-4 6-2.5-3L2 19Z" },
-  { id: "project", label: "Project", icon: "M5 4.5h9L19 9v10.5H5v-15ZM14 4.5V9h5" },
+/**
+ * Drawn rather than imported: four icons is not worth a dependency.
+ *
+ * They are set on a 24 unit grid but drawn at 18, so the stroke is deliberately
+ * heavy and there is no hairline detail. Anything thinner reads as a smudge at
+ * this size, which is what a 1.5 stroke on a 16 pixel icon was doing.
+ */
+const ICONS: Record<PaneId, JSX.Element> = {
+  layers: (
+    <>
+      <path d="M12 3.5 3.5 8l8.5 4.5L20.5 8 12 3.5Z" />
+      <path d="m3.5 13.5 8.5 4.5 8.5-4.5" />
+    </>
+  ),
+  basemaps: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M3.6 12h16.8" />
+      <path d="M12 3.5c2.3 2.3 3.5 5.3 3.5 8.5s-1.2 6.2-3.5 8.5c-2.3-2.3-3.5-5.3-3.5-8.5s1.2-6.2 3.5-8.5Z" />
+    </>
+  ),
+  scene: (
+    <>
+      <path d="M2.5 19h19L14.5 8.5l-3.5 5.5-2.5-3L2.5 19Z" />
+      <circle cx="17" cy="5.5" r="2.5" />
+    </>
+  ),
+  project: (
+    <>
+      <path d="M13.5 3.5H6.5A1.5 1.5 0 0 0 5 5v14a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V9l-5.5-5.5Z" />
+      <path d="M13.5 3.5V9H19" />
+    </>
+  ),
+};
+
+const PANES: { id: PaneId; label: string }[] = [
+  { id: "layers", label: "Layers" },
+  { id: "basemaps", label: "Basemaps" },
+  { id: "scene", label: "Scene" },
+  { id: "project", label: "Project" },
 ];
 
 export function Rail({ active, onSelect }: { active: PaneId; onSelect: (id: PaneId) => void }) {
@@ -23,9 +56,15 @@ export function Rail({ active, onSelect }: { active: PaneId; onSelect: (id: Pane
           aria-pressed={p.id === active}
           onClick={() => onSelect(p.id)}
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-            <path d={p.icon} />
-            {p.id === "basemaps" && <circle cx="12" cy="12" r="8.5" />}
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.75"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            {ICONS[p.id]}
           </svg>
         </button>
       ))}

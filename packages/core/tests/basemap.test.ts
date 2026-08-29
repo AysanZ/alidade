@@ -66,6 +66,29 @@ describe("basemap", () => {
     ]);
   });
 
+  it("takes a layer down before replacing the source it reads", () => {
+    const light: Basemap = {
+      ...dark,
+      id: "light",
+      raster: { tiles: ["https://tiles.example.com/light/{z}/{x}/{y}.png"], attribution: "Example" },
+    };
+    const ops = reconcile(withBasemap(dark), withBasemap(light));
+    const kinds = ops.map((o) => o.t);
+    // A renderer refuses to remove a source that is still being read.
+    expect(kinds.indexOf("layer.remove")).toBeLessThan(kinds.indexOf("source.remove"));
+    expect(kinds.indexOf("source.add")).toBeLessThan(kinds.indexOf("layer.add"));
+    expect(ops.filter((o) => o.t === "layer.remove").map((o) => (o as { id: string }).id)).toEqual([
+      "basemap:raster",
+    ]);
+  });
+
+  it("fading the basemap is a paint change, not a reload", () => {
+    const ops = reconcile(withBasemap(dark), withBasemap({ ...dark, opacity: 0.4 }));
+    expect(ops).toEqual([
+      { t: "layer.paint", id: "basemap:raster", key: "raster-opacity", value: 0.4 },
+    ]);
+  });
+
   it("swapping the basemap never touches a data layer", () => {
     const light: Basemap = {
       ...dark,

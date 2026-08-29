@@ -82,6 +82,64 @@ describe("adapter", () => {
     expect(map.calls).toEqual([]);
   });
 
+  it("moves the camera when the view changes", () => {
+    const map = new FakeMap();
+    const manager = new MapManager(map, project());
+    map.calls = [];
+    manager.update((p) => {
+      p.view = { ...p.view, pitch: 58, bearing: -28 };
+      return p;
+    });
+    expect(map.calls).toEqual([["jumpTo", { ...project().view, pitch: 58, bearing: -28 }]]);
+  });
+
+  it("takes the camera from the map without emitting anything", () => {
+    const map = new FakeMap();
+    const manager = new MapManager(map, project());
+    map.calls = [];
+
+    // The user drags the map, then tilts it from the panel.
+    manager.syncView({ center: [51.5, 35.8], zoom: 14, pitch: 0, bearing: 0 });
+    expect(map.calls).toEqual([]);
+
+    manager.update((p) => {
+      p.view = { ...p.view, pitch: 45 };
+      return p;
+    });
+    // Tilting must not drag the map back to where the document started.
+    expect(map.calls).toEqual([
+      ["jumpTo", { center: [51.5, 35.8], zoom: 14, pitch: 45, bearing: 0 }],
+    ]);
+  });
+
+  it("swaps a raster basemap without asking the engine to do the impossible", () => {
+    const tiles = (name: string) => ({
+      tiles: [`https://tiles.example.com/${name}/{z}/{x}/{y}.png`],
+      attribution: "Example",
+    });
+    const dark = {
+      id: "dark",
+      name: "Dark",
+      background: "#0b0b0c",
+      raster: tiles("dark"),
+      labels: false,
+    };
+
+    const map = new FakeMap();
+    const manager = new MapManager(map, { ...project(), basemap: dark });
+    map.calls = [];
+
+    // MapLibre refuses to remove a source a layer still reads, so this throws
+    // unless the reconciler takes the layer down first.
+    manager.update((p) => {
+      p.basemap = { ...dark, id: "light", name: "Light", raster: tiles("light") };
+      return p;
+    });
+
+    expect(map.sources.has("basemap:raster")).toBe(true);
+    expect(map.order).toEqual(compile(manager.project).layers.map((l) => l.id));
+  });
+
   it("reports the operations it applied", () => {
     const seen: unknown[][] = [];
     const map = new FakeMap();

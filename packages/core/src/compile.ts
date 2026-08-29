@@ -86,7 +86,7 @@ export function compile(project: MapProject): Compiled {
       type: "raster",
       source: "basemap:raster",
       slot: "base",
-      paint: { "raster-opacity": 1 },
+      paint: { "raster-opacity": project.basemap.opacity ?? 1 },
       layout: {},
     });
   }

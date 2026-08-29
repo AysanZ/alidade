@@ -89,14 +89,15 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   padding-block: 6px;
 }
 .rail button {
-  width: 34px;
-  height: 32px;
+  width: 36px;
+  height: 34px;
   display: grid;
   place-items: center;
-  border-radius: 3px;
-  color: var(--txt-3);
+  border-radius: 4px;
+  color: #7d7d85;
 }
-.rail svg { width: 16px; height: 16px; }
+/* Bigger than it looks like it needs to be. At 16px these read as smudges. */
+.rail svg { width: 18px; height: 18px; }
 .rail button:hover { background: var(--raise); color: var(--txt); }
 .rail button.on { background: rgba(76, 141, 255, 0.13); color: var(--accent); }
 
@@ -411,3 +412,39 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 }
 .picker em { font-style: normal; font-size: 9px; color: var(--accent); }
 .mfoot { display: flex; justify-content: flex-end; padding-top: 12px; }
+
+.warn {
+  margin: 9px 11px;
+  padding: 7px 9px;
+  border: 1px solid rgba(232, 177, 76, 0.3);
+  border-radius: 3px;
+  background: rgba(232, 177, 76, 0.07);
+  color: #e8b14c;
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+
+.mapcontrols {
+  position: absolute;
+  top: 78px;
+  inset-inline-end: 14px;
+  z-index: 2;
+  display: grid;
+  gap: 1px;
+  padding: 3px;
+  background: rgba(12, 12, 13, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.mapcontrols button {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 2px;
+  color: var(--txt-2);
+}
+.mapcontrols button:hover { background: var(--raise); color: var(--txt); }
+.mapcontrols svg { width: 15px; height: 15px; }
+.row button.danger:hover { border-color: rgba(240, 97, 107, 0.4); color: #f0616b; }
+.gallery { grid-template-columns: 1fr 1fr; }

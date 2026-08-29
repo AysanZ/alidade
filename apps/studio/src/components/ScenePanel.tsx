@@ -9,15 +9,21 @@ const VIEWS = [
   { id: "3d", label: "3D", pitch: 58, bearing: -28 },
 ];
 
+/** Relief needs a minimum scale before it reads as anything but a flat sheet. */
+const TERRAIN_DENOMINATOR = 3_000_000;
+
 export function ScenePanel({
   project,
   edit,
+  denominator,
 }: {
   project: MapProject;
   edit: (change: (draft: MapProject) => MapProject) => void;
+  denominator: number;
 }) {
   const { view, environment, chrome } = project;
   const mode = VIEWS.find((v) => v.pitch === view.pitch)?.id ?? "custom";
+  const tooFarOutForRelief = denominator > TERRAIN_DENOMINATOR;
 
   return (
     <div className="pane">
@@ -30,6 +36,14 @@ export function ScenePanel({
               onClick={() =>
                 edit((d) => {
                   d.view = { ...d.view, pitch: v.pitch, bearing: v.bearing };
+                  // Tilting a flat sheet is not a 3D view. Anything but 2D brings
+                  // the relief with it, which is what the button is really asking for.
+                  if (v.id === "2d") {
+                    delete d.environment.terrain;
+                  } else {
+                    d.environment.terrain ??= { source: "dem", exaggeration: 1.4 };
+                    d.environment.hillshade ??= { ...HILLSHADE };
+                  }
                   return d;
                 })
               }
@@ -81,6 +95,12 @@ export function ScenePanel({
       </Section>
 
       <Section title="Terrain">
+        {environment.terrain && tooFarOutForRelief && (
+          <p className="warn">
+            Terrain is on, but at 1:{Math.round(denominator).toLocaleString("en-US").replace(/,/g, " ")} there
+            is no relief to see. Zoom in to somewhere with mountains.
+          </p>
+        )}
         <Switch
           label="Terrain from SRTM"
           on={Boolean(environment.terrain)}
@@ -175,7 +195,7 @@ export function ScenePanel({
                 })
               }
             >
-              {[0.05, 0.1, 0.25, 0.5, 1, 5].map((i) => (
+              {[0.1, 0.25, 0.5, 1, 5, 10].map((i) => (
                 <option key={i} value={i}>
                   {i}°
                 </option>

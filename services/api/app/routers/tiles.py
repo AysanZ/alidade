@@ -36,7 +36,8 @@ async def tile(layer_id: str, z: int, x: int, y: int) -> Response:
         raise HTTPException(400, "Tile coordinates are outside the pyramid.")
 
     # Identifiers come from the registry, never from the request. Values are bound.
-    columns = ", ".join(f"t.{check_identifier(c)}" for c in layer.fields) or "t.*"
+    attributes = [c for c in layer.fields if c != layer.geometry_column]
+    columns = ", ".join(f"t.{check_identifier(c)}" for c in attributes) or "t.fid"
     sql = TILE_SQL.format(table=layer.table, geom=layer.geometry_column, columns=columns)
 
     async with pool().acquire() as conn:

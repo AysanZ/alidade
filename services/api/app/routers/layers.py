@@ -3,11 +3,13 @@ import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, UploadFile
+from pydantic import BaseModel
 
 from .. import registry
 from ..config import settings
-from ..ingest import EXTENSIONS, IngestError, import_file
+from ..ingest import EXTENSIONS, IngestError, import_file, import_url
 from ..naming import slug
+from ..net import UnsafeUrl
 
 router = APIRouter(prefix="/api/layers", tags=["layers"])
 
@@ -17,12 +19,27 @@ async def list_layers() -> dict:
     return {"layers": [layer.as_dict() for layer in await registry.all_layers()]}
 
 
-@router.get("/{layer_id}")
-async def get_layer(layer_id: str) -> dict:
-    layer = await registry.get(layer_id)
-    if layer is None:
-        raise HTTPException(404, f"No layer named {layer_id}.")
-    return layer.as_dict()
+@router.post("/from-url")
+async def add_from_url(body: FromUrl) -> dict:
+    """Import a link. GDAL reads it over HTTP, so nothing is downloaded twice."""
+    name = body.name or Path(body.url.split("?")[0]).name or "layer"
+    try:
+        imported = await import_url(body.url, name)
+    except UnsafeUrl as error:
+        raise HTTPException(400, str(error)) from error
+    except IngestError as error:
+        raise HTTPException(422, str(error)) from error
+
+    return (
+        await registry.register(
+            layer_id=slug(Path(name).stem) or imported.table,
+            title=Path(name).stem,
+            table=imported.table,
+            geometry_type=imported.geometry_type,
+            source_crs=imported.source_crs,
+            fields=imported.fields,
+        )
+    ).as_dict()
 
 
 @router.post("/upload")
@@ -58,4 +75,18 @@ async def upload(file: UploadFile) -> dict:
         source_crs=imported.source_crs,
         fields=imported.fields,
     )
+    return layer.as_dict()
+
+
+class FromUrl(BaseModel):
+    url: str
+    name: str | None = None
+
+
+
+@router.get("/{layer_id}")
+async def get_layer(layer_id: str) -> dict:
+    layer = await registry.get(layer_id)
+    if layer is None:
+        raise HTTPException(404, f"No layer named {layer_id}.")
     return layer.as_dict()

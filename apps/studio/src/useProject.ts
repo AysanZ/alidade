@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import type { MapProject, Op } from "@alidade/core";
+import type { MapProject, Op, View } from "@alidade/core";
 import { MapManager } from "@alidade/maplibre";
 
 /**
@@ -22,5 +22,12 @@ export function useProject(initial: MapProject) {
     setLog((previous) => [...ops, ...previous].slice(0, 40));
   }, []);
 
-  return { project, log, edit, attach };
+  /** Where the user dragged the map to. Records, never emits. */
+  const sync = useCallback((view: View) => {
+    if (!manager.current) return;
+    manager.current.syncView(view);
+    setProject(manager.current.project);
+  }, []);
+
+  return { project, log, edit, sync, attach };
 }

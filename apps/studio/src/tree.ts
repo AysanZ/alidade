@@ -27,3 +27,25 @@ export function withNode(
   });
   return draft;
 }
+
+/** Drop a node from the tree, and any source nothing reads any more. */
+export function removeNode(draft: MapProject, id: string): MapProject {
+  const prune = (nodes: TreeNode[]): TreeNode[] =>
+    nodes
+      .filter((n) => n.id !== id)
+      .map((n) => (n.type === "group" ? { ...n, children: prune(n.children) } : n));
+
+  draft.tree = prune(draft.tree);
+
+  const used = new Set<string>();
+  walk(draft.tree, (n) => {
+    if (n.type === "layer") used.add(n.source);
+  });
+  for (const source of Object.keys(draft.sources)) {
+    // The elevation source belongs to the environment, not to any one layer.
+    if (!used.has(source) && source !== draft.environment.terrain?.source) {
+      delete draft.sources[source];
+    }
+  }
+  return draft;
+}

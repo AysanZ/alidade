@@ -43,6 +43,17 @@ export class MapManager {
     return ops;
   }
 
+  /**
+   * Record where the user dragged the map to, without emitting anything.
+   *
+   * Panning is the one edit the renderer makes first and the project learns about
+   * second. If the project is not told, the next camera operation jumps the map
+   * back to wherever the document still thinks it is.
+   */
+  syncView(view: MapProject["view"]): void {
+    this.#project = { ...this.#project, view };
+  }
+
   /** Rebuild everything from an empty style, after the renderer threw it all away. */
   replay(): Op[] {
     const ops = reconcile(null, this.#project);
