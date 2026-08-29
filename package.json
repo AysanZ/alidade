@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "dev": "pnpm --filter @alidade/studio dev",
+    "build": "pnpm --filter @alidade/studio build",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p packages/core && tsc -p packages/maplibre"
@@ -11,5 +13,10 @@
   "devDependencies": {
     "typescript": "^5.6.3",
     "vitest": "^2.1.8"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

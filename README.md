@@ -12,8 +12,20 @@ basemap does not destroy the layers.
 
 ```bash
 cp .env.example .env
-docker compose -f deploy/docker-compose.yml up -d --build
-cd apps/studio && pnpm install && pnpm dev
+
+# --env-file matters: compose looks for .env next to the compose file, not here.
+docker compose --env-file .env -f deploy/docker-compose.yml up -d --build
+
+# Install from the repository root. The studio depends on two workspace packages,
+# so installing inside apps/studio cannot see them.
+pnpm install
+pnpm dev
+```
+
+Postgres is published on host port **5433**, because 5432 is usually already taken:
+
+```bash
+psql postgresql://alidade:change_me@localhost:5433/alidade -c 'select count(*) from wards_1400;'
 ```
 
 - Studio: <http://localhost:5173>

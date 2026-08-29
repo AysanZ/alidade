@@ -8,7 +8,12 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "baseUrl": ".",
+    "paths": {
+      "@alidade/core": ["../../packages/core/src/index.ts"],
+      "@alidade/maplibre": ["../../packages/maplibre/src/index.ts"]
+    }
   },
-  "include": ["src"]
+  "include": ["src", "vite.config.ts"]
 }

@@ -4,16 +4,18 @@ services:
   postgis:
     image: postgis/postgis:16-3.4
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:-alidade}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-alidade}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ../data/init:/docker-entrypoint-initdb.d:ro
     ports:
-      - "5432:5432"
+      # 5432 is usually taken by a local postgres, so the host side is 5433.
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test:
+        ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-alidade} -d ${POSTGRES_DB:-alidade}"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -22,18 +24,18 @@ services:
     build:
       context: ../services/api
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:-alidade}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-alidade}
       POSTGRES_HOST: postgis
       POSTGRES_PORT: 5432
-      TILE_CACHE_SECONDS: ${TILE_CACHE_SECONDS}
-      CORS_ORIGINS: ${CORS_ORIGINS}
+      TILE_CACHE_SECONDS: ${TILE_CACHE_SECONDS:-300}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
     depends_on:
       postgis:
         condition: service_healthy
     ports:
-      - "${API_PORT}:8000"
+      - "${API_PORT:-8000}:8000"
 
   nginx:
     image: nginx:1.27-alpine
