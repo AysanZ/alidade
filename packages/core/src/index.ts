@@ -6,3 +6,8 @@ export { toExpression, toSql } from "./filter";
 export type { SqlFilter } from "./filter";
 export { denominatorAt, zoomForDenominator, zoomRange, metresPerPixel } from "./scale";
 export { paintFor, colorExpression, templateToExpression } from "./symbology";
+export { graticuleGeoJSON, graticuleSourceId } from "./graticule";
+export { formatCoordinate, scaleBar, dms, toUtm } from "./format";
+export { wmsTileUrl, wmsSource, wmsFeatureInfoUrl } from "./wms";
+export type { WmsCapabilities, WmsLayerChoice, WmsOptions } from "./wms";
+export type { ScaleBar } from "./format";
