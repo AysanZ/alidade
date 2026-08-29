@@ -1,3 +1,4 @@
+import { defaultChrome } from "../src/types/project";
 import type { MapProject } from "../src/types/project";
 
 /** The demo project, small enough to read in a diff and real enough to be useful. */
@@ -5,10 +6,11 @@ export function project(): MapProject {
   return {
     schema: 3,
     id: "demo",
-    name: "Dushanbe · population density 2024",
-    view: { center: [68.79, 38.5598], zoom: 11.5, pitch: 0, bearing: 0 },
+    name: "Tehran · population density 2024",
+    view: { center: [51.4, 35.715], zoom: 11.5, pitch: 0, bearing: 0 },
     basemap: { id: "graphite", name: "Graphite", background: "#0b0b0c", labels: true },
     environment: {},
+    chrome: defaultChrome(),
     sources: {
       wards: { type: "vector", tiles: ["/api/tiles/wards/{z}/{x}/{y}.mvt"], maxzoom: 16 },
       sensors: { type: "vector", tiles: ["/api/tiles/sensors/{z}/{x}/{y}.mvt"] },

@@ -1,18 +1,18 @@
--- Demo dataset: a 7x6 fishnet over Dushanbe with a plausible density surface.
+-- Demo dataset: a 7x6 fishnet over Tehran with a plausible density surface.
 -- Replace with real data by loading a GeoPackage through data/seed.sh.
 SELECT setseed(0.42);
 
 WITH params AS (
-    SELECT 68.66::double precision AS lon0,
-           68.92::double precision AS lon1,
-           38.47::double precision AS lat0,
-           38.635::double precision AS lat1,
+    SELECT 51.20::double precision AS lon0,
+           51.60::double precision AS lon1,
+           35.60::double precision AS lat0,
+           35.83::double precision AS lat1,
            7 AS cols,
            6 AS rows
 ),
 names AS (
-    SELECT ARRAY['Sino','Firdavsi','Shohmansur','Somoni','Zarafshon','Guliston','Varzob',
-                 'Hisor','Rudaki','Navruz','Bahoriston','Chorbogh','Kohistan','Dehmoy'] AS n
+    SELECT ARRAY['Tajrish','Niavaran','Vanak','Punak','Sadeghiyeh','Ekbatan','Yaftabad',
+                 'Narmak','Tehranpars','Piroozi','Nazi Abad','Javadiyeh','Shush','Lavizan'] AS n
 ),
 cells AS (
     SELECT c, r,

@@ -14,4 +14,4 @@ CREATE TABLE IF NOT EXISTS wards_1400 (
 CREATE INDEX IF NOT EXISTS wards_1400_geom_idx ON wards_1400 USING gist (geom);
 CREATE INDEX IF NOT EXISTS wards_1400_density_idx ON wards_1400 (density);
 
-COMMENT ON TABLE wards_1400 IS 'Demo wards. Source CRS was EPSG:32642, reprojected on import.';
+COMMENT ON TABLE wards_1400 IS 'Demo wards over Tehran. Source CRS was EPSG:32639, reprojected on import.';

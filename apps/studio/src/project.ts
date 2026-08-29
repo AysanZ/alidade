@@ -1,4 +1,6 @@
-import type { MapProject } from "@alidade/core";
+import { defaultChrome, type MapProject } from "@alidade/core";
+
+import { BASEMAPS } from "./basemaps";
 
 /**
  * The sample project. From phase 8 this is loaded from the database; for now it is
@@ -7,15 +9,25 @@ import type { MapProject } from "@alidade/core";
 export const demoProject: MapProject = {
   schema: 3,
   id: "demo",
-  name: "Dushanbe · population density 2024",
-  view: { center: [68.79, 38.5598], zoom: 11.2, pitch: 0, bearing: 0 },
-  basemap: { id: "graphite", name: "Graphite", background: "#0b0b0c", labels: true },
+  name: "Tehran · population density 2024",
+  view: { center: [51.4, 35.715], zoom: 10.6, pitch: 0, bearing: 0 },
+  basemap: BASEMAPS[0]!,
   environment: {},
+  chrome: { ...defaultChrome(), graticule: { ...defaultChrome().graticule, interval: 0.1 } },
   sources: {
     wards: {
       type: "vector",
       tiles: [`${location.origin}/api/tiles/wards/{z}/{x}/{y}.mvt`],
       maxzoom: 16,
+    },
+    // Open elevation tiles, no key required. Terrain and hillshade both read this.
+    dem: {
+      type: "raster-dem",
+      tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+      encoding: "terrarium",
+      tileSize: 256,
+      maxzoom: 14,
+      attribution: "Elevation: Mapzen and partners",
     },
   },
   tree: [
@@ -36,7 +48,7 @@ export const demoProject: MapProject = {
           geometry: "polygon",
           visible: true,
           opacity: 1,
-          scale: { minDenominator: 2000, maxDenominator: 500000 },
+          scale: { minDenominator: 2000, maxDenominator: 2000000 },
           symbology: {
             kind: "graduated",
             field: "density",
@@ -45,11 +57,19 @@ export const demoProject: MapProject = {
             noDataColor: "#3a3a40",
             stroke: { color: "#0a0a0b", width: 0.6 },
           },
-          metadata: { sourceCrs: "EPSG:32642", fields: ["ward_id", "name", "density"] },
+          metadata: { sourceCrs: "EPSG:32639", fields: ["ward_id", "name", "density"] },
         },
       ],
     },
   ],
+};
+
+export const HILLSHADE = {
+  source: "dem",
+  illumination: 315,
+  intensity: 0.5,
+  shadowColor: "#000000",
+  highlightColor: "#5a6470",
 };
 
 /** An empty style. Everything on the map is put there by the adapter. */
