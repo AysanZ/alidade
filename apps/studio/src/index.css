@@ -1,0 +1,30 @@
+:root {
+  --void: #050505;
+  --line: #252528;
+  --txt: #e4e4e6;
+  --txt-3: #66666d;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; margin: 0; }
+html, body, #root { height: 100%; }
+body { background: var(--void); color: var(--txt); font-family: "IBM Plex Sans", system-ui, sans-serif; }
+
+.map { position: absolute; inset: 0; }
+
+.status {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 25px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding-inline: 12px;
+  background: #0e0e10;
+  border-top: 1px solid var(--line);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--txt-3);
+  z-index: 2;
+}
