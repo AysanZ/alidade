@@ -3,8 +3,10 @@
 An open-source Web-GIS platform. PostGIS vector tiles, OGC services, full symbology,
 and a real-time asset layer.
 
-This repository is at **phase 0**: a thin slice through the whole stack. One table in
-PostGIS, one `ST_AsMVT` endpoint, one layer on the map, deployed.
+This repository is at **phase 1**. The map is described by a single project object.
+The core diffs two versions of it and emits a list of operations; the adapter applies
+those operations to MapLibre. Editing the project changes the map, and swapping the
+basemap does not destroy the layers.
 
 ## Run it
 
@@ -32,11 +34,27 @@ creates 42 demo wards over Dushanbe. To load your own data instead:
 | `data/init/` | Schema and seed dataset, run once on first start |
 | `data/seed.sh` | ogr2ogr loader for real data |
 | `services/api/` | FastAPI: tiles today, ingest and features next |
-| `apps/studio/` | React and MapLibre client |
+| `apps/studio/` | React client |
 | `deploy/` | Compose stack and Nginx |
 
-`packages/core` and `packages/maplibre` arrive in phase 1, when the map starts being
-described by a project document rather than a hand-written style.
+| `packages/core/` | Project model, reconciler, symbology, filter compiler |
+| `packages/maplibre/` | The only folder that knows MapLibre exists |
+
+`packages/core` is internally named **layersync**. It is a folder in this repository,
+not a published package.
+
+## Tests
+
+```bash
+pnpm install
+pnpm test        # 34 tests, Node only: no browser, no WebGL
+pnpm typecheck
+```
+
+Core tests assert on the operation array the reconciler emits for a given pair of
+project states, so slot ordering, bundle expansion, classification and filter
+compilation are all tested without rendering anything. Adapter tests use a fake
+renderer that records calls.
 
 ## Licence
 
