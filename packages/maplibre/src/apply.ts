@@ -2,8 +2,11 @@ import type { Op } from "@alidade/core";
 
 import { toSpec, type Renderer } from "./renderer";
 
+/** Told when the engine cannot do something, rather than swallowing it. */
+export type Warn = (message: string) => void;
+
 /** Operations in, engine calls out. One switch, no decisions. */
-export function apply(renderer: Renderer, ops: Op[]): void {
+export function apply(renderer: Renderer, ops: Op[], warn?: Warn): void {
   for (const op of ops) {
     switch (op.t) {
       case "source.add":
@@ -37,7 +40,7 @@ export function apply(renderer: Renderer, ops: Op[]): void {
         renderer.jumpTo(op.view);
         break;
       case "env.set":
-        applyEnvironment(renderer, op.key, op.value);
+        applyEnvironment(renderer, op.key, op.value, warn);
         break;
     }
   }
@@ -53,24 +56,37 @@ const SKY = {
   "fog-ground-blend": 0.15,
 };
 
-function applyEnvironment(renderer: Renderer, key: string, value: unknown): void {
+function applyEnvironment(renderer: Renderer, key: string, value: unknown, warn?: Warn): void {
+  /**
+   * Optional methods were being called with `?.`, which meant an engine too old to
+   * support globe or sky produced no error, no log and no globe. Say it out loud.
+   */
+  const call = (method: keyof Renderer, argument: unknown, needs: string) => {
+    const fn = renderer[method];
+    if (typeof fn !== "function") {
+      warn?.(`This MapLibre build has no ${String(method)}, so ${needs} cannot be applied.`);
+      return;
+    }
+    (fn as (a: unknown) => void).call(renderer, argument);
+  };
+
   switch (key) {
     case "terrain":
       renderer.setTerrain(value ?? null);
       break;
     case "fog":
-      renderer.setFog?.(value ?? null);
+      call("setFog", value ?? null, "fog");
       break;
     case "light":
-      renderer.setLight?.(value ?? null);
+      call("setLight", value ?? null, "scene lighting");
       break;
     case "sky":
       // The project says yes or no; the engine wants a set of colours.
-      renderer.setSky?.(value ? SKY : undefined);
+      call("setSky", value ? SKY : undefined, "the sky");
       break;
     case "projection":
       // Ours is the name a GIS user says. MapLibre wants it wrapped.
-      renderer.setProjection?.(value ? { type: value } : { type: "mercator" });
+      call("setProjection", { type: value || "mercator" }, "the projection");
       break;
   }
 }

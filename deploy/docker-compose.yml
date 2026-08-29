@@ -45,7 +45,8 @@ services:
     depends_on:
       - api
     ports:
-      - "8080:80"
+      # 8080 is usually taken by something else already.
+      - "${NGINX_PORT:-8088}:80"
 
 volumes:
   pgdata:

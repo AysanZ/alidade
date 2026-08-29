@@ -202,3 +202,22 @@ describe("environment", () => {
     expect(map.calls).toEqual([["setSky", undefined]]);
   });
 });
+
+describe("an engine that cannot do what was asked", () => {
+  it("says so rather than doing nothing quietly", () => {
+    const warnings: string[] = [];
+    const map = new FakeMap();
+    // An older MapLibre: no globe, no sky. The methods live on the prototype, so
+    // shadow them rather than deleting them.
+    Object.assign(map, { setProjection: undefined, setSky: undefined });
+
+    const manager = new MapManager(map, project(), { onWarning: (m) => warnings.push(m) });
+    manager.update((p) => {
+      p.environment.projection = "globe";
+      return p;
+    });
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("setProjection");
+  });
+});

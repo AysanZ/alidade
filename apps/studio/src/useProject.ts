@@ -10,6 +10,7 @@ export function useProject(initial: MapProject) {
   const manager = useRef<MapManager | null>(null);
   const [project, setProject] = useState(initial);
   const [log, setLog] = useState<Op[]>([]);
+  const [warning, setWarning] = useState<string | null>(null);
 
   const attach = useCallback((m: MapManager) => {
     manager.current = m;
@@ -29,5 +30,5 @@ export function useProject(initial: MapProject) {
     setProject(manager.current.project);
   }, []);
 
-  return { project, log, edit, sync, attach };
+  return { project, log, edit, sync, attach, warning, setWarning };
 }

@@ -40,6 +40,23 @@ export async function addFromUrl(url: string, name?: string): Promise<Registered
   );
 }
 
+export interface FeaturePage {
+  fields: string[];
+  rows: Record<string, string | number | boolean | null>[];
+  total: number;
+}
+
+export async function readFeatures(
+  id: string,
+  options: { limit?: number; offset?: number; order?: string } = {},
+): Promise<FeaturePage> {
+  const query = new URLSearchParams();
+  if (options.limit) query.set("limit", String(options.limit));
+  if (options.offset) query.set("offset", String(options.offset));
+  if (options.order) query.set("order", options.order);
+  return json<FeaturePage>(await fetch(`/api/layers/${id}/features?${query}`));
+}
+
 export async function listLayers(): Promise<RegisteredLayer[]> {
   const { layers } = await json<{ layers: RegisteredLayer[] }>(await fetch("/api/layers"));
   return layers;

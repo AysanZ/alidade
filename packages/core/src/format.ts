@@ -111,3 +111,60 @@ export function toUtm(lon: number, lat: number) {
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;
+
+
+/**
+ * Read a coordinate the way a person types one.
+ *
+ * Accepts decimal degrees and degrees-minutes-seconds, comma or space separated,
+ * with or without hemisphere letters. Latitude comes first, as it does on every
+ * form a surveyor has ever filled in, unless a hemisphere letter says otherwise.
+ */
+export function parseCoordinate(text: string): [number, number] | null {
+  const cleaned = text.trim().replace(/\s+/g, " ");
+  if (!cleaned) return null;
+
+  const halves = split(cleaned);
+  if (!halves) return null;
+
+  const first = readAngle(halves[0]);
+  const second = readAngle(halves[1]);
+  if (first === null || second === null) return null;
+
+  // A hemisphere letter is authoritative; without one, latitude is written first.
+  const firstIsLon = /[EWew]$/.test(halves[0].trim());
+  const lat = firstIsLon ? second.value : first.value;
+  const lon = firstIsLon ? first.value : second.value;
+
+  if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+  return [lon, lat];
+}
+
+/**
+ * Cutting the string in two, in order of how reliable the separator is: a comma,
+ * then hemisphere letters, then simply two numbers and nothing else.
+ */
+function split(text: string): [string, string] | null {
+  const byComma = text.split(/[,;]/).map((p) => p.trim()).filter(Boolean);
+  if (byComma.length === 2) return [byComma[0]!, byComma[1]!];
+
+  const byHemisphere = text.match(/-?[\d.]+[^NSEWnsew]*[NSEWnsew]/g);
+  if (byHemisphere?.length === 2) return [byHemisphere[0]!, byHemisphere[1]!];
+
+  const numbers = text.match(/-?\d+(?:\.\d+)?/g);
+  if (numbers?.length === 2) return [numbers[0]!, numbers[1]!];
+  return null;
+}
+
+function readAngle(text: string): { value: number } | null {
+  const hemisphere = text.trim().match(/[NSEWnsew]$/)?.[0]?.toUpperCase();
+  const numbers = (text.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
+  if (numbers.length === 0) return null;
+
+  const [degrees = 0, minutes = 0, seconds = 0] = numbers;
+  const sign = degrees < 0 ? -1 : 1;
+  let value = Math.abs(degrees) + minutes / 60 + seconds / 3600;
+  value *= sign;
+  if (hemisphere === "S" || hemisphere === "W") value = -Math.abs(value);
+  return { value };
+}

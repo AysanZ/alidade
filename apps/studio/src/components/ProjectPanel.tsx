@@ -2,8 +2,26 @@ import type { MapProject, Op } from "@alidade/core";
 
 import { Field, Section } from "./Field";
 
-export function ProjectPanel({ project, log }: { project: MapProject; log: Op[] }) {
+export function ProjectPanel({
+  project,
+  log,
+  onExportImage,
+}: {
+  project: MapProject;
+  log: Op[];
+  onExportImage: () => void;
+}) {
   const size = new Blob([JSON.stringify(project)]).size;
+
+  const download = () => {
+    const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${project.id}.alidade.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="pane">
@@ -21,6 +39,10 @@ export function ProjectPanel({ project, log }: { project: MapProject; log: Op[] 
           The project holds no geometry. It says where the data lives and how to draw it, which is
           why saving and sharing are cheap.
         </p>
+        <div className="row buttons">
+          <button onClick={download}>Export project JSON</button>
+          <button onClick={onExportImage}>Export map PNG</button>
+        </div>
       </Section>
 
       <Section title="Last operations">

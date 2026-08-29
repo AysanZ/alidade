@@ -20,14 +20,25 @@ interface Props {
   onFlyTo: (extent: Extent) => void;
 }
 
+/**
+ * PostGIS reports geometry types in upper case (`POINT`, `MULTIPOLYGON`), GDAL in
+ * mixed case. Matching on the wrong case silently produced a fill layer for a point
+ * table, which draws nothing at all: the layer was there, and invisible.
+ */
 const GEOMETRY: Record<string, Geometry> = {
-  Point: "point",
-  MultiPoint: "point",
-  LineString: "line",
-  MultiLineString: "line",
-  Polygon: "polygon",
-  MultiPolygon: "polygon",
+  point: "point",
+  multipoint: "point",
+  linestring: "line",
+  multilinestring: "line",
+  polygon: "polygon",
+  multipolygon: "polygon",
+  geometry: "polygon",
+  geometrycollection: "polygon",
 };
+
+export function geometryOf(reported: string | null): Geometry {
+  return GEOMETRY[(reported ?? "").trim().toLowerCase()] ?? "polygon";
+}
 
 export function AddData(props: Props) {
   const { onClose } = props;
@@ -311,14 +322,14 @@ function vectorLayer(layer: RegisteredLayer): LayerNode {
     slot: "data",
     source: layer.id,
     sourceLayer: layer.id,
-    geometry: GEOMETRY[layer.geometryType ?? ""] ?? "polygon",
+    geometry: geometryOf(layer.geometryType),
     visible: true,
     opacity: 1,
-    symbology: {
-      kind: "single",
-      color: "#4c8dff",
-      stroke: { color: "#0a0a0b", width: 0.6 },
-    },
+    // A point layer with a polygon stroke is a fill layer that draws nothing.
+    symbology:
+      geometryOf(layer.geometryType) === "point"
+        ? { kind: "single", color: "#4c8dff" }
+        : { kind: "single", color: "#4c8dff", stroke: { color: "#0a0a0b", width: 0.6 } },
     metadata: {
       sourceCrs: layer.sourceCrs ?? undefined,
       featureCount: layer.featureCount ?? undefined,

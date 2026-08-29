@@ -76,10 +76,16 @@ export const HILLSHADE = {
   highlightColor: "#5a6470",
 };
 
-/** An empty style. Everything on the map is put there by the adapter. */
+/**
+ * An empty style. Everything on the map is put there by the adapter.
+ *
+ * The projection is declared here as well as applied through an operation, because
+ * a style replaces it wholesale and the document has to win.
+ */
 export const emptyStyle = {
   version: 8 as const,
   glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+  projection: { type: demoProject.environment.projection ?? "mercator" },
   sources: {},
   layers: [],
 };

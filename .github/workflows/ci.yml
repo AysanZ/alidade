@@ -21,6 +21,18 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
 
+  api-unit:
+    name: api without a database
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r services/api/requirements.txt pytest
+      - run: pytest tests/test_routes.py tests/test_naming.py tests/test_capabilities.py tests/test_net.py
+        working-directory: services/api
+
   api:
     name: api
     runs-on: ubuntu-latest

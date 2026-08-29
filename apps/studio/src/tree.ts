@@ -49,3 +49,21 @@ export function removeNode(draft: MapProject, id: string): MapProject {
   }
   return draft;
 }
+
+/** Copy a layer, its source reference included, and put it above the original. */
+export function duplicateNode(draft: MapProject, id: string): MapProject {
+  const copy = (nodes: TreeNode[]): boolean => {
+    const index = nodes.findIndex((n) => n.id === id);
+    if (index !== -1) {
+      const original = nodes[index]!;
+      const clone = JSON.parse(JSON.stringify(original)) as TreeNode;
+      clone.id = `${original.id}_copy_${Math.random().toString(36).slice(2, 6)}`;
+      clone.name = `${original.name} copy`;
+      nodes.splice(index, 0, clone);
+      return true;
+    }
+    return nodes.some((n) => n.type === "group" && copy(n.children));
+  };
+  copy(draft.tree);
+  return draft;
+}

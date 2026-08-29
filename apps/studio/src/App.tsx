@@ -6,6 +6,8 @@ import { denominatorAt, formatCoordinate } from "@alidade/core";
 import { MapManager, watchStyleSwaps, type Renderer } from "@alidade/maplibre";
 
 import { AddData } from "./components/AddData";
+import { AttributeTable } from "./components/AttributeTable";
+import { LayerMenu, moveWithinSlot } from "./components/LayerMenu";
 import { BasemapGallery } from "./components/BasemapGallery";
 import { Inspector } from "./components/Inspector";
 import { LayerTree } from "./components/LayerTree";
@@ -16,6 +18,7 @@ import { Rail, type PaneId } from "./components/Rail";
 import { ScenePanel } from "./components/ScenePanel";
 import { TitleBar } from "./components/TitleBar";
 import { demoProject, emptyStyle } from "./project";
+import { duplicateNode, findLayer, removeNode, withNode } from "./tree";
 import { useProject } from "./useProject";
 
 const TITLES: Record<PaneId, string> = {
@@ -27,10 +30,13 @@ const TITLES: Record<PaneId, string> = {
 
 export default function App() {
   const holder = useRef<HTMLDivElement>(null);
-  const { project, log, edit, sync, attach } = useProject(demoProject);
+  const { project, log, edit, sync, attach, warning, setWarning } = useProject(demoProject);
   const mapRef = useRef<MapLibreMap | null>(null);
   const [pane, setPane] = useState<PaneId>("layers");
   const [adding, setAdding] = useState(false);
+  const [menu, setMenu] = useState<{ id: string; at: { x: number; y: number } } | null>(null);
+  const [table, setTable] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>("density");
   const [camera, setCamera] = useState<Camera>({
     zoom: demoProject.view.zoom,
@@ -58,11 +64,16 @@ export default function App() {
       center: demoProject.view.center,
       zoom: demoProject.view.zoom,
       attributionControl: false,
-      maxPitch: 75,
+      maxPitch: 85,
+      // Required if the canvas is ever to be read back, which Export map does.
+      // MapLibre 5 moved these under canvasContextAttributes.
+      canvasContextAttributes: { preserveDrawingBuffer: true, antialias: true },
     });
 
     map.on("load", () => {
-      const manager = new MapManager(map as unknown as Renderer, demoProject);
+      const manager = new MapManager(map as unknown as Renderer, demoProject, {
+        onWarning: (message) => setProblem(message),
+      });
       watchStyleSwaps(map as never, manager);
       attach(manager);
       readCamera(map);
@@ -79,6 +90,12 @@ export default function App() {
       });
     });
     map.on("mousemove", (e: MapMouseEvent) => setPointer([e.lngLat.lng, e.lngLat.lat]));
+    // Without this, a failing tile request is invisible and looks like an empty map.
+    map.on("error", (e: { error?: Error }) => {
+      const message = e.error?.message ?? "The renderer reported a problem.";
+      setProblem(message);
+      console.error("[alidade]", e.error ?? e);
+    });
 
     mapRef.current = map;
     return () => map.remove();
@@ -98,6 +115,50 @@ export default function App() {
   );
 
   const denominator = Math.round(denominatorAt(camera.zoom, camera.latitude));
+
+  const exportImage = () => {
+    const canvas = mapRef.current?.getCanvas();
+    if (!canvas) return;
+    const link = document.createElement("a");
+    link.href = canvas.toDataURL("image/png");
+    link.download = `${project.id}.png`;
+    link.click();
+  };
+
+  const goTo = (lon: number, lat: number) =>
+    mapRef.current?.flyTo({ center: [lon, lat], zoom: Math.max(camera.zoom, 12), duration: 800 });
+
+  const runAction = (id: string, action: string) => {
+    const layer = findLayer(project, id);
+    switch (action) {
+      case "zoom":
+        if (layer?.metadata?.extent) flyTo(layer.metadata.extent);
+        else setProblem("That layer has no recorded extent to zoom to.");
+        break;
+      case "attributes":
+        setTable(id);
+        break;
+      case "up":
+        edit((d) => moveWithinSlot(d, id, -1));
+        break;
+      case "down":
+        edit((d) => moveWithinSlot(d, id, 1));
+        break;
+      case "duplicate":
+        edit((d) => duplicateNode(d, id));
+        break;
+      case "rename": {
+        const name = window.prompt("Layer name", layer?.name ?? "");
+        if (name) edit((d) => withNode(d, id, (n) => void (n.name = name)));
+        break;
+      }
+      case "remove":
+        edit((d) => removeNode(d, id));
+        if (selected === id) setSelected(null);
+        if (table === id) setTable(null);
+        break;
+    }
+  };
 
   const actions = {
     zoomIn: () => mapRef.current?.zoomIn(),
@@ -133,19 +194,46 @@ export default function App() {
             )}
           </div>
           {pane === "layers" && (
-            <LayerTree project={project} selected={selected} onSelect={setSelected} edit={edit} />
+            <LayerTree
+              project={project}
+              selected={selected}
+              onSelect={setSelected}
+              edit={edit}
+              onMenu={(id, at) => setMenu({ id, at })}
+            />
           )}
           {pane === "basemaps" && <BasemapGallery project={project} edit={edit} />}
           {pane === "scene" && (
-            <ScenePanel project={project} edit={edit} denominator={denominator} />
+            <ScenePanel
+              project={project}
+              edit={edit}
+              denominator={denominator}
+              onGoTo={goTo}
+            />
           )}
-          {pane === "project" && <ProjectPanel project={project} log={log} />}
+          {pane === "project" && (
+            <ProjectPanel project={project} log={log} onExportImage={exportImage} />
+          )}
         </aside>
 
         <div className="mapwrap">
           <div className="map" ref={holder} />
           <MapChrome chrome={project.chrome} camera={camera} />
           <MapControls actions={actions} />
+          {(problem ?? warning) && (
+            <div className="problem">
+              <span>{problem ?? warning}</span>
+              <button
+                onClick={() => {
+                  setProblem(null);
+                  setWarning(null);
+                }}
+                aria-label="Dismiss"
+              >
+                ✕
+              </button>
+            </div>
+          )}
           <p className="attribution">{project.basemap.raster?.attribution}</p>
         </div>
 
@@ -158,15 +246,34 @@ export default function App() {
           onRemoved={() => setSelected(null)}
         />
 
+        {menu && (
+          <LayerMenu
+            at={menu.at}
+            onPick={(action) => runAction(menu.id, action)}
+            onClose={() => setMenu(null)}
+          />
+        )}
+
         {adding && (
           <AddData
             edit={edit}
             onClose={() => setAdding(false)}
-            onAdded={setSelected}
+            onAdded={(id) => {
+              setSelected(id);
+              setTable(id);
+            }}
             onFlyTo={flyTo}
           />
         )}
       </div>
+
+      {table && (
+        <AttributeTable
+          layerId={table}
+          title={findLayer(project, table)?.name ?? table}
+          onClose={() => setTable(null)}
+        />
+      )}
 
       <footer className="status">
         <span>EPSG:4326</span>

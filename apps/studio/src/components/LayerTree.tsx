@@ -14,10 +14,11 @@ interface Props {
   selected: string | null;
   onSelect: (id: string) => void;
   edit: (change: (draft: MapProject) => MapProject) => void;
+  onMenu: (id: string, at: { x: number; y: number }) => void;
 }
 
 /** The table of contents, grouped by slot so the ordering rule is visible. */
-export function LayerTree({ project, selected, onSelect, edit }: Props) {
+export function LayerTree({ project, selected, onSelect, edit, onMenu }: Props) {
   const slotOf = (node: TreeNode): Slot =>
     node.type === "layer" ? node.slot : (slotOf(node.children[0]!) ?? "data");
 
@@ -40,6 +41,7 @@ export function LayerTree({ project, selected, onSelect, edit }: Props) {
                 selected={selected}
                 onSelect={onSelect}
                 edit={edit}
+                onMenu={onMenu}
               />
             ))}
           </div>
@@ -64,6 +66,7 @@ function Node({
   selected,
   onSelect,
   edit,
+  onMenu,
 }: {
   node: TreeNode;
   depth: number;
@@ -81,6 +84,11 @@ function Node({
         className={`node${node.id === selected ? " on" : ""}${node.visible ? "" : " off"}`}
         style={{ paddingInlineStart: 8 + depth * 13 }}
         onClick={() => onSelect(node.id)}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onSelect(node.id);
+          onMenu(node.id, { x: e.clientX, y: e.clientY });
+        }}
       >
         <button
           className="eye"
@@ -99,6 +107,18 @@ function Node({
         )}
         <span className="name">{node.name}</span>
         {node.type === "layer" && node.filter && <span className="tag">filtered</span>}
+        <button
+          className="more"
+          aria-label="Layer actions"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect(node.id);
+            const box = (e.target as HTMLElement).getBoundingClientRect();
+            onMenu(node.id, { x: box.right + 4, y: box.top });
+          }}
+        >
+          ⋯
+        </button>
       </div>
       {node.type === "group" &&
         node.children.map((child) => (
@@ -109,6 +129,7 @@ function Node({
             selected={selected}
             onSelect={onSelect}
             edit={edit}
+            onMenu={onMenu}
           />
         ))}
     </>

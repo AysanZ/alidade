@@ -1,5 +1,8 @@
 import type { MapProject } from "@alidade/core";
 
+import { useState } from "react";
+import { parseCoordinate } from "@alidade/core";
+
 import { HILLSHADE } from "../project";
 import { Field, Section, Switch } from "./Field";
 
@@ -16,11 +19,15 @@ export function ScenePanel({
   project,
   edit,
   denominator,
+  onGoTo,
 }: {
   project: MapProject;
   edit: (change: (draft: MapProject) => MapProject) => void;
   denominator: number;
+  onGoTo: (lon: number, lat: number) => void;
 }) {
+  const [target, setTarget] = useState("");
+  const parsed = parseCoordinate(target);
   const { view, environment, chrome } = project;
   const mode = VIEWS.find((v) => v.pitch === view.pitch)?.id ?? "custom";
   const tooFarOutForRelief = denominator > TERRAIN_DENOMINATOR;
@@ -92,6 +99,32 @@ export function ScenePanel({
             Reset pitch and bearing
           </button>
         </div>
+      </Section>
+
+      <Section title="Go to">
+        <div className="row">
+          <input
+            className="text"
+            value={target}
+            placeholder="35.6892, 51.389"
+            onChange={(e) => setTarget(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && parsed) onGoTo(parsed[0], parsed[1]);
+            }}
+          />
+          <button
+            className="primary"
+            disabled={!parsed}
+            onClick={() => parsed && onGoTo(parsed[0], parsed[1])}
+          >
+            Go
+          </button>
+        </div>
+        <p className="hint">
+          {target && !parsed
+            ? "That is not a coordinate this can read."
+            : "Latitude first. Decimal degrees or 35° 41′ 21″ N, 51° 23′ 20″ E."}
+        </p>
       </Section>
 
       <Section title="Projection">

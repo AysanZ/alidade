@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatCoordinate, scaleBar, toUtm } from "../src/format";
+import { formatCoordinate, parseCoordinate, scaleBar, toUtm } from "../src/format";
 
 describe("coordinate readout", () => {
   it("writes decimal degrees with a hemisphere", () => {
@@ -52,5 +52,36 @@ describe("scale bar", () => {
   it("switches units on request", () => {
     expect(scaleBar(10, 120, "imperial").label).toMatch(/ft|mi/);
     expect(scaleBar(10, 120, "nautical").label).toContain("nm");
+  });
+});
+
+describe("reading a coordinate someone typed", () => {
+  it("takes decimal degrees, latitude first", () => {
+    expect(parseCoordinate("35.6892, 51.389")).toEqual([51.389, 35.6892]);
+  });
+
+  it("does not mind spaces instead of a comma", () => {
+    expect(parseCoordinate("35.6892 51.389")).toEqual([51.389, 35.6892]);
+  });
+
+  it("takes degrees, minutes and seconds", () => {
+    const parsed = parseCoordinate("35° 41′ 21″ N, 51° 23′ 20″ E")!;
+    expect(parsed[1]).toBeCloseTo(35.6892, 3);
+    expect(parsed[0]).toBeCloseTo(51.3889, 3);
+  });
+
+  it("believes a hemisphere letter over the usual order", () => {
+    expect(parseCoordinate("51.389 E, 35.6892 N")).toEqual([51.389, 35.6892]);
+  });
+
+  it("understands south and west as negative", () => {
+    const parsed = parseCoordinate("33.87 S, 151.21 E")!;
+    expect(parsed[1]).toBeCloseTo(-33.87, 4);
+  });
+
+  it("refuses a latitude that cannot exist", () => {
+    expect(parseCoordinate("135.2, 51.3")).toBeNull();
+    expect(parseCoordinate("nowhere")).toBeNull();
+    expect(parseCoordinate("")).toBeNull();
   });
 });

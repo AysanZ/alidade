@@ -9,7 +9,7 @@ export { hiddenBecause, denominatorInRange } from "./visibility";
 export type { Hidden } from "./visibility";
 export { paintFor, colorExpression, templateToExpression } from "./symbology";
 export { graticuleGeoJSON, graticuleSourceId } from "./graticule";
-export { formatCoordinate, scaleBar, dms, toUtm } from "./format";
+export { formatCoordinate, parseCoordinate, scaleBar, dms, toUtm } from "./format";
 export { wmsTileUrl, wmsSource, wmsFeatureInfoUrl } from "./wms";
 export type { WmsCapabilities, WmsLayerChoice, WmsOptions } from "./wms";
 export type { ScaleBar } from "./format";
