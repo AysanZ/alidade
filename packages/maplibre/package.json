@@ -1,0 +1,14 @@
+{
+  "name": "@alidade/maplibre",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@alidade/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "maplibre-gl": "^4.7.1"
+  }
+}
