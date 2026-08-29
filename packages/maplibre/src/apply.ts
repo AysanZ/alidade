@@ -43,6 +43,16 @@ export function apply(renderer: Renderer, ops: Op[]): void {
   }
 }
 
+/** A clear day at altitude. Only used when the project asks for a sky. */
+const SKY = {
+  "sky-color": "#0d1622",
+  "horizon-color": "#2a3646",
+  "fog-color": "#0a0a0b",
+  "sky-horizon-blend": 0.6,
+  "horizon-fog-blend": 0.6,
+  "fog-ground-blend": 0.15,
+};
+
 function applyEnvironment(renderer: Renderer, key: string, value: unknown): void {
   switch (key) {
     case "terrain":
@@ -55,10 +65,12 @@ function applyEnvironment(renderer: Renderer, key: string, value: unknown): void
       renderer.setLight?.(value ?? null);
       break;
     case "sky":
-      renderer.setSky?.(value ?? null);
+      // The project says yes or no; the engine wants a set of colours.
+      renderer.setSky?.(value ? SKY : undefined);
       break;
     case "projection":
-      renderer.setProjection?.(value ?? null);
+      // Ours is the name a GIS user says. MapLibre wants it wrapped.
+      renderer.setProjection?.(value ? { type: value } : { type: "mercator" });
       break;
   }
 }

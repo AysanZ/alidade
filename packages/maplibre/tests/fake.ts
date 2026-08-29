@@ -75,6 +75,12 @@ export class FakeMap implements Renderer {
   setFog(value: unknown) {
     this.log("setFog", value);
   }
+  setSky(value: unknown) {
+    this.log("setSky", value);
+  }
+  setProjection(value: unknown) {
+    this.log("setProjection", value);
+  }
   getLayer(id: string) {
     return this.order.includes(id) ? { id } : undefined;
   }

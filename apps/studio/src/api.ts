@@ -13,6 +13,11 @@ export interface RegisteredLayer {
 
 async function json<T>(response: Response): Promise<T> {
   if (!response.ok) {
+    if (response.status === 405 || response.status === 404) {
+      throw new Error(
+        "The API does not have this endpoint. Rebuild it: docker compose -f deploy/docker-compose.yml up -d --build api",
+      );
+    }
     const body = (await response.json().catch(() => null)) as { detail?: string } | null;
     throw new Error(body?.detail ?? `The server answered ${response.status}.`);
   }

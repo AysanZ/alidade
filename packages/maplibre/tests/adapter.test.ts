@@ -169,3 +169,36 @@ function register(map: FakeMap) {
     (map as unknown as { fire: () => void }).fire = handler;
   };
 }
+
+describe("environment", () => {
+  it("wraps a projection name the way the engine wants it", () => {
+    const map = new FakeMap();
+    const manager = new MapManager(map, project());
+    map.calls = [];
+    manager.update((p) => {
+      p.environment.projection = "globe";
+      return p;
+    });
+    expect(map.calls).toEqual([["setProjection", { type: "globe" }]]);
+  });
+
+  it("turns a yes into a sky and a no into nothing", () => {
+    const map = new FakeMap();
+    const manager = new MapManager(map, project());
+
+    map.calls = [];
+    manager.update((p) => {
+      p.environment.sky = true;
+      return p;
+    });
+    expect(map.calls[0]![0]).toBe("setSky");
+    expect(map.calls[0]![1]).toMatchObject({ "sky-color": expect.any(String) });
+
+    map.calls = [];
+    manager.update((p) => {
+      delete p.environment.sky;
+      return p;
+    });
+    expect(map.calls).toEqual([["setSky", undefined]]);
+  });
+});

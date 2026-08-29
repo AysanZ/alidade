@@ -9,6 +9,6 @@
     "@alidade/core": "workspace:*"
   },
   "peerDependencies": {
-    "maplibre-gl": "^4.7.1"
+    "maplibre-gl": "^5.0.0"
   }
 }

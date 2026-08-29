@@ -94,6 +94,43 @@ export function ScenePanel({
         </div>
       </Section>
 
+      <Section title="Projection">
+        <div className="row buttons">
+          {(["mercator", "globe"] as const).map((p) => (
+            <button
+              key={p}
+              className={(project.environment.projection ?? "mercator") === p ? "on" : ""}
+              onClick={() =>
+                edit((d) => {
+                  d.environment.projection = p;
+                  // A globe against a black void reads as a bug, not a globe.
+                  if (p === "globe") d.environment.sky = true;
+                  return d;
+                })
+              }
+            >
+              {p === "mercator" ? "Mercator" : "Globe"}
+            </button>
+          ))}
+        </div>
+        <Switch
+          label="Sky and atmosphere"
+          on={Boolean(environment.sky)}
+          onChange={(on) =>
+            edit((d) => {
+              if (on) d.environment.sky = true;
+              else delete d.environment.sky;
+              return d;
+            })
+          }
+        />
+        <p className="hint">
+          Storage and rendering stay EPSG:3857. Globe is a way of drawing the same web mercator
+          data, not a different coordinate system, and it only looks like a globe below about
+          zoom 5.
+        </p>
+      </Section>
+
       <Section title="Terrain">
         {environment.terrain && tooFarOutForRelief && (
           <p className="warn">

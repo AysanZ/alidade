@@ -75,7 +75,7 @@ not a published package.
 
 ```bash
 pnpm install
-pnpm test        # 76 tests, Node only: no browser, no WebGL
+pnpm test        # 78 tests, Node only: no browser, no WebGL
 pnpm typecheck
 ```
 

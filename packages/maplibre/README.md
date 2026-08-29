@@ -8,6 +8,6 @@ anything: if a decision is being made in this folder, it is in the wrong folder.
 ## A note on the MapLibre version
 
 `setFog`, `setSky` and `setProjection` are optional on the renderer interface and
-called with `?.`. MapLibre 4 does not implement all of them, so those environment
-operations are emitted, ignored by the engine, and start working the day the
-dependency moves to a version that has them. Nothing else has to change.
+called with `?.`. They were emitted and quietly ignored under MapLibre 4; moving
+to 5 turned them on without a change to the core, which is the point of the
+operations being data.
