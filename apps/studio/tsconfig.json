@@ -9,6 +9,8 @@
     "noEmit": true,
     "skipLibCheck": true,
     "isolatedModules": true,
+    "esModuleInterop": true,
+    "types": ["node"],
     "baseUrl": ".",
     "paths": {
       "@alidade/core": ["../../packages/core/src/index.ts"],

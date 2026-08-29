@@ -1,0 +1,22 @@
+import type { MapProject } from "@alidade/core";
+
+export function TitleBar({ project, ops }: { project: MapProject; ops: number }) {
+  return (
+    <header className="titlebar">
+      <div className="brand">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor">
+          <circle cx="12" cy="12" r="9" strokeWidth="1.6" />
+          <path d="M12 1.5v21M1.5 12h21" strokeWidth="0.8" />
+          <path d="m12 4.5 3 7.5-3 7.5-3-7.5 3-7.5Z" fill="currentColor" fillOpacity=".2" />
+        </svg>
+        <b>Alidade</b>
+      </div>
+      <span className="doc">{project.name}</span>
+      <span className="tag">schema {project.schema}</span>
+      <div className="grow" />
+      <span className="muted">{ops} operations this session</span>
+      <button className="ghost">Share</button>
+      <button className="primary">Save</button>
+    </header>
+  );
+}
