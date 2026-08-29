@@ -1,5 +1,10 @@
 FROM python:3.12-slim
 
+# GDAL is what turns an uploaded Shapefile into a PostGIS table.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends gdal-bin \
+ && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /srv
 
 COPY requirements.txt .
