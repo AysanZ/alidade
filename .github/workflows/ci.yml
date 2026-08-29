@@ -1,0 +1,49 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  core:
+    name: core and adapter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+
+  api:
+    name: api
+    runs-on: ubuntu-latest
+    services:
+      postgis:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: alidade
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: alidade
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U alidade" --health-interval 5s
+          --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r services/api/requirements.txt pytest httpx
+      - run: psql "$DSN" -f data/init/01_schema.sql -f data/init/02_seed.sql
+        env:
+          DSN: postgresql://alidade:test@localhost:5432/alidade
+      - run: pytest services/api
+        env:
+          POSTGRES_PASSWORD: test
