@@ -1,149 +1,126 @@
-import { useEffect, useRef, useState } from "react";
-import maplibregl from "maplibre-gl";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Map as MapLibreMap, type MapMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import { denominatorAt, type GraduatedSymbol, type GroupNode, type LayerNode } from "@alidade/core";
+import { denominatorAt, formatCoordinate } from "@alidade/core";
 import { MapManager, watchStyleSwaps, type Renderer } from "@alidade/maplibre";
 
+import { AddData } from "./components/AddData";
+import { BasemapGallery } from "./components/BasemapGallery";
+import { Inspector } from "./components/Inspector";
+import { LayerTree } from "./components/LayerTree";
+import { MapChrome, type Camera } from "./components/MapChrome";
+import { ProjectPanel } from "./components/ProjectPanel";
+import { Rail, type PaneId } from "./components/Rail";
+import { ScenePanel } from "./components/ScenePanel";
+import { TitleBar } from "./components/TitleBar";
 import { demoProject, emptyStyle } from "./project";
 import { useProject } from "./useProject";
 
-const BASEMAPS = [
-  { id: "graphite", name: "Graphite", background: "#0b0b0c" },
-  { id: "carbon", name: "Carbon", background: "#050505" },
-  { id: "blueprint", name: "Blueprint", background: "#0a1420" },
-];
-
-const densityLayer = (p: typeof demoProject) =>
-  (p.tree[0] as GroupNode).children[0] as LayerNode;
+const TITLES: Record<PaneId, string> = {
+  layers: "Layers",
+  basemaps: "Basemaps",
+  scene: "Scene",
+  project: "Project",
+};
 
 export default function App() {
   const holder = useRef<HTMLDivElement>(null);
   const { project, log, edit, attach } = useProject(demoProject);
-  const [scale, setScale] = useState(0);
+  const [pane, setPane] = useState<PaneId>("layers");
+  const [adding, setAdding] = useState(false);
+  const [selected, setSelected] = useState<string | null>("density");
+  const [camera, setCamera] = useState<Camera>({
+    zoom: demoProject.view.zoom,
+    latitude: demoProject.view.center[1],
+    bearing: 0,
+    pitch: 0,
+  });
+  const [pointer, setPointer] = useState<[number, number]>(demoProject.view.center);
+
+  const readCamera = useCallback((map: MapLibreMap) => {
+    setCamera({
+      zoom: map.getZoom(),
+      latitude: map.getCenter().lat,
+      bearing: map.getBearing(),
+      pitch: map.getPitch(),
+    });
+  }, []);
 
   useEffect(() => {
     if (!holder.current) return;
 
-    const map = new maplibregl.Map({
+    const map = new MapLibreMap({
       container: holder.current,
       style: emptyStyle,
       center: demoProject.view.center,
       zoom: demoProject.view.zoom,
       attributionControl: false,
+      maxPitch: 75,
     });
 
     map.on("load", () => {
       const manager = new MapManager(map as unknown as Renderer, demoProject);
       watchStyleSwaps(map as never, manager);
       attach(manager);
+      readCamera(map);
     });
-
-    const readScale = () => setScale(denominatorAt(map.getZoom(), map.getCenter().lat));
-    map.on("move", readScale);
-    map.on("load", readScale);
+    map.on("move", () => readCamera(map));
+    map.on("mousemove", (e: MapMouseEvent) => setPointer([e.lngLat.lng, e.lngLat.lat]));
 
     return () => map.remove();
-  }, [attach]);
+  }, [attach, readCamera]);
 
-  const layer = densityLayer(project);
-  const symbology = layer.symbology as GraduatedSymbol;
+  const denominator = Math.round(denominatorAt(camera.zoom, camera.latitude));
 
   return (
-    <>
-      <div className="map" ref={holder} />
+    <div className="app">
+      <TitleBar project={project} ops={log.length} />
 
-      <aside className="panel">
-        <header>{project.name}</header>
+      <div className="middle">
+        <Rail active={pane} onSelect={setPane} />
 
-        <label className="row">
-          <input
-            type="checkbox"
-            checked={layer.visible}
-            onChange={(e) =>
-              edit((draft) => {
-                densityLayer(draft).visible = e.target.checked;
-                return draft;
-              })
-            }
-          />
-          {layer.name}
-        </label>
+        <aside className="panel">
+          <div className="phead">
+            {TITLES[pane]}
+            {pane === "layers" && (
+              <button className="add" onClick={() => setAdding(true)} title="Add data">
+                +
+              </button>
+            )}
+          </div>
+          {pane === "layers" && (
+            <LayerTree project={project} selected={selected} onSelect={setSelected} edit={edit} />
+          )}
+          {pane === "basemaps" && <BasemapGallery project={project} edit={edit} />}
+          {pane === "scene" && <ScenePanel project={project} edit={edit} />}
+          {pane === "project" && <ProjectPanel project={project} log={log} />}
+        </aside>
 
-        <div className="row">
-          <span>Third break</span>
-          <input
-            type="range"
-            min={2200}
-            max={9000}
-            step={50}
-            value={symbology.breaks[2]}
-            onChange={(e) =>
-              edit((draft) => {
-                const s = densityLayer(draft).symbology as GraduatedSymbol;
-                s.breaks[2] = Number(e.target.value);
-                return draft;
-              })
-            }
-          />
-          <b>{symbology.breaks[2]}</b>
+        <div className="mapwrap">
+          <div className="map" ref={holder} />
+          <MapChrome chrome={project.chrome} camera={camera} />
+          <p className="attribution">{project.basemap.raster?.attribution}</p>
         </div>
 
-        <div className="row">
-          <span>Opacity</span>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={Math.round(layer.opacity * 100)}
-            onChange={(e) =>
-              edit((draft) => {
-                densityLayer(draft).opacity = Number(e.target.value) / 100;
-                return draft;
-              })
-            }
-          />
-          <b>{Math.round(layer.opacity * 100)}%</b>
-        </div>
+        <Inspector project={project} selected={selected} edit={edit} />
 
-        <div className="row basemaps">
-          {BASEMAPS.map((b) => (
-            <button
-              key={b.id}
-              className={b.id === project.basemap.id ? "on" : ""}
-              onClick={() =>
-                edit((draft) => {
-                  draft.basemap = { ...draft.basemap, ...b };
-                  return draft;
-                })
-              }
-            >
-              {b.name}
-            </button>
-          ))}
-        </div>
-
-        <footer>
-          <span>Last operations</span>
-          <ol>
-            {log.slice(0, 6).map((op, i) => (
-              <li key={i}>
-                {op.t}
-                {"id" in op ? ` · ${op.id}` : ""}
-                {"key" in op ? ` · ${op.key}` : ""}
-              </li>
-            ))}
-          </ol>
-        </footer>
-      </aside>
-
-      <div className="status">
-        <span>EPSG:4326</span>
-        <span>1:{Math.round(scale).toLocaleString("en-US").replace(/,/g, " ")}</span>
-        <span style={{ marginInlineStart: "auto" }}>
-          schema {project.schema} · {log.length} ops this session
-        </span>
+        {adding && (
+          <AddData edit={edit} onClose={() => setAdding(false)} onAdded={setSelected} />
+        )}
       </div>
-    </>
+
+      <footer className="status">
+        <span>EPSG:4326</span>
+        <span>{formatCoordinate(pointer[0], pointer[1], project.chrome.coordinates)}</span>
+        <span>1:{denominator.toLocaleString("en-US").replace(/,/g, " ")}</span>
+        <span>z {camera.zoom.toFixed(1)}</span>
+        <span>
+          pitch {Math.round(camera.pitch)}° · bearing {Math.round(camera.bearing)}°
+        </span>
+        <span className="grow" />
+        <span>{project.basemap.name}</span>
+      </footer>
+    </div>
   );
 }
