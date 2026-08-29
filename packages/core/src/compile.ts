@@ -9,6 +9,7 @@ import type {
 } from "./types/project";
 import { SLOT_ORDER } from "./types/project";
 import { toExpression } from "./filter";
+import { graticuleGeoJSON, graticuleSourceId } from "./graticule";
 import { zoomRange } from "./scale";
 import { labelLayout, labelPaint, paintFor, strokePaint } from "./symbology";
 
@@ -59,17 +60,67 @@ function flatten(nodes: TreeNode[], opacity = 1, visible = true): Flat[] {
 }
 
 export function compile(project: MapProject): Compiled {
+  const sources: Record<string, Source> = { ...project.sources };
   const bySlot = new Map<Slot, EngineLayer[]>();
   for (const slot of SLOT_ORDER) bySlot.set(slot, []);
 
-  // The basemap owns the bottom of the base slot and nothing else.
-  bySlot.get("base")!.push({
-    id: "basemap:background",
-    type: "background",
-    slot: "base",
-    paint: { "background-color": project.basemap.background },
-    layout: {},
-  });
+  /*
+   * Layers the application owns rather than the user. They are not reversed with
+   * the tree, because their draw order is fixed: background, basemap, hillshade.
+   */
+  const systemBase: EngineLayer[] = [
+    {
+      id: "basemap:background",
+      type: "background",
+      slot: "base",
+      paint: { "background-color": project.basemap.background },
+      layout: {},
+    },
+  ];
+  const systemLabels: EngineLayer[] = [];
+
+  if (project.basemap.raster) {
+    sources["basemap:raster"] = { type: "raster", ...project.basemap.raster };
+    systemBase.push({
+      id: "basemap:raster",
+      type: "raster",
+      source: "basemap:raster",
+      slot: "base",
+      paint: { "raster-opacity": 1 },
+      layout: {},
+    });
+  }
+
+  // Hillshade sits on the basemap, under everything the user added.
+  const hillshade = project.environment.hillshade;
+  if (hillshade) {
+    systemBase.push({
+      id: "environment:hillshade",
+      type: "hillshade",
+      source: hillshade.source,
+      slot: "base",
+      paint: {
+        "hillshade-illumination-direction": hillshade.illumination,
+        "hillshade-illumination-anchor": "map",
+        "hillshade-exaggeration": hillshade.intensity,
+        "hillshade-shadow-color": hillshade.shadowColor,
+        "hillshade-highlight-color": hillshade.highlightColor,
+      },
+      layout: {},
+    });
+  }
+
+  if (project.basemap.labelTiles && project.basemap.labels) {
+    sources["basemap:labels"] = { type: "raster", ...project.basemap.labelTiles };
+    systemLabels.push({
+      id: "basemap:labels",
+      type: "raster",
+      source: "basemap:labels",
+      slot: "labels",
+      paint: { "raster-opacity": 1 },
+      layout: {},
+    });
+  }
 
   const lat = project.view.center[1];
 
@@ -79,17 +130,45 @@ export function compile(project: MapProject): Compiled {
     }
   }
 
+  // The graticule is chrome, but it is the one piece of chrome the renderer draws.
+  if (project.chrome.graticule.enabled) {
+    const { interval, color, labels } = project.chrome.graticule;
+    sources[graticuleSourceId()] = { type: "geojson", data: graticuleGeoJSON(interval) };
+    systemLabels.push({
+      id: "chrome:graticule:line",
+      type: "line",
+      source: graticuleSourceId(),
+      slot: "labels",
+      paint: { "line-color": color, "line-width": 0.7, "line-dasharray": [3, 5] },
+      layout: {},
+    });
+    if (labels) {
+      systemLabels.push({
+        id: "chrome:graticule:label",
+        type: "symbol",
+        source: graticuleSourceId(),
+        slot: "labels",
+        paint: { "text-color": color, "text-halo-color": "#050505", "text-halo-width": 1 },
+        layout: {
+          "text-field": ["get", "label"],
+          "text-size": 10,
+          "symbol-placement": "line",
+          "text-allow-overlap": false,
+        },
+      });
+    }
+  }
+
   // Within a slot the top of the table of contents draws on top, so the engine
   // order is the reverse. Slots are applied before tree order, always.
   const layers: EngineLayer[] = [];
   for (const slot of SLOT_ORDER) {
-    const inSlot = bySlot.get(slot)!;
-    const head = slot === "base" ? inSlot.slice(0, 1) : [];
-    const rest = slot === "base" ? inSlot.slice(1) : inSlot;
-    layers.push(...head, ...groupsReversed(rest));
+    if (slot === "base") layers.push(...systemBase);
+    if (slot === "labels") layers.push(...systemLabels);
+    layers.push(...groupsReversed(bySlot.get(slot)!));
   }
 
-  return { sources: project.sources, layers };
+  return { sources, layers };
 }
 
 /** Reverse the layers but keep each bundle's internal order intact. */

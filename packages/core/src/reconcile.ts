@@ -15,10 +15,8 @@ export function reconcile(prev: MapProject | null, next: MapProject): Op[] {
     : { sources: {} as Record<string, never>, layers: [] as EngineLayer[] };
   const b = compile(next);
 
-  /* sources */
-  for (const id of Object.keys(a.sources)) {
-    if (!(id in b.sources)) ops.push({ t: "source.remove", id });
-  }
+  /* sources: additions first, removals only once nothing reads them any more */
+  const orphaned = Object.keys(a.sources).filter((id) => !(id in b.sources));
   for (const [id, source] of Object.entries(b.sources)) {
     const before = (a.sources as Record<string, unknown>)[id];
     if (before === undefined) ops.push({ t: "source.add", id, source });
@@ -33,6 +31,7 @@ export function reconcile(prev: MapProject | null, next: MapProject): Op[] {
 
   /* removed */
   for (const l of a.layers) if (!will.has(l.id)) ops.push({ t: "layer.remove", id: l.id });
+  for (const id of orphaned) ops.push({ t: "source.remove", id });
 
   /* added, each placed under the first layer above it that already exists */
   for (let i = 0; i < b.layers.length; i++) {

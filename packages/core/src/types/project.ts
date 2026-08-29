@@ -40,7 +40,17 @@ export interface RasterSource {
   attribution?: string;
 }
 
-export type Source = VectorSource | GeoJSONSource | RasterSource;
+/** Elevation tiles. `terrarium` and `mapbox` are the two encodings in the wild. */
+export interface RasterDEMSource {
+  type: "raster-dem";
+  tiles: string[];
+  tileSize?: number;
+  encoding?: "terrarium" | "mapbox";
+  maxzoom?: number;
+  attribution?: string;
+}
+
+export type Source = VectorSource | GeoJSONSource | RasterSource | RasterDEMSource;
 
 /* ---------------------------------------------------------------- symbology */
 
@@ -156,21 +166,64 @@ export interface View {
   bearing: number;
 }
 
+export interface BasemapTiles {
+  tiles: string[];
+  tileSize?: number;
+  maxzoom?: number;
+  attribution: string;
+}
+
 export interface Basemap {
   id: string;
   name: string;
+  /** Shows through wherever the tiles have not loaded, so it is never optional. */
   background: string;
-  /** Raster basemaps name a source declared in `sources`. */
-  raster?: string;
+  raster?: BasemapTiles;
+  /**
+   * A labels-only overlay. It is compiled into the labels slot, above the user's
+   * data, because place names belong on top of a choropleth and not under it.
+   */
+  labelTiles?: BasemapTiles;
   labels: boolean;
+}
+
+export interface Hillshade {
+  /** Names a raster-dem source. */
+  source: string;
+  /** Degrees clockwise from north, the way a GIS user states a sun azimuth. */
+  illumination: number;
+  intensity: number;
+  shadowColor: string;
+  highlightColor: string;
 }
 
 export interface Environment {
   terrain?: { source: string; exaggeration: number };
+  /** Drawn just above the basemap, below everything the user added. */
+  hillshade?: Hillshade;
   fog?: { color: string; range: [number, number] };
   light?: { anchor: "map" | "viewport"; intensity: number };
   sky?: boolean;
   projection?: "mercator" | "globe";
+}
+
+/* ---------------------------------------------------------------- chrome */
+
+export type CoordinateFormat = "dd" | "dms" | "utm";
+export type DistanceUnits = "metric" | "imperial" | "nautical";
+
+/**
+ * Furniture around and over the map. Only the graticule reaches the renderer;
+ * the rest is drawn by the application, which is why it lives beside the tree
+ * rather than in it.
+ */
+export interface Chrome {
+  graticule: { enabled: boolean; interval: number; labels: boolean; color: string };
+  scaleBar: { enabled: boolean; units: DistanceUnits };
+  northArrow: boolean;
+  overview: boolean;
+  legend: boolean;
+  coordinates: CoordinateFormat;
 }
 
 export interface MapProject {
@@ -180,6 +233,16 @@ export interface MapProject {
   view: View;
   basemap: Basemap;
   environment: Environment;
+  chrome: Chrome;
   sources: Record<string, Source>;
   tree: TreeNode[];
 }
+
+export const defaultChrome = (): Chrome => ({
+  graticule: { enabled: false, interval: 0.5, labels: true, color: "#2b2b30" },
+  scaleBar: { enabled: true, units: "metric" },
+  northArrow: true,
+  overview: false,
+  legend: true,
+  coordinates: "dd",
+});

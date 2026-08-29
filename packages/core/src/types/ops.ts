@@ -10,6 +10,7 @@ export interface EngineLayer {
     | "symbol"
     | "circle"
     | "raster"
+    | "hillshade"
     | "fill-extrusion";
   source?: string;
   sourceLayer?: string;
