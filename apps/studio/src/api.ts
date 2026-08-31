@@ -126,3 +126,22 @@ export async function readCapabilities(
     await fetch(`/api/services/wms/capabilities?${query}`),
   );
 }
+
+export interface FieldStats {
+  field: string;
+  type: string | null;
+  numeric: boolean;
+  min: number | null;
+  max: number | null;
+  distinct: number;
+  values: { value: string; count: number }[];
+}
+
+/**
+ * What one column actually contains, so a classification can be built from the
+ * data rather than from a guess.
+ */
+export async function readStats(id: string, field: string): Promise<FieldStats> {
+  const query = new URLSearchParams({ field });
+  return json<FieldStats>(await fetch(`/api/layers/${id}/stats?${query}`));
+}

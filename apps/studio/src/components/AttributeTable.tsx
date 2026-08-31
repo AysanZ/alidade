@@ -6,6 +6,8 @@ import type { Extent } from "./AddData";
 interface Props {
   layerId: string;
   title: string;
+  /** A feature picked on the map, to be found and shown in the table. */
+  focus?: { field: string; value: string } | null;
   /** The layer's source is what a highlight has to filter on. */
   onSelect: (field: string, values: (string | number)[], hover: boolean) => void;
   onZoom: (extent: Extent) => void;
@@ -25,7 +27,7 @@ const LIMIT = 100;
  * be turned off, the panel can be dragged taller, and there is a search box so
  * you can find the row instead of hunting for it.
  */
-export function AttributeTable({ layerId, title, onSelect, onZoom, onClose }: Props) {
+export function AttributeTable({ layerId, title, focus, onSelect, onZoom, onClose }: Props) {
   const [page, setPage] = useState<FeaturePage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
@@ -37,6 +39,18 @@ export function AttributeTable({ layerId, title, onSelect, onZoom, onClose }: Pr
   const [picking, setPicking] = useState(false);
   const [height, setHeight] = useState(240);
   const [chosen, setChosen] = useState<number | null>(null);
+
+  /*
+   * A feature clicked on the map has to be findable in a table of nine thousand
+   * rows, and it will usually be on a page you are not looking at. Searching for
+   * it is how you get to it in one request rather than paging through.
+   */
+  useEffect(() => {
+    if (!focus) return;
+    setSearch(focus.value);
+    setQuery(focus.value);
+    setOffset(0);
+  }, [focus]);
 
   /* the search box waits for a pause rather than a request per keystroke */
   useEffect(() => {
@@ -96,6 +110,17 @@ export function AttributeTable({ layerId, title, onSelect, onZoom, onClose }: Pr
       window.removeEventListener("mouseup", up);
     };
   }, []);
+
+  /* once the page arrives, put the focused row on the screen and mark it */
+  const body = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!focus || !page) return;
+    const at = page.rows.findIndex((row) => String(row.values?.[focus.field] ?? "") === focus.value);
+    if (at < 0) return;
+    setChosen(at);
+    const row = body.current?.querySelectorAll("tbody tr")[at];
+    row?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [focus, page]);
 
   const lastPage = page ? offset + LIMIT >= page.total : true;
 
@@ -169,7 +194,7 @@ export function AttributeTable({ layerId, title, onSelect, onZoom, onClose }: Pr
 
       {error && <p className="error">{error}</p>}
 
-      <div className="tablewrap" onMouseLeave={() => highlight(null, true)}>
+      <div className="tablewrap" ref={body} onMouseLeave={() => highlight(null, true)}>
         {page && (
           <table>
             <thead>

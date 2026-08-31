@@ -9,6 +9,7 @@ import {
   formatCoordinate,
   gridKey,
   padded,
+  needsFraming,
   utmCell,
   viewForExtent,
   withMinimumSize,
@@ -20,7 +21,9 @@ import { AttributeTable } from "./components/AttributeTable";
 import { LayerMenu, moveWithinSlot } from "./components/LayerMenu";
 import { BasemapGallery } from "./components/BasemapGallery";
 import { DrawPanel } from "./components/DrawPanel";
+import { Identify, type Identified } from "./components/Identify";
 import { Inspector } from "./components/Inspector";
+import { Legend } from "./components/Legend";
 import { LayerTree } from "./components/LayerTree";
 import { MapChrome, type Camera } from "./components/MapChrome";
 import { MapControls } from "./components/MapControls";
@@ -30,7 +33,7 @@ import { Rail, type PaneId } from "./components/Rail";
 import { ScenePanel } from "./components/ScenePanel";
 import { TitleBar } from "./components/TitleBar";
 import { emptyProject, emptyStyle } from "./project";
-import { duplicateNode, findLayer, removeNode, withNode } from "./tree";
+import { allLayers, bundleIdsOf, duplicateNode, findLayer, removeNode, withNode } from "./tree";
 import { useDrawing } from "./useDrawing";
 import { useProject } from "./useProject";
 import { stampedPng } from "./export";
@@ -63,6 +66,11 @@ export default function App() {
   });
   const [centre, setCentre] = useState<[number, number]>(emptyProject.view.center);
   const [pointer, setPointer] = useState<[number, number]>(emptyProject.view.center);
+  const [found, setFound] = useState<Identified | null>(null);
+  const [focus, setFocus] = useState<{ field: string; value: string } | null>(null);
+  const [hover, setHover] = useState<{ layer: string; properties: Record<string, unknown> } | null>(
+    null,
+  );
 
   const drawing = useDrawing(project, edit);
 
@@ -75,6 +83,8 @@ export default function App() {
   onClick.current = drawing.click;
   const drawingNow = useRef(false);
   drawingNow.current = drawing.session.mode !== null;
+  const latest = useRef(project);
+  latest.current = project;
 
   const readCamera = useCallback((map: MapLibreMap) => {
     const middle = map.getCenter();
@@ -128,9 +138,53 @@ export default function App() {
         bearing: Math.round(map.getBearing()),
       });
     });
-    map.on("mousemove", (e: MapMouseEvent) => setPointer([e.lngLat.lng, e.lngLat.lat]));
+    /*
+     * Hover and identify. The layers to test are worked out from the project each
+     * time rather than captured once, because the set changes as layers come and
+     * go and a stale list means hovering silently stops working.
+     */
+    const dataLayers = () => {
+      const ids: string[] = [];
+      for (const node of allLayers(latest.current)) {
+        if (node.geometry === "raster") continue;
+        for (const id of bundleIdsOf(node)) {
+          if (id.endsWith(":label")) continue;
+          if (map.getLayer(id)) ids.push(id);
+        }
+      }
+      return ids;
+    };
+
+    const hit = (event: MapMouseEvent) => {
+      const layers = dataLayers();
+      if (layers.length === 0) return null;
+      const features = map.queryRenderedFeatures(event.point, { layers });
+      const feature = features[0];
+      if (!feature) return null;
+      const owner = allLayers(latest.current).find((node) =>
+        bundleIdsOf(node).includes(feature.layer.id),
+      );
+      return owner ? { owner, feature } : null;
+    };
+
+    map.on("mousemove", (e: MapMouseEvent) => {
+      setPointer([e.lngLat.lng, e.lngLat.lat]);
+      if (drawingNow.current) return;
+      const under = hit(e);
+      map.getCanvas().style.cursor = under ? "pointer" : "";
+      setHover(under ? { layer: under.owner.id, properties: under.feature.properties ?? {} } : null);
+    });
+
     map.on("click", (e: MapMouseEvent) => {
-      if (drawingNow.current) onClick.current([e.lngLat.lng, e.lngLat.lat]);
+      if (drawingNow.current) return onClick.current([e.lngLat.lng, e.lngLat.lat]);
+      const under = hit(e);
+      if (!under) return setFound(null);
+      setFound({
+        layer: under.owner,
+        properties: (under.feature.properties ?? {}) as Record<string, unknown>,
+        at: { x: e.originalEvent.clientX, y: e.originalEvent.clientY },
+        position: [e.lngLat.lng, e.lngLat.lat],
+      });
     });
     // Without this, a failing tile request is invisible and looks like an empty map.
     map.on("error", (e: { error?: Error }) => {
@@ -147,11 +201,53 @@ export default function App() {
     };
   }, [attach, readCamera, sync]);
 
+  /*
+   * The hover becomes a selection on the project, which is what the compiler
+   * turns into a highlight layer. It is keyed on the layer's first field, the
+   * same column the attribute table matches on, so hovering the map and hovering
+   * a row light up the same feature.
+   */
+  useEffect(() => {
+    if (found) return;
+    const key = hover ? (findLayer(project, hover.layer)?.metadata?.fields ?? [])[0] : undefined;
+    const value = key ? hover?.properties[key] : undefined;
+    edit((d) => {
+      const wanted =
+        hover && key && (typeof value === "string" || typeof value === "number")
+          ? { layer: hover.layer, field: key, values: [value], hover: true }
+          : undefined;
+      // Only touch the document when the highlight is actually different, or a
+      // mouse moving across a polygon would emit an edit per frame.
+      const now = d.selection;
+      if (!wanted && now?.hover) delete d.selection;
+      else if (wanted && (now?.hover !== true || now.values[0] !== wanted.values[0] || now.layer !== wanted.layer)) {
+        d.selection = wanted;
+      }
+      return d;
+    });
+    // `project` is deliberately not a dependency: this reacts to the pointer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hover, found, edit]);
+
   /* the pointer becomes a crosshair while a drawing is open */
   useEffect(() => {
     const canvas = mapRef.current?.getCanvas();
     if (canvas) canvas.style.cursor = drawing.session.mode ? "crosshair" : "";
   }, [drawing.session.mode]);
+
+  /*
+   * Escape steps back out of whatever is open, in the order a person expects:
+   * the popup first, then presentation mode. Drawing has its own escape.
+   */
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (found) setFound(null);
+      else if (presenting) setPresenting(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [found, presenting]);
 
   /* navigation locks */
   useEffect(() => {
@@ -201,13 +297,25 @@ export default function App() {
    * part of the question and the whole thing can be tested.
    */
   const flyTo = useCallback(
-    (extent: Extent) => {
+    (extent: Extent, onlyIfItHelps = false) => {
       const map = mapRef.current;
       if (!map) return;
       const canvas = map.getCanvas();
+      const viewport = { width: canvas.clientWidth, height: canvas.clientHeight };
+      const now = {
+        center: [map.getCenter().lng, map.getCenter().lat] as [number, number],
+        zoom: map.getZoom(),
+      };
+      /*
+       * Adding a worldwide layer while looking at a globe used to pull the camera
+       * out until the whole extent fitted, shrinking the planet to show data that
+       * was already on the screen. An explicit "zoom to layer" always moves; the
+       * automatic one after an import only moves when it would help.
+       */
+      if (onlyIfItHelps && !needsFraming(extent, now, viewport)) return;
       const view = viewForExtent(
         withMinimumSize(extent),
-        { width: canvas.clientWidth, height: canvas.clientHeight },
+        viewport,
         {
           center: [map.getCenter().lng, map.getCenter().lat],
           zoom: map.getZoom(),
@@ -346,7 +454,7 @@ export default function App() {
               edit={edit}
               onMenu={(id, at) => setMenu({ id, at })}
               onAdd={() => setAdding(true)}
-              onFlyTo={flyTo}
+              onFlyTo={(extent) => flyTo(extent, true)}
             />
           )}
           {pane === "basemaps" && <BasemapGallery project={project} edit={edit} />}
@@ -406,6 +514,29 @@ export default function App() {
               </span>
             </div>
           )}
+          {project.chrome.legend && <Legend project={project} />}
+          {found && (
+            <Identify
+              found={found}
+              onClose={() => setFound(null)}
+              onZoom={() =>
+                mapRef.current?.easeTo({
+                  center: found.position,
+                  zoom: Math.max(mapRef.current.getZoom(), 9),
+                  duration: 700,
+                })
+              }
+              onOpenTable={() => {
+                const key = (found.layer.metadata?.fields ?? [])[0];
+                const value = key ? found.properties[key] : undefined;
+                setTable(found.layer.id);
+                if (key && (typeof value === "string" || typeof value === "number")) {
+                  setFocus({ field: key, value: String(value) });
+                }
+                setFound(null);
+              }}
+            />
+          )}
           {(problem ?? warning) && (
             <div className="problem">
               <span>{problem ?? warning}</span>
@@ -450,7 +581,7 @@ export default function App() {
               setSelected(id);
               setTable(id);
             }}
-            onFlyTo={flyTo}
+            onFlyTo={(extent) => flyTo(extent, true)}
           />
         )}
       </div>
@@ -459,6 +590,7 @@ export default function App() {
         <AttributeTable
           layerId={table}
           title={findLayer(project, table)?.name ?? table}
+          focus={focus}
           onSelect={(field, values, hover) => select(table, field, values, hover)}
           onZoom={flyTo}
           onClose={() => {

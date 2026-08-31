@@ -301,3 +301,84 @@ Nothing about it is hard-coded any more.
 
 The placing logic moved to `apps/studio/src/layers.ts` so the catalogue and the
 import dialog share one path rather than two that drift.
+
+
+---
+
+# Fourth round
+
+## Symbology only worked for "Single"
+
+Reproduced in Node against the style validator rather than guessed at:
+
+```
+=== categorized ===
+style errors: 1
+  - layers[1].paint.fill-color: Expected at least 4 arguments, but found only 2.
+```
+
+`match` needs at least one label and output pair. A classification you have just
+switched to has no entries yet, so it compiled to `["match", input, fallback]`,
+the renderer rejected it, `setPaintProperty` threw, and the layer kept the colour
+it already had. An empty classification is a normal intermediate state, not an
+error; it now compiles to the fallback colour. Same for a graduated layer with no
+breaks.
+
+Graduated was worse in a different way. It was valid and it was useless: the
+default breaks were 25, 50 and 75 over `scalerank`, which runs 0 to 10, so every
+feature landed in the first class and the map went one flat colour. Classifying
+without knowing what is in the column is guessing.
+
+New endpoint `GET /api/layers/{id}/stats?field=` returns the column's type, range,
+distinct count and commonest values. The appearance panel reads it and:
+
+- fills a fresh classification from the real range or the real values
+- says what the column contains, so the numbers are not a mystery
+- refuses to graduate a text column and says why, instead of drawing nothing
+- has a **Classify from the data** button, and offers the 24 commonest values
+  when a column has more categories than a legend can hold
+- `to-number` now carries a fallback, so a stray non-numeric value cannot throw
+
+## The globe shrank when a worldwide layer was added
+
+Framing pulled the camera out until the whole extent fitted, which for a global
+layer means shrinking the planet to show data that was already on the screen.
+
+- automatic framing after an import only moves the camera when it would help
+  (`needsFraming`); an explicit "Zoom to layer" always moves
+- round projections have a zoom floor, so a sphere fills the viewport instead of
+  sitting in the middle of a black rectangle
+
+## Presentation mode did nothing
+
+Hiding the panels was not enough. `.middle` is a grid with fixed columns, so
+`display: none` on the children left four tracks exactly where they were and the
+map never grew. The tracks collapse now, and Escape leaves the mode.
+
+## Hover and identify on the map
+
+- hovering a feature highlights it and the cursor becomes a pointer
+- clicking opens a panel with its attributes, a **Zoom here** and a
+  **Find in table**
+- **Find in table** opens the attribute table, searches for that feature, marks
+  the row and scrolls it into view — it will usually be on a page you are not on,
+  so paging to it was never going to work
+- hovering the map and hovering a table row light up the same feature, because
+  both go through the same `selection` on the project
+
+## Legend
+
+`chrome.legend` has been in the schema since the beginning and had never drawn
+anything. It reads the classifications: bands with their ranges for a graduated
+layer, entries for a categorized one.
+
+## Smaller
+
+- the tile clip uses `ST_ClipByBox2D(ST_MakeValid(...))` rather than
+  `ST_Intersection`. It is a box clip rather than a full overlay, so it is faster
+  and much harder to make raise — Natural Earth polygons are frequently
+  self-intersecting, and a clip of an invalid polygon is a TopologyException.
+  A column name the checker refuses now answers 422 naming it, and every tile
+  failure is logged server-side.
+- `schema 3` is gone from the title bar.
+- catalogue entries in the 272px sidebar truncate instead of running off the end.

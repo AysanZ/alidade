@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { compile } from "../src/compile";
+import { colorExpression } from "../src/symbology";
+import { frameExtent, needsFraming } from "../src/frame";
 import { reconcile } from "../src/reconcile";
 import { gridKey, padded, squareGridGeoJSON, utmGridGeoJSON } from "../src/grids";
 import {
@@ -235,5 +237,88 @@ describe("a selection", () => {
     const opacity = (p: MapProject) =>
       compile(p).layers.find((l) => l.id === "chrome:selection:line")!.paint["line-opacity"];
     expect(opacity(hovered)).toBeLessThan(opacity(clicked) as number);
+  });
+});
+
+/**
+ * Switching a layer to Categories appeared to do nothing. `match` needs at least
+ * one label and output, so an empty classification compiled to
+ * `["match", input, fallback]`, which the renderer rejects as malformed — the
+ * setPaintProperty threw and the layer kept the colour it already had. An empty
+ * classification is a normal intermediate state, not an error.
+ */
+describe("a classification that has not been filled in", () => {
+  it("compiles categories with no entries to the fallback colour", () => {
+    expect(
+      colorExpression({
+        kind: "categorized",
+        field: "name",
+        categories: [],
+        fallbackColor: "#123456",
+      }),
+    ).toBe("#123456");
+  });
+
+  it("compiles a graduated layer with no breaks to one colour", () => {
+    expect(
+      colorExpression({
+        kind: "graduated",
+        field: "pop",
+        breaks: [],
+        colors: ["#abcdef"],
+        noDataColor: "#000000",
+      }),
+    ).toBe("#abcdef");
+  });
+
+  it("still builds a match once there is a category", () => {
+    const expression = colorExpression({
+      kind: "categorized",
+      field: "name",
+      categories: [{ value: "a", color: "#ff0000" }],
+      fallbackColor: "#123456",
+    }) as unknown[];
+    expect(expression[0]).toBe("match");
+    expect(expression).toHaveLength(5);
+  });
+
+  it("gives to-number a fallback so a non numeric value cannot throw", () => {
+    const expression = colorExpression({
+      kind: "graduated",
+      field: "pop",
+      breaks: [10],
+      colors: ["#111111", "#222222"],
+      noDataColor: "#000000",
+    }) as unknown[];
+    const step = expression[3] as unknown[];
+    expect(step[1]).toEqual(["to-number", ["get", "pop"], -1]);
+  });
+});
+
+/**
+ * Adding a worldwide layer while looking at a globe pulled the camera out until
+ * the whole extent fitted, which shrinks the planet to show data already on the
+ * screen.
+ */
+describe("framing after adding a layer", () => {
+  const screen = { width: 1200, height: 800 };
+  const world = { west: -180, south: -90, east: 180, north: 90 };
+
+  it("does not move for a worldwide layer you are already inside", () => {
+    expect(needsFraming(world, { center: [20, 25], zoom: 2 }, screen)).toBe(false);
+  });
+
+  it("does move when you are zoomed right in", () => {
+    expect(needsFraming(world, { center: [51.4, 35.7], zoom: 14 }, screen)).toBe(true);
+  });
+
+  it("always moves for an ordinary extent", () => {
+    const tehran = { west: 51.2, south: 35.6, east: 51.6, north: 35.83 };
+    expect(needsFraming(tehran, { center: [51.4, 35.7], zoom: 11 }, screen)).toBe(true);
+  });
+
+  it("keeps a sphere filling the viewport rather than shrinking it", () => {
+    const frame = frameExtent(world, screen, { projection: "globe" });
+    expect(frame.zoom).toBeGreaterThanOrEqual(1.7);
   });
 });

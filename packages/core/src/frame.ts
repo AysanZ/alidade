@@ -18,6 +18,8 @@ export interface FrameOptions {
   padding?: number;
   maxZoom?: number;
   minZoom?: number;
+  /** The zoom below which a sphere stops filling the screen. */
+  globeFloor?: number;
 }
 
 /** Mercator cannot draw past about 85°, and neither can a camera aimed at it. */
@@ -75,7 +77,16 @@ export function frameExtent(
    * country would silently land back in mercator.
    */
   const round = projection !== "mercator";
-  if (round) zoom = Math.min(zoom, 5.5);
+  if (round) {
+    /*
+     * Capped so framing a country does not zoom past the point where MapLibre's
+     * `globe` stops being a sphere, and floored so framing something worldwide
+     * does not shrink the planet into the middle of a black rectangle. A globe
+     * that fills the viewport is the whole reason for using one.
+     */
+    zoom = Math.min(zoom, 5.5);
+    zoom = Math.max(zoom, options.globeFloor ?? 1.7);
+  }
 
   zoom = clamp(zoom, minZoom, maxZoom);
   if (!Number.isFinite(zoom)) zoom = minZoom;
@@ -162,4 +173,36 @@ function normaliseLon(lon: number): number {
   while (value > 180) value -= 360;
   while (value < -180) value += 360;
   return Number(value.toFixed(6));
+}
+
+
+/**
+ * Whether moving the camera would actually show the user anything new.
+ *
+ * Adding a worldwide layer while looking at a globe used to pull the camera out
+ * until the whole extent fitted, which shrinks the planet to show data that was
+ * already on the screen. Framing is for finding something, not for reminding you
+ * that the world is round.
+ */
+export function needsFraming(
+  extent: Extent,
+  current: { center: [number, number]; zoom: number },
+  viewport: Viewport,
+): boolean {
+  if (isDegenerate(extent)) return false;
+  if (!spansMostOfTheWorld(extent)) return true;
+  // A worldwide extent is worth moving for only if you are not already inside it.
+  return !contains(extent, current.center) || current.zoom > 6;
+}
+
+export function contains(extent: Extent, position: [number, number]): boolean {
+  const [lon, lat] = position;
+  const east = extent.east < extent.west ? extent.east + 360 : extent.east;
+  const shifted = lon < extent.west ? lon + 360 : lon;
+  return (
+    shifted >= extent.west &&
+    shifted <= east &&
+    lat >= Math.min(extent.south, extent.north) &&
+    lat <= Math.max(extent.south, extent.north)
+  );
 }

@@ -1,3 +1,5 @@
+import logging
+
 import asyncpg
 from fastapi import APIRouter, HTTPException, Response
 
@@ -5,6 +7,8 @@ from .. import registry
 from ..config import settings
 from ..db import pool
 from ..naming import check_identifier
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/tiles", tags=["tiles"])
 
@@ -20,7 +24,12 @@ router = APIRouter(prefix="/api/tiles", tags=["tiles"])
 # the z0 tile is the one that selects them, so the world tile failed while every
 # other tile worked. Anything that strays outside the band is cut down to it
 # first. The bounding box test in the CASE keeps that cost off the other 99% of
-# rows, because ST_Intersection on every feature of every tile is not free.
+# rows, because clipping every feature of every tile is not free.
+#
+# ST_ClipByBox2D rather than ST_Intersection: it is a box clip rather than a full
+# overlay, so it is both faster and far less likely to raise. ST_MakeValid first
+# because Natural Earth polygons are frequently self-intersecting and a clip of an
+# invalid polygon is a TopologyException.
 TILE_SQL = """
 WITH bounds AS (
     SELECT ST_TileEnvelope($1, $2, $3) AS __mercator,
@@ -31,8 +40,8 @@ clipped AS (
            CASE
                WHEN ST_YMax(t.{geom}) > 85.05112878 OR ST_YMin(t.{geom}) < -85.05112878
                THEN ST_CollectionExtract(
-                        ST_Intersection(
-                            t.{geom},
+                        ST_ClipByBox2D(
+                            ST_MakeValid(t.{geom}),
                             ST_MakeEnvelope(-180, -85.05112878, 180, 85.05112878, 4326)
                         ),
                         ST_Dimension(t.{geom}) + 1
@@ -65,8 +74,13 @@ async def tile(layer_id: str, z: int, x: int, y: int) -> Response:
         raise HTTPException(400, "Tile coordinates are outside the pyramid.")
 
     # Identifiers come from the registry, never from the request. Values are bound.
+    # A column the checker refuses is a registry problem, and answering 422 with
+    # its name is more use than a 500 with a traceback in the container log.
     attributes = [c for c in layer.fields if c != layer.geometry_column]
-    checked = [check_identifier(c) for c in attributes]
+    try:
+        checked = [check_identifier(c) for c in attributes]
+    except ValueError as error:
+        raise HTTPException(422, f"{layer_id} has an unusable column name: {error}") from error
     columns = ", ".join(f"t.{c}" for c in checked) or "t.fid"
     plain = ", ".join(checked) or "fid"
     sql = TILE_SQL.format(
@@ -79,6 +93,7 @@ async def tile(layer_id: str, z: int, x: int, y: int) -> Response:
     except asyncpg.PostgresError as error:
         # A tile that cannot be built is a property of this layer's data, not a
         # crash. Saying which layer and why beats a bare 500 in the console.
+        logger.warning("tile %s/%s/%s of %s failed: %s", z, x, y, layer_id, error)
         raise HTTPException(
             422, f"Tile {z}/{x}/{y} of {layer_id} could not be built: {error}"
         ) from error

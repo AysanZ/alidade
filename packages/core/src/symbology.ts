@@ -46,14 +46,26 @@ export function colorExpression(sym: Symbology): unknown {
       return sym.color;
 
     case "graduated": {
-      const steps: unknown[] = ["step", ["to-number", ["get", sym.field]], sym.colors[0]];
+      // A classification with no breaks is one class, and `step` needs at least
+      // one stop, so it degrades to the flat colour rather than to an error.
+      if (sym.breaks.length === 0) return sym.colors[0] ?? sym.noDataColor;
+      const steps: unknown[] = ["step", ["to-number", ["get", sym.field], -1], sym.colors[0]];
       sym.breaks.forEach((b, i) => steps.push(b, sym.colors[i + 1] ?? sym.colors[sym.colors.length - 1]));
       // A missing value is its own class, never the bottom one.
       return ["case", ["==", ["typeof", ["get", sym.field]], "null"], sym.noDataColor, steps];
     }
 
     case "categorized": {
-      const match: unknown[] = ["match", ["to-string", ["get", sym.field]]];
+      /*
+       * `match` needs at least one label and output. An empty classification
+       * compiled to `["match", input, fallback]`, which the renderer rejects as
+       * a malformed expression — so switching a layer to Categories threw inside
+       * setPaintProperty and the layer silently kept the colour it already had.
+       * Switching to a classification you have not filled in yet is a normal
+       * intermediate state, not an error.
+       */
+      if (sym.categories.length === 0) return sym.fallbackColor;
+      const match: unknown[] = ["match", ["to-string", ["get", sym.field], ""]];
       for (const c of sym.categories) match.push(String(c.value), c.color);
       match.push(sym.fallbackColor);
       return match;

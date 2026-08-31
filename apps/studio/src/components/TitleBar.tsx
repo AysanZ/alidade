@@ -32,7 +32,6 @@ export function TitleBar({
           })
         }
       />
-      <span className="tag">schema {project.schema}</span>
       <div className="grow" />
       <span className="muted">{ops} operations this session</span>
       <button className="ghost">Share</button>

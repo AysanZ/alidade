@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type {
   CategorizedSymbol,
   GraduatedSymbol,
@@ -9,6 +9,7 @@ import type {
 } from "@alidade/core";
 import { CATEGORY_COLORS, RAMPS, equalIntervalBreaks, rampOf } from "@alidade/core";
 
+import { readStats, type FieldStats } from "../api";
 import { Field, Section, Switch } from "./Field";
 
 interface Props {
@@ -28,8 +29,68 @@ type Kind = Symbology["kind"];
  */
 export function Appearance({ layer, edit }: Props) {
   const [ramp, setRamp] = useState("Blue");
+  const [stats, setStats] = useState<FieldStats | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
   const fields = layer.metadata?.fields ?? [];
   const kind = layer.symbology.kind;
+  const field = "field" in layer.symbology ? layer.symbology.field : null;
+
+  /*
+   * The range and the distinct values of the classified column, read from the
+   * database. Classifying without them is guessing: breaks of 25, 50 and 75 over
+   * a column that runs 0 to 10 put every feature in the first class, so the map
+   * went one flat colour and the classification looked broken rather than wrong.
+   */
+  useEffect(() => {
+    if (!field || (kind !== "graduated" && kind !== "categorized")) {
+      setStats(null);
+      return;
+    }
+    let live = true;
+    setStatsError(null);
+    readStats(layer.source, field)
+      .then((result) => live && setStats(result))
+      .catch((error: unknown) => {
+        if (!live) return;
+        setStats(null);
+        setStatsError(error instanceof Error ? error.message : String(error));
+      });
+    return () => {
+      live = false;
+    };
+  }, [layer.source, field, kind]);
+
+  /** Build the classification the column actually calls for. */
+  const classify = useCallback(
+    (using: FieldStats | null, classes = 5, rampName = ramp) => {
+      if (!using) return;
+      edit((node) => {
+        if (node.symbology.kind === "graduated" && using.numeric) {
+          const breaks = equalIntervalBreaks(using.min ?? 0, using.max ?? 1, classes);
+          node.symbology.breaks = breaks;
+          node.symbology.colors = rampOf(RAMPS[rampName] ?? RAMPS["Blue"]!, breaks.length + 1);
+        } else if (node.symbology.kind === "categorized") {
+          node.symbology.categories = using.values.slice(0, 24).map((entry, i) => ({
+            value: entry.value,
+            color: CATEGORY_COLORS[i % CATEGORY_COLORS.length]!,
+            label: entry.value,
+          }));
+        }
+      });
+    },
+    [edit, ramp],
+  );
+
+  /* A fresh classification is filled in the moment the numbers arrive. */
+  useEffect(() => {
+    if (!stats) return;
+    const empty =
+      (layer.symbology.kind === "graduated" && layer.symbology.breaks.length === 0) ||
+      (layer.symbology.kind === "categorized" && layer.symbology.categories.length === 0);
+    if (empty) classify(stats);
+    // Only when the numbers change, not on every edit to the classification.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stats]);
 
   const available: { id: Kind; label: string; needsField: boolean }[] = [
     { id: "single", label: "Single", needsField: false },
@@ -50,11 +111,13 @@ export function Appearance({ layer, edit }: Props) {
 
       if (next === "single") node.symbology = { kind: "single", color: colour, stroke };
       else if (next === "graduated") {
+        // Left empty on purpose: the effect above fills it from the column's
+        // real range as soon as the database answers.
         node.symbology = {
           kind: "graduated",
           field,
-          breaks: [25, 50, 75],
-          colors: rampOf(RAMPS[ramp]!, 4),
+          breaks: [],
+          colors: rampOf(RAMPS[ramp]!, 1),
           noDataColor: "#3a3a40",
           stroke,
         };
@@ -122,11 +185,38 @@ export function Appearance({ layer, edit }: Props) {
           </Field>
         )}
 
+        {statsError && <p className="warn">Could not read that column: {statsError}</p>}
+        {stats && (
+          <p className="hint">
+            {stats.numeric
+              ? `${stats.field} runs from ${format(stats.min)} to ${format(stats.max)} · ${stats.distinct} distinct values`
+              : `${stats.field} has ${stats.distinct} distinct values`}
+          </p>
+        )}
+        {kind === "graduated" && stats && !stats.numeric && (
+          <p className="warn">
+            {stats.field} is {stats.type ?? "not a number"}, so it cannot be graduated. Use
+            Categories, or pick a numeric column.
+          </p>
+        )}
+
         {kind === "graduated" && (
-          <Graduated symbology={layer.symbology as GraduatedSymbol} edit={edit} ramp={ramp} setRamp={setRamp} />
+          <Graduated
+            symbology={layer.symbology as GraduatedSymbol}
+            edit={edit}
+            ramp={ramp}
+            setRamp={setRamp}
+            stats={stats}
+            onClassify={classify}
+          />
         )}
         {kind === "categorized" && (
-          <Categorized symbology={layer.symbology as CategorizedSymbol} edit={edit} />
+          <Categorized
+            symbology={layer.symbology as CategorizedSymbol}
+            edit={edit}
+            stats={stats}
+            onClassify={classify}
+          />
         )}
         {kind === "extrusion" && (
           <>
@@ -183,24 +273,17 @@ function Graduated({
   edit,
   ramp,
   setRamp,
+  stats,
+  onClassify,
 }: {
   symbology: GraduatedSymbol;
   edit: Props["edit"];
   ramp: string;
   setRamp: (name: string) => void;
+  stats: FieldStats | null;
+  onClassify: (using: FieldStats | null, classes?: number, ramp?: string) => void;
 }) {
-  const classes = symbology.breaks.length + 1;
-  const [low, setLow] = useState(symbology.breaks[0] ?? 0);
-  const [high, setHigh] = useState(symbology.breaks[symbology.breaks.length - 1] ?? 100);
-
-  const reclassify = (nextClasses: number, nextRamp: string, from = low, to = high) => {
-    const breaks = equalIntervalBreaks(from, to, nextClasses);
-    edit((node) => {
-      const s = node.symbology as GraduatedSymbol;
-      s.breaks = breaks;
-      s.colors = rampOf(RAMPS[nextRamp] ?? RAMPS["Blue"]!, breaks.length + 1);
-    });
-  };
+  const classes = Math.max(2, symbology.breaks.length + 1);
 
   return (
     <>
@@ -209,7 +292,7 @@ function Graduated({
           value={ramp}
           onChange={(e) => {
             setRamp(e.target.value);
-            reclassify(classes, e.target.value);
+            onClassify(stats, classes, e.target.value);
           }}
         >
           {Object.keys(RAMPS).map((name) => (
@@ -225,31 +308,14 @@ function Graduated({
           min={2}
           max={9}
           value={classes}
-          onChange={(e) => reclassify(Number(e.target.value), ramp)}
+          onChange={(e) => onClassify(stats, Number(e.target.value), ramp)}
         />
       </Field>
-      <Field label="From" value={low}>
-        <input
-          type="number"
-          className="num"
-          value={low}
-          onChange={(e) => {
-            setLow(Number(e.target.value));
-            reclassify(classes, ramp, Number(e.target.value), high);
-          }}
-        />
-      </Field>
-      <Field label="To" value={high}>
-        <input
-          type="number"
-          className="num"
-          value={high}
-          onChange={(e) => {
-            setHigh(Number(e.target.value));
-            reclassify(classes, ramp, low, Number(e.target.value));
-          }}
-        />
-      </Field>
+      <div className="row buttons">
+        <button onClick={() => onClassify(stats, classes, ramp)} disabled={!stats?.numeric}>
+          Classify from the data
+        </button>
+      </div>
 
       {/* Each break is editable on its own, because equal interval is a start. */}
       {symbology.breaks.map((value, i) => (
@@ -289,11 +355,28 @@ function Graduated({
   );
 }
 
-function Categorized({ symbology, edit }: { symbology: CategorizedSymbol; edit: Props["edit"] }) {
+function Categorized({
+  symbology,
+  edit,
+  stats,
+  onClassify,
+}: {
+  symbology: CategorizedSymbol;
+  edit: Props["edit"];
+  stats: FieldStats | null;
+  onClassify: (using: FieldStats | null, classes?: number, ramp?: string) => void;
+}) {
   const [entry, setEntry] = useState("");
 
   return (
     <>
+      <div className="row buttons">
+        <button onClick={() => onClassify(stats)} disabled={!stats}>
+          {stats && stats.distinct > 24
+            ? `Take the 24 commonest of ${stats.distinct}`
+            : "Classify from the data"}
+        </button>
+      </div>
       <div className="row">
         <input
           className="text"
@@ -352,8 +435,7 @@ function Categorized({ symbology, edit }: { symbology: CategorizedSymbol; edit: 
       </Field>
       {symbology.categories.length === 0 && (
         <p className="hint">
-          Add the values you want to pick out. Opening the attribute table and sorting by the field
-          is the quickest way to see what they are.
+          Classify from the data, or type the values you want to pick out one at a time.
         </p>
       )}
     </>
@@ -500,6 +582,9 @@ function Labels({
     </Section>
   );
 }
+
+const format = (n: number | null) =>
+  n === null ? "—" : Number.isInteger(n) ? String(n) : n.toFixed(2);
 
 function representative(symbology: Symbology): string {
   if (symbology.kind === "graduated") return symbology.colors[symbology.colors.length - 1] ?? "#4c8dff";

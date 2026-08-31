@@ -64,6 +64,8 @@ export {
   spansMostOfTheWorld,
   isDegenerate,
   withMinimumSize,
+  needsFraming,
+  contains,
 } from "./frame";
 export type { Extent, Viewport, FrameOptions } from "./frame";
 

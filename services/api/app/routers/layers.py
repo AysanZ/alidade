@@ -183,6 +183,74 @@ def jsonable(value):
     return str(value)
 
 
+@router.get("/{layer_id}/stats")
+async def stats(layer_id: str, field: str) -> dict:
+    """
+    What one column actually contains.
+
+    Classifying without this is guessing. Breaks of 25, 50 and 75 over a column
+    that runs 0 to 10 put every feature in the first class, so the map goes one
+    flat colour and the classification looks broken rather than wrong. The range
+    and the distinct values are the two things a classifier needs, and only the
+    database knows them.
+    """
+    layer = await registry.get(layer_id)
+    if layer is None:
+        raise HTTPException(404, f"No layer named {layer_id}.")
+    if field not in layer.fields:
+        raise HTTPException(400, f"{layer_id} has no column called {field}.")
+
+    column = check_identifier(field)
+
+    async with pool().acquire() as conn:
+        kind = await conn.fetchval(
+            """
+            SELECT data_type FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2
+            """,
+            layer.table,
+            column,
+        )
+        numeric = kind in {
+            "smallint", "integer", "bigint", "numeric", "real",
+            "double precision", "decimal",
+        }
+
+        low = high = None
+        if numeric:
+            extremes = await conn.fetchrow(
+                f"SELECT min({column}) AS low, max({column}) AS high FROM {layer.table}"
+            )
+            low = None if extremes["low"] is None else float(extremes["low"])
+            high = None if extremes["high"] is None else float(extremes["high"])
+
+        # Capped, because a classification with two thousand categories is not a
+        # classification and the legend it produces is unreadable.
+        rows = await conn.fetch(
+            f"""
+            SELECT {column}::text AS value, count(*)::int AS n
+            FROM {layer.table}
+            WHERE {column} IS NOT NULL
+            GROUP BY 1
+            ORDER BY n DESC
+            LIMIT 60
+            """
+        )
+        distinct = await conn.fetchval(
+            f"SELECT count(DISTINCT {column})::int FROM {layer.table}"
+        )
+
+    return {
+        "field": field,
+        "type": kind,
+        "numeric": numeric,
+        "min": low,
+        "max": high,
+        "distinct": distinct,
+        "values": [{"value": r["value"], "count": r["n"]} for r in rows],
+    }
+
+
 # Declared last on purpose: a wildcard above the fixed paths swallows them, and a
 # POST to a path this route matches answers 405 rather than 404.
 @router.get("/{layer_id}")

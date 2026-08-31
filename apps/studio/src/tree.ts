@@ -1,4 +1,5 @@
 import type { LayerNode, MapProject, TreeNode } from "@alidade/core";
+import { bundleFor } from "@alidade/core";
 
 /** Depth first walk over the layer tree, groups included. */
 export function walk(nodes: TreeNode[], visit: (node: TreeNode) => void): void {
@@ -92,4 +93,19 @@ export function duplicateNode(draft: MapProject, id: string): MapProject {
   };
   copy(draft.tree);
   return draft;
+}
+
+
+/** Every layer in the tree, in table of contents order. */
+export function allLayers(project: MapProject): LayerNode[] {
+  const out: LayerNode[] = [];
+  walk(project.tree, (n) => {
+    if (n.type === "layer") out.push(n);
+  });
+  return out;
+}
+
+/** The engine layer ids one logical layer expands into. */
+export function bundleIdsOf(layer: LayerNode): string[] {
+  return bundleFor(layer);
 }
