@@ -84,6 +84,10 @@ export class FakeMap implements Renderer {
   getLayer(id: string) {
     return this.order.includes(id) ? { id } : undefined;
   }
+  getSource(id: string) {
+    if (!this.sources.has(id)) return undefined;
+    return { id, setData: (data: unknown) => this.log("setData", id, data) };
+  }
 
   /** What setStyle does: everything the application added is gone. */
   wipe() {

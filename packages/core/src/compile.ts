@@ -8,8 +8,10 @@ import type {
   TreeNode,
 } from "./types/project";
 import { SLOT_ORDER } from "./types/project";
+import { annotationSourceId, annotationsGeoJSON, vertexGeoJSON } from "./annotate";
 import { toExpression } from "./filter";
 import { graticuleGeoJSON, graticuleSourceId } from "./graticule";
+import { squareGridGeoJSON, squareGridSourceId, utmGridGeoJSON, utmGridSourceId } from "./grids";
 import { zoomRange } from "./scale";
 import { labelLayout, labelPaint, paintFor, strokePaint } from "./symbology";
 
@@ -42,13 +44,22 @@ interface Flat {
 }
 
 /** Depth first, table of contents order: the first entry is the top of the list. */
-function flatten(nodes: TreeNode[], opacity = 1, visible = true): Flat[] {
+function flatten(nodes: TreeNode[], opacity = 1, visible = true, seen = new Set<string>()): Flat[] {
   const out: Flat[] = [];
   for (const node of nodes) {
     if (node.type === "group") {
       const g = node as GroupNode;
-      out.push(...flatten(g.children, opacity * g.opacity, visible && g.visible));
+      out.push(...flatten(g.children, opacity * g.opacity, visible && g.visible, seen));
     } else {
+      /*
+       * Two nodes with the same id compile to two engine layers with the same id,
+       * which a renderer refuses to add and a reconciler cannot tell apart. It
+       * used to happen every time the same file was imported twice: the second
+       * layer appeared in the table of contents and nothing was drawn. The tree
+       * should not contain a duplicate, and if it does, the first one wins.
+       */
+      if (seen.has(node.id)) continue;
+      seen.add(node.id);
       out.push({
         layer: node,
         opacity: opacity * node.opacity,
@@ -130,6 +141,53 @@ export function compile(project: MapProject): Compiled {
     }
   }
 
+  const grids = project.chrome.grids;
+  if (grids?.utm) {
+    sources[utmGridSourceId()] = { type: "geojson", data: utmGridGeoJSON() };
+    systemLabels.push({
+      id: "chrome:grid:utm:line",
+      type: "line",
+      source: utmGridSourceId(),
+      slot: "labels",
+      paint: { "line-color": grids.color, "line-width": 0.9, "line-opacity": 0.75 },
+      layout: {},
+    });
+    systemLabels.push({
+      id: "chrome:grid:utm:label",
+      type: "symbol",
+      source: utmGridSourceId(),
+      slot: "labels",
+      paint: { "text-color": grids.color, "text-halo-color": "#050505", "text-halo-width": 1.2 },
+      layout: {
+        "text-field": ["get", "label"],
+        "text-size": 10,
+        "symbol-placement": "line",
+        "text-allow-overlap": false,
+      },
+    });
+  }
+
+  if (grids?.square.enabled) {
+    // Metric squares only exist relative to somewhere, so they are built for the
+    // view. `bounds` is carried on the project so the same document redraws the
+    // same grid; the application refreshes it when the view leaves the patch.
+    sources[squareGridSourceId()] = {
+      type: "geojson",
+      data: squareGridGeoJSON(
+        project.chrome.grids.squareBounds ?? viewBounds(project.view),
+        grids.square.spacing,
+      ),
+    };
+    systemLabels.push({
+      id: "chrome:grid:square:line",
+      type: "line",
+      source: squareGridSourceId(),
+      slot: "labels",
+      paint: { "line-color": grids.color, "line-width": 0.55, "line-opacity": 0.5 },
+      layout: {},
+    });
+  }
+
   // The graticule is chrome, but it is the one piece of chrome the renderer draws.
   if (project.chrome.graticule.enabled) {
     const { interval, color, labels } = project.chrome.graticule;
@@ -159,6 +217,141 @@ export function compile(project: MapProject): Compiled {
     }
   }
 
+  /*
+   * What the user is pointing at, drawn over its own layer rather than instead of
+   * it, so a highlight cannot hide the thing it is highlighting.
+   */
+  const systemOverlay: EngineLayer[] = [];
+  const selection = project.selection;
+  const target = selection ? findLayer(project.tree, selection.layer) : undefined;
+  if (selection && target && selection.values.length > 0 && target.geometry !== "raster") {
+    const match = [
+      "in",
+      ["to-string", ["get", selection.field]],
+      ["literal", selection.values.map(String)],
+    ];
+    const strong = selection.hover ? 0.55 : 1;
+    const base = {
+      source: target.source,
+      sourceLayer: target.sourceLayer,
+      slot: "overlay" as const,
+      filter: match,
+      layout: {},
+    };
+
+    if (target.geometry === "point") {
+      systemOverlay.push({
+        ...base,
+        id: "chrome:selection:point",
+        type: "circle",
+        paint: {
+          "circle-color": "rgba(0,0,0,0)",
+          "circle-radius": 9,
+          "circle-stroke-color": "#ffd166",
+          "circle-stroke-width": 2.4,
+          "circle-stroke-opacity": strong,
+        },
+      });
+    } else {
+      if (target.geometry === "polygon") {
+        systemOverlay.push({
+          ...base,
+          id: "chrome:selection:fill",
+          type: "fill",
+          paint: { "fill-color": "#ffd166", "fill-opacity": 0.18 * strong },
+        });
+      }
+      systemOverlay.push({
+        ...base,
+        id: "chrome:selection:line",
+        type: "line",
+        paint: { "line-color": "#ffd166", "line-width": 2.4, "line-opacity": strong },
+      });
+    }
+  }
+
+  /*
+   * Drawings sit in the overlay slot, above everything, because they are what the
+   * user is doing right now. Vertices are a separate layer so they can be given
+   * a hit target the fill does not have.
+   */
+  const annotations = project.annotations;
+  if (annotations && annotations.features.length > 0) {
+    const shown = annotations.visible ? "visible" : "none";
+    const alpha = annotations.opacity;
+    sources[annotationSourceId()] = {
+      type: "geojson",
+      data: annotationsGeoJSON(annotations, project.chrome.scaleBar.units),
+    };
+    sources[`${annotationSourceId()}:vertices`] = {
+      type: "geojson",
+      data: vertexGeoJSON(annotations),
+    };
+
+    systemOverlay.push({
+      id: "chrome:annotations:fill",
+      type: "fill",
+      source: annotationSourceId(),
+      slot: "overlay",
+      paint: { "fill-color": ["get", "color"], "fill-opacity": 0.18 * alpha },
+      layout: { visibility: shown },
+      filter: ["==", ["geometry-type"], "Polygon"],
+    });
+    systemOverlay.push({
+      id: "chrome:annotations:line",
+      type: "line",
+      source: annotationSourceId(),
+      slot: "overlay",
+      paint: { "line-color": ["get", "color"], "line-width": 2.2, "line-opacity": alpha },
+      layout: { visibility: shown, "line-join": "round", "line-cap": "round" },
+      filter: ["!=", ["geometry-type"], "Point"],
+    });
+    systemOverlay.push({
+      id: "chrome:annotations:point",
+      type: "circle",
+      source: annotationSourceId(),
+      slot: "overlay",
+      paint: {
+        "circle-color": ["get", "color"],
+        "circle-radius": 5,
+        "circle-opacity": alpha,
+        "circle-stroke-color": "#050505",
+        "circle-stroke-width": 1.2,
+      },
+      layout: { visibility: shown },
+      filter: ["==", ["geometry-type"], "Point"],
+    });
+    systemOverlay.push({
+      id: "chrome:annotations:vertex",
+      type: "circle",
+      source: `${annotationSourceId()}:vertices`,
+      slot: "overlay",
+      paint: {
+        "circle-color": "#050505",
+        "circle-radius": 3.4,
+        "circle-opacity": alpha,
+        "circle-stroke-color": ["get", "color"],
+        "circle-stroke-width": 1.4,
+      },
+      layout: { visibility: shown },
+    });
+    systemOverlay.push({
+      id: "chrome:annotations:label",
+      type: "symbol",
+      source: annotationSourceId(),
+      slot: "overlay",
+      paint: { "text-color": "#e4e4e6", "text-halo-color": "#050505", "text-halo-width": 1.4 },
+      layout: {
+        visibility: shown,
+        "text-field": ["get", "label"],
+        "text-size": 11,
+        "text-offset": [0, 1.1],
+        "text-anchor": "top",
+        "text-allow-overlap": false,
+      },
+    });
+  }
+
   // Within a slot the top of the table of contents draws on top, so the engine
   // order is the reverse. Slots are applied before tree order, always.
   const layers: EngineLayer[] = [];
@@ -166,9 +359,45 @@ export function compile(project: MapProject): Compiled {
     if (slot === "base") layers.push(...systemBase);
     if (slot === "labels") layers.push(...systemLabels);
     layers.push(...groupsReversed(bySlot.get(slot)!));
+    if (slot === "overlay") layers.push(...systemOverlay);
   }
 
   return { sources, layers };
+}
+
+/** The layer a selection or a style edit names, wherever it is in the tree. */
+export function findLayer(nodes: TreeNode[], id: string): LayerNode | undefined {
+  for (const node of nodes) {
+    if (node.type === "layer") {
+      if (node.id === id) return node;
+    } else {
+      const found = findLayer(node.children, id);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * A rough bounding box for a camera position.
+ *
+ * Only used as the starting patch for the square grid before the application has
+ * measured the real one, so an approximation from zoom and latitude is enough.
+ */
+export function viewBounds(view: MapProject["view"]): {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+} {
+  const span = 360 / Math.pow(2, view.zoom);
+  const [lon, lat] = view.center;
+  return {
+    west: lon - span,
+    east: lon + span,
+    south: Math.max(-85, lat - span / 2),
+    north: Math.min(85, lat + span / 2),
+  };
 }
 
 /** Reverse the layers but keep each bundle's internal order intact. */

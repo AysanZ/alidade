@@ -1,6 +1,9 @@
 import type { MapProject, Slot, TreeNode } from "@alidade/core";
+import { representativeColor } from "@alidade/core";
 
+import type { Extent } from "../layers";
 import { withNode } from "../tree";
+import { Catalogue } from "./Catalogue";
 
 const SLOTS: { id: Slot; label: string }[] = [
   { id: "overlay", label: "Overlay" },
@@ -15,12 +18,48 @@ interface Props {
   onSelect: (id: string) => void;
   edit: (change: (draft: MapProject) => MapProject) => void;
   onMenu: (id: string, at: { x: number; y: number }) => void;
+  onAdd: () => void;
+  onFlyTo: (extent: Extent) => void;
 }
 
 /** The table of contents, grouped by slot so the ordering rule is visible. */
-export function LayerTree({ project, selected, onSelect, edit, onMenu }: Props) {
-  const slotOf = (node: TreeNode): Slot =>
-    node.type === "layer" ? node.slot : (slotOf(node.children[0]!) ?? "data");
+export function LayerTree({ project, selected, onSelect, edit, onMenu, onAdd, onFlyTo }: Props) {
+  /*
+   * A group takes the slot of its first layer. It used to read
+   * `slotOf(node.children[0]!)`, which threw on a group with no children and took
+   * the whole panel down with it — and removing the last layer from a group is
+   * how you get an empty group.
+   */
+  const slotOf = (node: TreeNode): Slot => {
+    if (node.type === "layer") return node.slot;
+    for (const child of node.children) {
+      const slot = slotOf(child);
+      if (slot) return slot;
+    }
+    return "data";
+  };
+
+  /*
+   * An empty project is the normal way to start, not an error, so it says what
+   * to do next rather than showing four empty headings.
+   */
+  if (project.tree.length === 0) {
+    return (
+      <div className="tree">
+        <div className="empty">
+          <b>No layers yet</b>
+        </div>
+        <Catalogue
+          project={project}
+          edit={edit}
+          onAdded={onSelect}
+          onFlyTo={onFlyTo}
+          onImport={onAdd}
+          compact
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="tree">
@@ -70,7 +109,7 @@ function Node({
 }: {
   node: TreeNode;
   depth: number;
-} & Omit<Props, "project">) {
+} & Omit<Props, "project" | "onAdd" | "onFlyTo">) {
   const toggle = () =>
     edit((draft) =>
       withNode(draft, node.id, (n) => {
@@ -139,6 +178,8 @@ function Node({
 function swatch(node: Extract<TreeNode, { type: "layer" }>): string {
   const s = node.symbology;
   if (s.kind === "graduated") return `linear-gradient(90deg, ${s.colors.join(", ")})`;
-  if (s.kind === "categorized") return s.categories[0]?.color ?? s.fallbackColor;
-  return s.color;
+  if (s.kind === "categorized" && s.categories.length > 1) {
+    return `linear-gradient(90deg, ${s.categories.map((c) => c.color).join(", ")})`;
+  }
+  return representativeColor(s);
 }

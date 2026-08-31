@@ -1,6 +1,6 @@
 import type { JSX } from "react";
 
-export type PaneId = "layers" | "basemaps" | "scene" | "project";
+export type PaneId = "layers" | "basemaps" | "scene" | "draw" | "project";
 
 /**
  * Drawn rather than imported: four icons is not worth a dependency.
@@ -29,6 +29,12 @@ const ICONS: Record<PaneId, JSX.Element> = {
       <circle cx="17" cy="5.5" r="2.5" />
     </>
   ),
+  draw: (
+    <>
+      <path d="M4 20.5 5 16l10.5-10.5a2.1 2.1 0 0 1 3 3L8 19l-4 1.5Z" />
+      <path d="m13.5 7.5 3 3" />
+    </>
+  ),
   project: (
     <>
       <path d="M13.5 3.5H6.5A1.5 1.5 0 0 0 5 5v14a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V9l-5.5-5.5Z" />
@@ -41,6 +47,7 @@ const PANES: { id: PaneId; label: string }[] = [
   { id: "layers", label: "Layers" },
   { id: "basemaps", label: "Basemaps" },
   { id: "scene", label: "Scene" },
+  { id: "draw", label: "Draw and measure" },
   { id: "project", label: "Project" },
 ];
 

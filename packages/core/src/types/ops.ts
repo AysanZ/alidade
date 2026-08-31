@@ -31,6 +31,12 @@ export interface EngineLayer {
 export type Op =
   | { t: "source.add"; id: string; source: Source }
   | { t: "source.remove"; id: string }
+  /**
+   * New data for a geojson source that is otherwise unchanged. Without this a
+   * moving graticule or grid would remove and re-add its source on every pan,
+   * which takes every layer reading it down with it.
+   */
+  | { t: "source.data"; id: string; data: unknown }
   | { t: "layer.add"; spec: EngineLayer; before?: string }
   | { t: "layer.remove"; id: string }
   | { t: "layer.move"; id: string; before?: string }

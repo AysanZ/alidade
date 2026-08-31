@@ -26,6 +26,12 @@ export interface Renderer {
   setSky?(value: unknown): void;
   setProjection?(value: unknown): void;
   getLayer(id: string): unknown;
+  /**
+   * Optional so an old fake in a test still satisfies the interface, but every
+   * real engine has it, and without it the adapter cannot tell an operation that
+   * would fail from one that would work.
+   */
+  getSource?(id: string): unknown;
 }
 
 /** An engine layer as MapLibre wants it. `slot` is ours and stays behind. */

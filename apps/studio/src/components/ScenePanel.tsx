@@ -1,7 +1,7 @@
-import type { MapProject } from "@alidade/core";
+import type { Bookmark, MapProject, Projection } from "@alidade/core";
 
 import { useState } from "react";
-import { parseCoordinate } from "@alidade/core";
+import { GLOBE_IS_ROUND_BELOW, parseCoordinate } from "@alidade/core";
 
 import { HILLSHADE } from "../project";
 import { Field, Section, Switch } from "./Field";
@@ -12,6 +12,18 @@ const VIEWS = [
   { id: "3d", label: "3D", pitch: 58, bearing: -28 },
 ];
 
+/**
+ * `globe` is MapLibre's own name for a projection that is a sphere when zoomed
+ * out and mercator on the way in. That is the right default and the wrong
+ * surprise: picking it at zoom 10 changes nothing on the screen, which is what
+ * made it look broken. `vertical-perspective` is the sphere at every zoom.
+ */
+const PROJECTIONS: { id: Projection; label: string; hint: string }[] = [
+  { id: "mercator", label: "Mercator", hint: "Flat, the way web maps are drawn" },
+  { id: "globe", label: "Globe", hint: "A sphere when zoomed out, mercator when zoomed in" },
+  { id: "vertical-perspective", label: "Sphere", hint: "A sphere at every zoom" },
+];
+
 /** Relief needs a minimum scale before it reads as anything but a flat sheet. */
 const TERRAIN_DENOMINATOR = 3_000_000;
 
@@ -20,11 +32,15 @@ export function ScenePanel({
   edit,
   denominator,
   onGoTo,
+  onProjection,
+  onRecall,
 }: {
   project: MapProject;
   edit: (change: (draft: MapProject) => MapProject) => void;
   denominator: number;
   onGoTo: (lon: number, lat: number) => void;
+  onProjection: (projection: Projection) => void;
+  onRecall: (bookmark: Bookmark) => void;
 }) {
   const [target, setTarget] = useState("");
   const parsed = parseCoordinate(target);
@@ -129,23 +145,24 @@ export function ScenePanel({
 
       <Section title="Projection">
         <div className="row buttons">
-          {(["mercator", "globe"] as const).map((p) => (
+          {PROJECTIONS.map((p) => (
             <button
-              key={p}
-              className={(project.environment.projection ?? "mercator") === p ? "on" : ""}
-              onClick={() =>
-                edit((d) => {
-                  d.environment.projection = p;
-                  // A globe against a black void reads as a bug, not a globe.
-                  if (p === "globe") d.environment.sky = true;
-                  return d;
-                })
-              }
+              key={p.id}
+              className={(environment.projection ?? "mercator") === p.id ? "on" : ""}
+              title={p.hint}
+              onClick={() => onProjection(p.id)}
             >
-              {p === "mercator" ? "Mercator" : "Globe"}
+              {p.label}
             </button>
           ))}
         </div>
+        {environment.projection === "globe" && view.zoom > GLOBE_IS_ROUND_BELOW && (
+          <p className="warn">
+            Globe is drawn as a sphere below about zoom {GLOBE_IS_ROUND_BELOW} and as mercator above
+            it, and the map is at zoom {view.zoom.toFixed(1)}. Zoom out, or pick Sphere, which stays
+            round at every zoom.
+          </p>
+        )}
         <Switch
           label="Sky and atmosphere"
           on={Boolean(environment.sky)}
@@ -158,9 +175,8 @@ export function ScenePanel({
           }
         />
         <p className="hint">
-          Storage and rendering stay EPSG:3857. Globe is a way of drawing the same web mercator
-          data, not a different coordinate system, and it only looks like a globe below about
-          zoom 5.
+          Storage and rendering stay EPSG:3857. These are ways of drawing the same web mercator
+          data, not different coordinate systems.
         </p>
       </Section>
 
@@ -274,6 +290,69 @@ export function ScenePanel({
           </Field>
         )}
         <Switch
+          label="UTM zones and bands"
+          on={Boolean(chrome.grids?.utm)}
+          onChange={(on) =>
+            edit((d) => {
+              d.chrome.grids = { ...defaults(d), utm: on };
+              return d;
+            })
+          }
+        />
+        <Switch
+          label="Metric square grid"
+          on={Boolean(chrome.grids?.square.enabled)}
+          onChange={(on) =>
+            edit((d) => {
+              const grids = defaults(d);
+              d.chrome.grids = { ...grids, square: { ...grids.square, enabled: on } };
+              return d;
+            })
+          }
+        />
+        {chrome.grids?.square.enabled && (
+          <Field label="Spacing">
+            <select
+              value={chrome.grids.square.spacing}
+              onChange={(e) =>
+                edit((d) => {
+                  const grids = defaults(d);
+                  d.chrome.grids = {
+                    ...grids,
+                    square: { ...grids.square, spacing: Number(e.target.value) },
+                    // Forget the patch so the application rebuilds it at the new
+                    // spacing rather than reusing the one built for the old.
+                    squareBounds: undefined,
+                  };
+                  return d;
+                })
+              }
+            >
+              {[
+                [1000, "1 km"],
+                [5000, "5 km"],
+                [10000, "10 km"],
+                [50000, "50 km"],
+                [100000, "100 km"],
+              ].map(([metres, label]) => (
+                <option key={String(metres)} value={metres}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+        <Switch
+          label="Overview map"
+          on={chrome.overview}
+          onChange={(on) =>
+            edit((d) => {
+              d.chrome.overview = on;
+              return d;
+            })
+          }
+        />
+        <Switch
           label="Scale bar"
           on={chrome.scaleBar.enabled}
           onChange={(on) =>
@@ -327,6 +406,101 @@ export function ScenePanel({
           </select>
         </Field>
       </Section>
+
+      <Section title="Lighting">
+        <div className="row buttons">
+          {([
+            ["day", "Day"],
+            ["night", "Night"],
+          ] as const).map(([id, label]) => (
+            <button
+              key={id}
+              className={(environment.light?.intensity ?? 1) >= 0.7 === (id === "day") ? "on" : ""}
+              onClick={() =>
+                edit((d) => {
+                  d.environment.light =
+                    id === "day"
+                      ? { anchor: "viewport", color: "#ffffff", intensity: 1 }
+                      : { anchor: "viewport", color: "#64748b", intensity: 0.35 };
+                  return d;
+                })
+              }
+            >
+              {label}
+            </button>
+          ))}
+          <button
+            onClick={() =>
+              edit((d) => {
+                delete d.environment.light;
+                return d;
+              })
+            }
+          >
+            Default
+          </button>
+        </div>
+        <p className="hint">
+          Lighting is what shades extruded buildings and hillshade, so it does nothing on a flat
+          map with neither.
+        </p>
+      </Section>
+
+      <Section title="Bookmarks">
+        <div className="row buttons">
+          <button
+            onClick={() => {
+              const name = window.prompt("Name this view", `View ${(project.bookmarks?.length ?? 0) + 1}`);
+              if (!name) return;
+              edit((d) => {
+                d.bookmarks ??= [];
+                d.bookmarks.push({
+                  id: `bm_${Math.random().toString(36).slice(2, 8)}`,
+                  name,
+                  view: { ...d.view },
+                });
+                return d;
+              });
+            }}
+          >
+            Save this view
+          </button>
+        </div>
+        {(project.bookmarks ?? []).map((bookmark) => (
+          <div className="row" key={bookmark.id}>
+            <button className="link" onClick={() => onRecall(bookmark)}>
+              {bookmark.name}
+            </button>
+            <span className="grow" />
+            <button
+              className="danger"
+              aria-label={`Delete ${bookmark.name}`}
+              onClick={() =>
+                edit((d) => {
+                  d.bookmarks = (d.bookmarks ?? []).filter((b) => b.id !== bookmark.id);
+                  return d;
+                })
+              }
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+        {(project.bookmarks?.length ?? 0) === 0 && (
+          <p className="hint">Nothing saved. A bookmark keeps the centre, zoom, pitch and bearing.</p>
+        )}
+      </Section>
     </div>
+  );
+}
+
+/** Grids were added after the first projects were written, so fill them in. */
+function defaults(draft: MapProject) {
+  return (
+    draft.chrome.grids ?? {
+      utm: false,
+      square: { enabled: false, spacing: 10000 },
+      color: "#3b6ea5",
+    }
   );
 }

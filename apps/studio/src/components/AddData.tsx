@@ -1,48 +1,27 @@
 import { useState } from "react";
-import type { Geometry, LayerNode, MapProject, WmsLayerChoice } from "@alidade/core";
+import type { MapProject, WmsLayerChoice } from "@alidade/core";
 import { wmsSource } from "@alidade/core";
 
 import { addFromUrl, readCapabilities, uploadFile, type RegisteredLayer } from "../api";
+import { place, type Extent } from "../layers";
+import { uniqueId } from "../tree";
+import { Catalogue } from "./Catalogue";
 
-type Tab = "file" | "url" | "wms";
+type Tab = "catalogue" | "file" | "url" | "wms";
 
-export interface Extent {
-  west: number;
-  south: number;
-  east: number;
-  north: number;
-}
+export type { Extent };
 
 interface Props {
+  project: MapProject;
   edit: (change: (draft: MapProject) => MapProject) => void;
   onClose: () => void;
   onAdded: (id: string) => void;
   onFlyTo: (extent: Extent) => void;
 }
 
-/**
- * PostGIS reports geometry types in upper case (`POINT`, `MULTIPOLYGON`), GDAL in
- * mixed case. Matching on the wrong case silently produced a fill layer for a point
- * table, which draws nothing at all: the layer was there, and invisible.
- */
-const GEOMETRY: Record<string, Geometry> = {
-  point: "point",
-  multipoint: "point",
-  linestring: "line",
-  multilinestring: "line",
-  polygon: "polygon",
-  multipolygon: "polygon",
-  geometry: "polygon",
-  geometrycollection: "polygon",
-};
-
-export function geometryOf(reported: string | null): Geometry {
-  return GEOMETRY[(reported ?? "").trim().toLowerCase()] ?? "polygon";
-}
-
 export function AddData(props: Props) {
   const { onClose } = props;
-  const [tab, setTab] = useState<Tab>("file");
+  const [tab, setTab] = useState<Tab>("catalogue");
 
   return (
     <div className="scrim" onClick={onClose}>
@@ -54,13 +33,24 @@ export function AddData(props: Props) {
           </button>
         </div>
         <div className="mtabs">
-          {(["file", "url", "wms"] as Tab[]).map((id) => (
+          {(["catalogue", "file", "url", "wms"] as Tab[]).map((id) => (
             <button key={id} className={tab === id ? "on" : ""} onClick={() => setTab(id)}>
-              {id === "file" ? "File" : id === "url" ? "Link" : "WMS"}
+              {id === "catalogue" ? "In the database" : id === "file" ? "File" : id === "url" ? "Link" : "WMS"}
             </button>
           ))}
         </div>
         <div className="mbody">
+          {tab === "catalogue" && (
+            <Catalogue
+              project={props.project}
+              edit={props.edit}
+              onAdded={(id) => {
+                props.onAdded(id);
+                onClose();
+              }}
+              onFlyTo={props.onFlyTo}
+            />
+          )}
           {tab === "file" && <FileTab {...props} />}
           {tab === "url" && <UrlTab {...props} />}
           {tab === "wms" && <WmsTab {...props} />}
@@ -148,26 +138,6 @@ function Facts({ layer }: { layer: RegisteredLayer }) {
   );
 }
 
-/** Put an imported layer in the project and take the map to it. */
-function place(
-  layer: RegisteredLayer,
-  edit: Props["edit"],
-  onAdded: Props["onAdded"],
-  onFlyTo: Props["onFlyTo"],
-) {
-  edit((draft) => {
-    draft.sources[layer.id] = {
-      type: "vector",
-      tiles: [`${location.origin}/api/tiles/${layer.id}/{z}/{x}/{y}.mvt`],
-      maxzoom: 16,
-    };
-    draft.tree.unshift(vectorLayer(layer));
-    return draft;
-  });
-  onAdded(layer.id);
-  if (layer.extent) onFlyTo(layer.extent);
-}
-
 function UrlTab({ edit, onClose, onAdded, onFlyTo }: Props) {
   const [url, setUrl] = useState(
     "https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_50m_populated_places_simple.geojson",
@@ -238,8 +208,10 @@ function WmsTab({ edit, onClose, onAdded }: Props) {
 
   const add = () => {
     if (!server || !chosen) return;
-    const id = `wms_${chosen.name.replace(/[^a-z0-9]+/gi, "_").toLowerCase()}`;
+    const wanted = `wms_${chosen.name.replace(/[^a-z0-9]+/gi, "_").toLowerCase()}`;
+    let id = wanted;
     edit((draft) => {
+      id = uniqueId(draft, wanted);
       draft.sources[id] = wmsSource({
         url: server.url,
         layers: chosen.name,
@@ -312,29 +284,4 @@ function WmsTab({ edit, onClose, onAdded }: Props) {
       )}
     </>
   );
-}
-
-function vectorLayer(layer: RegisteredLayer): LayerNode {
-  return {
-    type: "layer",
-    id: layer.id,
-    name: layer.title,
-    slot: "data",
-    source: layer.id,
-    sourceLayer: layer.id,
-    geometry: geometryOf(layer.geometryType),
-    visible: true,
-    opacity: 1,
-    // A point layer with a polygon stroke is a fill layer that draws nothing.
-    symbology:
-      geometryOf(layer.geometryType) === "point"
-        ? { kind: "single", color: "#4c8dff" }
-        : { kind: "single", color: "#4c8dff", stroke: { color: "#0a0a0b", width: 0.6 } },
-    metadata: {
-      sourceCrs: layer.sourceCrs ?? undefined,
-      featureCount: layer.featureCount ?? undefined,
-      fields: layer.fields,
-      extent: layer.extent ?? undefined,
-    },
-  };
 }

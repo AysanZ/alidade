@@ -41,13 +41,39 @@ export function removeNode(draft: MapProject, id: string): MapProject {
   walk(draft.tree, (n) => {
     if (n.type === "layer") used.add(n.source);
   });
+  /*
+   * The elevation source belongs to the environment, not to any one layer, and
+   * both terrain and hillshade read it. Only terrain was spared here, so removing
+   * the last layer while hillshade was on pulled the source out from under a
+   * layer that was still drawing from it.
+   */
+  if (draft.environment.terrain) used.add(draft.environment.terrain.source);
+  if (draft.environment.hillshade) used.add(draft.environment.hillshade.source);
+
   for (const source of Object.keys(draft.sources)) {
-    // The elevation source belongs to the environment, not to any one layer.
-    if (!used.has(source) && source !== draft.environment.terrain?.source) {
+    if (!used.has(source) && !source.startsWith("basemap:") && !source.startsWith("chrome:")) {
       delete draft.sources[source];
     }
   }
   return draft;
+}
+
+/**
+ * A name nothing else in the project is using.
+ *
+ * Importing the same file twice produced the same slug twice, so the tree held
+ * two nodes with one id. They compiled to two engine layers with one id, which a
+ * renderer will not add and the reconciler cannot tell apart: the layer appeared
+ * in the table of contents and nothing was drawn.
+ */
+export function uniqueId(project: MapProject, wanted: string): string {
+  const taken = new Set<string>(Object.keys(project.sources));
+  walk(project.tree, (n) => taken.add(n.id));
+  if (!taken.has(wanted)) return wanted;
+  for (let n = 2; ; n++) {
+    const candidate = `${wanted}_${n}`;
+    if (!taken.has(candidate)) return candidate;
+  }
 }
 
 /** Copy a layer, its source reference included, and put it above the original. */

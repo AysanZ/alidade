@@ -9,9 +9,25 @@ those operations to MapLibre. Editing the project changes the map, and swapping 
 basemap does not destroy the layers.
 
 Working now: a table of contents grouped by slot, a basemap gallery on open tiles,
-2D, 2.5D and 3D views, terrain and hillshade from open elevation tiles, a graticule,
-a scale bar in three unit systems, and a coordinate readout in decimal degrees, DMS
-or UTM.
+2D, 2.5D and 3D views, three projections including a real globe, terrain and
+hillshade from open elevation tiles, a graticule, UTM and metric reference grids,
+an overview map, drawing and geodesic measurement with buffers, camera bookmarks,
+a scale bar in three unit systems, and a coordinate readout in decimal degrees,
+DMS or UTM.
+
+Drawings and measurements are ordinary parts of the project document, so they
+survive a basemap swap, appear in the operation log, and export to GeoJSON, KML,
+GPX, CSV or WKT. Files in any of those formats can be read back in; the format is
+worked out from the content rather than the extension.
+
+### Projections
+
+`Mercator` is the flat web map. `Globe` is MapLibre's own name for a projection
+that is a sphere when zoomed out and quietly becomes mercator on the way in,
+which is the right default and a confusing thing to pick at street level, because
+nothing on the screen changes. `Sphere` is `vertical-perspective`: round at every
+zoom. Choosing either of the round ones from close in takes the camera out to
+where the choice is visible.
 
 Data goes in three ways. Upload a GeoJSON, zipped Shapefile, GeoPackage, KML or GPX
 and it is reprojected by ogr2ogr, written to PostGIS and served back as vector tiles
@@ -75,14 +91,18 @@ not a published package.
 
 ```bash
 pnpm install
-pnpm test        # 85 tests, Node only: no browser, no WebGL
+pnpm test        # 137 tests, Node only: no browser, no WebGL
 pnpm typecheck
 ```
 
 Core tests assert on the operation array the reconciler emits for a given pair of
 project states, so slot ordering, bundle expansion, classification and filter
 compilation are all tested without rendering anything. Adapter tests use a fake
-renderer that records calls.
+renderer that records calls, and refuse the same things a real one refuses:
+adding a layer before its source, removing a source something is still reading.
+
+`packages/core/tests/regressions.test.ts` holds one test per defect that has been
+fixed, named after the symptom rather than the cause.
 
 ## Licence
 

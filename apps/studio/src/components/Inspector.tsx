@@ -1,7 +1,8 @@
-import type { GraduatedSymbol, LayerNode, MapProject } from "@alidade/core";
+import type { LayerNode, MapProject } from "@alidade/core";
 import { hiddenBecause } from "@alidade/core";
 
 import { findLayer, removeNode, withNode } from "../tree";
+import { Appearance, describeSymbology } from "./Appearance";
 import { Field, Section, Switch } from "./Field";
 
 export interface Extent {
@@ -18,6 +19,7 @@ export function Inspector({
   denominator,
   onFlyTo,
   onRemoved,
+  onAttributes,
 }: {
   project: MapProject;
   selected: string | null;
@@ -25,6 +27,7 @@ export function Inspector({
   denominator: number;
   onFlyTo: (extent: Extent) => void;
   onRemoved: () => void;
+  onAttributes: (id: string) => void;
 }) {
   const layer = selected ? findLayer(project, selected) : undefined;
 
@@ -41,7 +44,6 @@ export function Inspector({
   const editLayer = (change: (node: LayerNode) => void) =>
     edit((d) => withNode(d, id, (n) => change(n as LayerNode)));
 
-  const graduated = layer.symbology.kind === "graduated" ? (layer.symbology as GraduatedSymbol) : null;
   const hidden = hiddenBecause(layer, denominator);
   const extent = layer.metadata?.extent;
 
@@ -64,6 +66,7 @@ export function Inspector({
       <Section title="Layer">
         <div className="row buttons">
           {extent && <button onClick={() => onFlyTo(extent)}>Zoom to layer</button>}
+          <button onClick={() => onAttributes(id)}>Attributes</button>
           <button
             className="danger"
             onClick={() => {
@@ -84,8 +87,21 @@ export function Inspector({
             onChange={(e) => editLayer((n) => void (n.opacity = Number(e.target.value) / 100))}
           />
         </Field>
-        <Field label="Slot">
-          <span className="muted small">{layer.slot}</span>
+        <Field label="Draws in">
+          <select
+            value={layer.slot}
+            onChange={(e) =>
+              editLayer((n) => void (n.slot = e.target.value as LayerNode["slot"]))
+            }
+          >
+            <option value="base">Base</option>
+            <option value="data">Data</option>
+            <option value="labels">Labels</option>
+            <option value="overlay">Overlay</option>
+          </select>
+        </Field>
+        <Field label="Styled as">
+          <span className="muted small">{describeSymbology(project, layer)}</span>
         </Field>
         {layer.scale && (
           <Field label="Visible at">
@@ -97,39 +113,7 @@ export function Inspector({
         )}
       </Section>
 
-      {graduated && (
-        <Section title="Graduated">
-          <Field label="Field">
-            <span className="muted small">{graduated.field}</span>
-          </Field>
-          {graduated.breaks.map((value, i) => (
-            <Field key={i} label={`Break ${i + 1}`} value={value}>
-              <input
-                type="range"
-                min={200}
-                max={9600}
-                step={50}
-                value={value}
-                onChange={(e) =>
-                  editLayer((n) => {
-                    const s = n.symbology as GraduatedSymbol;
-                    const next = Number(e.target.value);
-                    // Breaks stay ascending, or the step expression stops making sense.
-                    const low = i === 0 ? -Infinity : s.breaks[i - 1]!;
-                    const high = i === s.breaks.length - 1 ? Infinity : s.breaks[i + 1]!;
-                    s.breaks[i] = Math.min(Math.max(next, low + 50), high - 50);
-                  })
-                }
-              />
-            </Field>
-          ))}
-          <div className="classes">
-            {graduated.colors.map((c, i) => (
-              <span key={i} style={{ background: c }} title={c} />
-            ))}
-          </div>
-        </Section>
-      )}
+      <Appearance layer={layer} edit={editLayer} />
 
       {layer.metadata && (
         <Section title="Source">

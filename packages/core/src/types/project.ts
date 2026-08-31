@@ -205,14 +205,35 @@ export interface Hillshade {
   highlightColor: string;
 }
 
+/**
+ * How the sphere is put on the screen.
+ *
+ * `globe` is MapLibre's own name for a projection that is a sphere when zoomed
+ * out and quietly becomes mercator on the way in, which is what you want for
+ * normal work. `vertical-perspective` is the sphere at every zoom, which is what
+ * you want when you asked for a globe and meant it.
+ */
+export type Projection = "mercator" | "globe" | "vertical-perspective";
+
+/** Below this zoom `globe` is drawn as a sphere; above it, it is mercator. */
+export const GLOBE_IS_ROUND_BELOW = 9;
+
+export interface Light {
+  anchor: "map" | "viewport";
+  color: string;
+  intensity: number;
+  /** Degrees clockwise from north, then degrees down from straight up. */
+  position?: [number, number, number];
+}
+
 export interface Environment {
   terrain?: { source: string; exaggeration: number };
   /** Drawn just above the basemap, below everything the user added. */
   hillshade?: Hillshade;
   fog?: { color: string; range: [number, number] };
-  light?: { anchor: "map" | "viewport"; intensity: number };
+  light?: Light;
   sky?: boolean;
-  projection?: "mercator" | "globe";
+  projection?: Projection;
 }
 
 /* ---------------------------------------------------------------- chrome */
@@ -225,13 +246,96 @@ export type DistanceUnits = "metric" | "imperial" | "nautical";
  * the rest is drawn by the application, which is why it lives beside the tree
  * rather than in it.
  */
+/**
+ * Reference grids other than the graticule.
+ *
+ * `utm` is the zone and band framework, which is global and fixed, so it is
+ * generated once. `square` is a grid of true metric squares, which only exists
+ * relative to somewhere, so it is generated for the view and regenerated when
+ * the view has moved far enough to matter.
+ */
+export interface GridBounds {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+}
+
+export interface Grids {
+  utm: boolean;
+  square: { enabled: boolean; spacing: number };
+  /**
+   * The patch of world the square grid was last built for. It lives in the
+   * document so the same project redraws the same grid; the application replaces
+   * it when the view leaves the patch.
+   */
+  squareBounds?: GridBounds;
+  color: string;
+}
+
 export interface Chrome {
   graticule: { enabled: boolean; interval: number; labels: boolean; color: string };
+  grids: Grids;
   scaleBar: { enabled: boolean; units: DistanceUnits };
   northArrow: boolean;
   overview: boolean;
   legend: boolean;
   coordinates: CoordinateFormat;
+}
+
+/* ---------------------------------------------------------------- drawings */
+
+export type AnnotationKind = "point" | "line" | "polygon";
+
+/**
+ * Something the user drew, in lon/lat, with the measurement it carries.
+ *
+ * Drawings live beside the tree rather than in it because they are one layer no
+ * matter how many there are, and because they hold their own geometry: this is
+ * the only part of the project that is not just a description of data elsewhere.
+ */
+export interface Annotation {
+  id: string;
+  kind: AnnotationKind;
+  name: string;
+  /** point: one position. line: the path. polygon: the ring, not closed. */
+  coordinates: [number, number][];
+  color: string;
+  /** Set when the drawing was made by a measuring tool. */
+  measure?: "distance" | "area";
+  /** Metres, or square metres for an area. Recomputed on edit, stored for export. */
+  value?: number;
+  note?: string;
+}
+
+export interface Annotations {
+  visible: boolean;
+  opacity: number;
+  features: Annotation[];
+}
+
+/**
+ * What the user is pointing at.
+ *
+ * Held as attribute values rather than as renderer feature ids, because the
+ * demo table is keyed on text and an uploaded one on an integer, and a vector
+ * tile only carries a feature id when the key happens to be an integer. Matching
+ * on a column works for both and needs nothing from the tile that is not
+ * already in it.
+ */
+export interface Selection {
+  layer: string;
+  field: string;
+  values: (string | number)[];
+  /** A hover is drawn more quietly than a click, and is not kept. */
+  hover?: boolean;
+}
+
+/** A named camera position. */
+export interface Bookmark {
+  id: string;
+  name: string;
+  view: View;
 }
 
 export interface MapProject {
@@ -244,13 +348,30 @@ export interface MapProject {
   chrome: Chrome;
   sources: Record<string, Source>;
   tree: TreeNode[];
+  /** Optional so a project written before drawings existed still loads. */
+  annotations?: Annotations;
+  bookmarks?: Bookmark[];
+  selection?: Selection;
 }
+
+export const defaultGrids = (): Grids => ({
+  utm: false,
+  square: { enabled: false, spacing: 10000 },
+  color: "#3b6ea5",
+});
 
 export const defaultChrome = (): Chrome => ({
   graticule: { enabled: false, interval: 0.5, labels: true, color: "#2b2b30" },
+  grids: defaultGrids(),
   scaleBar: { enabled: true, units: "metric" },
   northArrow: true,
   overview: false,
   legend: true,
   coordinates: "dd",
+});
+
+export const defaultAnnotations = (): Annotations => ({
+  visible: true,
+  opacity: 1,
+  features: [],
 });

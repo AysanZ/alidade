@@ -81,33 +81,98 @@ async def upload(file: UploadFile) -> dict:
 
 @router.get("/{layer_id}/features")
 async def features(
-    layer_id: str, limit: int = 100, offset: int = 0, order: str | None = None
+    layer_id: str,
+    limit: int = 100,
+    offset: int = 0,
+    order: str | None = None,
+    descending: bool = False,
+    search: str | None = None,
 ) -> dict:
-    """Attributes only. Geometry is what the tile endpoint is for."""
+    """
+    Attributes, plus the bounding box of each row.
+
+    Geometry is still the tile endpoint's job, but a table you cannot click to
+    fly to is a spreadsheet, so each row carries the four numbers needed to aim
+    the camera and nothing more.
+    """
     layer = await registry.get(layer_id)
     if layer is None:
         raise HTTPException(404, f"No layer named {layer_id}.")
 
     attributes = [c for c in layer.fields if c != layer.geometry_column]
     if not attributes:
-        return {"fields": [], "rows": [], "total": 0}
+        return {"fields": [], "rows": [], "total": 0, "key": None}
 
     columns = ", ".join(check_identifier(c) for c in attributes)
+    geom = check_identifier(layer.geometry_column)
     sort = check_identifier(order) if order else attributes[0]
+    direction = "DESC" if descending else "ASC"
     limit = max(1, min(limit, 1000))
 
+    # Free text over every column, cast to text. Slow on a big table and honest
+    # about it: this is a table browser, not a search index.
+    haystack = " || ' ' || ".join(
+        f"coalesce({check_identifier(c)}::text, '')" for c in attributes
+    )
+    pattern = f"%{search}%" if search else None
+
     async with pool().acquire() as conn:
-        total = await conn.fetchval(f"SELECT count(*) FROM {layer.table}")
-        rows = await conn.fetch(
-            f"SELECT {columns} FROM {layer.table} ORDER BY {sort} LIMIT $1 OFFSET $2",
-            limit,
-            max(0, offset),
+        if pattern is None:
+            total = await conn.fetchval(f"SELECT count(*) FROM {layer.table}")
+            rows = await conn.fetch(
+                f"""
+                SELECT {columns},
+                       ST_XMin({geom}) AS __west, ST_YMin({geom}) AS __south,
+                       ST_XMax({geom}) AS __east, ST_YMax({geom}) AS __north
+                FROM {layer.table}
+                ORDER BY {sort} {direction}
+                LIMIT $1 OFFSET $2
+                """,
+                limit,
+                max(0, offset),
+            )
+        else:
+            total = await conn.fetchval(
+                f"SELECT count(*) FROM {layer.table} WHERE {haystack} ILIKE $1", pattern
+            )
+            rows = await conn.fetch(
+                f"""
+                SELECT {columns},
+                       ST_XMin({geom}) AS __west, ST_YMin({geom}) AS __south,
+                       ST_XMax({geom}) AS __east, ST_YMax({geom}) AS __north
+                FROM {layer.table}
+                WHERE {haystack} ILIKE $3
+                ORDER BY {sort} {direction}
+                LIMIT $1 OFFSET $2
+                """,
+                limit,
+                max(0, offset),
+                pattern,
+            )
+
+    out = []
+    for row in rows:
+        record = dict(row)
+        bounds = {
+            "west": record.pop("__west"),
+            "south": record.pop("__south"),
+            "east": record.pop("__east"),
+            "north": record.pop("__north"),
+        }
+        out.append(
+            {
+                "values": {k: jsonable(v) for k, v in record.items()},
+                "bounds": None if bounds["west"] is None else {k: float(v) for k, v in bounds.items()},
+            }
         )
 
     return {
         "fields": attributes,
-        "rows": [{k: jsonable(v) for k, v in dict(row).items()} for row in rows],
+        "rows": out,
         "total": total,
+        # Whichever column the client should match on to highlight a row. The
+        # first one is a guess, but it is the same guess the sort makes.
+        "key": attributes[0],
     }
 
 

@@ -1,6 +1,14 @@
 import type { MapProject } from "@alidade/core";
 
-export function TitleBar({ project, ops }: { project: MapProject; ops: number }) {
+export function TitleBar({
+  project,
+  ops,
+  edit,
+}: {
+  project: MapProject;
+  ops: number;
+  edit: (change: (draft: MapProject) => MapProject) => void;
+}) {
   return (
     <header className="titlebar">
       <div className="brand">
@@ -11,7 +19,19 @@ export function TitleBar({ project, ops }: { project: MapProject; ops: number })
         </svg>
         <b>Alidade</b>
       </div>
-      <span className="doc">{project.name}</span>
+      {/* The name is the user's, so it is an input rather than a label. */}
+      <input
+        className="doc"
+        value={project.name}
+        aria-label="Project name"
+        placeholder="Untitled map"
+        onChange={(e) =>
+          edit((d) => {
+            d.name = e.target.value;
+            return d;
+          })
+        }
+      />
       <span className="tag">schema {project.schema}</span>
       <div className="grow" />
       <span className="muted">{ops} operations this session</span>

@@ -488,6 +488,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 
 /* attribute dock */
 .app:has(.dock) { grid-template-rows: 38px 1fr auto 25px; }
+.app.presenting:has(.dock) { grid-template-rows: 0 1fr auto 0; }
 .dock {
   display: flex;
   flex-direction: column;
@@ -571,3 +572,294 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   line-height: 1.5;
 }
 .problem button { color: var(--txt-3); flex: none; }
+
+/* ---------------------------------------------------------------- drawing */
+
+.drawlist { list-style: none; margin: 0; padding: 2px 11px 6px; }
+.drawlist li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.drawlist li:last-child { border-bottom: 0; }
+.drawlist .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.drawlist .name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.drawlist .value {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--txt-2);
+  flex: none;
+}
+.drawlist button {
+  color: var(--txt-3);
+  padding: 1px 3px;
+  border-radius: 2px;
+  flex: none;
+  font-size: 11px;
+}
+.drawlist button:hover { background: var(--raise-2); color: var(--txt); }
+.drawlist button.danger:hover { color: #f0616b; }
+
+/* A drawing in progress needs its instructions on the map, not in the panel. */
+.drawhint {
+  position: absolute;
+  top: 14px;
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 13px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: rgba(10, 10, 11, 0.92);
+  backdrop-filter: blur(6px);
+  text-align: center;
+}
+.drawhint b { font-weight: 500; font-size: 11.5px; }
+.drawhint span { color: var(--txt-3); font-size: 10.5px; }
+
+.row button.link {
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  text-align: start;
+}
+.row button.link:hover { text-decoration: underline; }
+
+/* ---------------------------------------------------------------- overview */
+
+.minimap {
+  position: absolute;
+  inset-block-end: 34px;
+  inset-inline-end: 14px;
+  width: 168px;
+  height: 118px;
+  z-index: 3;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--void);
+}
+.minimapholder { position: absolute; inset: 0; }
+/* The main map is always in the middle of the overview, so the box can be too. */
+.minimapbox {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 38px;
+  height: 27px;
+  margin: -13.5px 0 0 -19px;
+  border: 1px solid var(--accent);
+  background: rgba(76, 141, 255, 0.12);
+  pointer-events: none;
+}
+
+.status .lock { color: #f0b849; }
+
+/* ------------------------------------------------------------ presentation */
+
+/* Everything but the map gets out of the way, and comes back on the same key. */
+.app.presenting { grid-template-rows: 0 1fr 0; }
+.app.presenting .titlebar,
+.app.presenting .status,
+.app.presenting .rail,
+.app.presenting .panel,
+.app.presenting .inspector { display: none; }
+
+/* ------------------------------------------------------- wide attribute tables */
+
+/*
+ * Natural Earth's populated places has thirty eight columns. The table used to
+ * grow sideways until the pager and the close button were off the screen with no
+ * way back, so: the header sticks, the row number column sticks, the body scrolls
+ * in both directions inside a box that can be dragged taller, and columns can be
+ * switched off.
+ */
+.dock { position: relative; min-height: 120px; }
+.dockgrip {
+  position: absolute;
+  top: 0;
+  inset-inline: 0;
+  height: 5px;
+  cursor: ns-resize;
+  z-index: 2;
+}
+.dockgrip:hover { background: var(--accent); opacity: 0.5; }
+
+.dock header { flex-wrap: nowrap; overflow: hidden; }
+.tablesearch {
+  width: 168px;
+  flex: none;
+  background: var(--raise);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--txt);
+  padding: 3px 7px;
+  font: inherit;
+  font-size: 11px;
+}
+.tablesearch::placeholder { color: var(--txt-3); }
+.dock header button.on { border-color: var(--accent); color: var(--txt); }
+
+.columnpicker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 8px 11px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  max-height: 92px;
+  overflow: auto;
+  flex: none;
+}
+.columnpicker label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  color: var(--txt-2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.columnpicker button {
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 7px;
+  font-size: 10.5px;
+  color: var(--txt-3);
+}
+
+.tablewrap { overflow: auto; }
+.dock table { table-layout: auto; width: max-content; min-width: 100%; }
+.dock thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--panel);
+  white-space: nowrap;
+  cursor: pointer;
+}
+/* Long values get an ellipsis rather than a column three screens wide. */
+.dock tbody td {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dock .rownum {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  background: var(--panel);
+  text-align: end;
+  min-width: 44px;
+}
+.dock thead .rownum { z-index: 3; }
+.dock tbody tr { cursor: pointer; }
+.dock tbody tr.on td { background: rgba(255, 209, 102, 0.13); }
+.dock tbody tr.on .rownum { background: rgba(255, 209, 102, 0.13); }
+
+/* ---------------------------------------------------------------- appearance */
+
+.row input[type="color"] {
+  width: 30px;
+  height: 19px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: none;
+  cursor: pointer;
+  flex: none;
+}
+.row input[type="number"].num {
+  width: 74px;
+  flex: none;
+  background: var(--raise);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--txt);
+  padding: 2px 6px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11px;
+}
+.row .grow.small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hint code {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--txt-2);
+}
+
+/* ---------------------------------------------------------------- empty state */
+
+.empty { padding: 22px 14px; text-align: center; }
+.empty b { display: block; font-weight: 500; margin-bottom: 5px; }
+.empty p {
+  color: var(--txt-3);
+  font-size: 10.5px;
+  line-height: 1.6;
+  margin-bottom: 11px;
+}
+.empty .row.buttons { justify-content: center; padding: 0; }
+.empty button.primary { border-color: var(--accent); color: var(--txt); }
+
+/* The project name is editable, so it has to look like it without shouting. */
+input.doc {
+  flex: none;
+  width: 220px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--txt-2);
+  font: inherit;
+  padding: 2px 6px;
+  margin-inline-start: 12px;
+}
+input.doc:hover { border-color: var(--line); }
+input.doc:focus { border-color: var(--accent); color: var(--txt); outline: none; }
+
+/* ---------------------------------------------------------------- crash */
+
+.crash {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: var(--shell);
+}
+.crash > div { max-width: 460px; }
+.crash b { display: block; font-weight: 500; margin-bottom: 8px; }
+.crash p { color: var(--txt-3); font-size: 11px; line-height: 1.7; margin-bottom: 10px; }
+.crash pre {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 8px 10px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  color: var(--txt-2);
+  overflow-x: auto;
+  margin-bottom: 10px;
+}
+.crash .detail {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  color: #f0616b;
+  word-break: break-word;
+}
+.crash .row.buttons { padding: 4px 0 0; }
+.crash button.primary { border-color: var(--accent); color: var(--txt); }
+
+/* A catalogue entry that is already on the map is shown, not hidden. */
+.picker li.used { opacity: 0.45; cursor: default; }
+.picker li.used:hover { background: none; }
+.picker li.used em { color: var(--txt-3); }

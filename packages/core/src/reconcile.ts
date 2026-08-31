@@ -18,9 +18,18 @@ export function reconcile(prev: MapProject | null, next: MapProject): Op[] {
   const gone = Object.keys(a.sources).filter((id) => !(id in b.sources));
   const added: string[] = [];
   const changed: string[] = [];
+  const refreshed: string[] = [];
   for (const [id, source] of Object.entries(b.sources)) {
-    if (!(id in a.sources)) added.push(id);
-    else if (!same(a.sources[id], source)) changed.push(id);
+    const before = a.sources[id];
+    if (!before) added.push(id);
+    else if (same(before, source)) continue;
+    /*
+     * A geojson source that only has new data is updated in place. Removing and
+     * re-adding it would take every layer reading it down with it, which is what
+     * made the graticule flicker and the grid rebuild on every drag.
+     */
+    else if (before.type === "geojson" && source.type === "geojson") refreshed.push(id);
+    else changed.push(id);
   }
   const replaced = new Set(changed);
 
@@ -33,15 +42,29 @@ export function reconcile(prev: MapProject | null, next: MapProject): Op[] {
    * afterwards, even when the layer itself did not change. This is what a basemap
    * swap looks like from here.
    */
-  const takenDown = a.layers.filter(
-    (l) => !will.has(l.id) || (l.source !== undefined && replaced.has(l.source)),
-  );
+  const takenDown = a.layers.filter((l) => {
+    const next = will.get(l.id);
+    if (!next) return true;
+    if (l.source !== undefined && replaced.has(l.source)) return true;
+    /*
+     * A renderer cannot move a layer onto a different source, or change what kind
+     * of layer it is, so those are a rebuild rather than a property change. This
+     * used to be silently skipped: the layer stayed pointed at the data it was
+     * built with and the edit appeared to do nothing.
+     */
+    return (
+      l.type !== next.type || l.source !== next.source || l.sourceLayer !== next.sourceLayer
+    );
+  });
   const down = new Set(takenDown.map((l) => l.id));
   for (const l of takenDown) ops.push({ t: "layer.remove", id: l.id });
 
   for (const id of [...gone, ...changed]) ops.push({ t: "source.remove", id });
   for (const id of [...added, ...changed]) {
     ops.push({ t: "source.add", id, source: b.sources[id]! });
+  }
+  for (const id of refreshed) {
+    ops.push({ t: "source.data", id, data: (b.sources[id] as { data: unknown }).data });
   }
 
   /* back up, each placed under the first layer above it that is already there */

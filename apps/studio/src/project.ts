@@ -1,25 +1,26 @@
-import { defaultChrome, type MapProject } from "@alidade/core";
+import { defaultAnnotations, defaultChrome, type LayerNode, type MapProject } from "@alidade/core";
 
 import { BASEMAPS } from "./basemaps";
 
 /**
- * The sample project. From phase 8 this is loaded from the database; for now it is
- * the one thing the application starts with, and every panel edits it.
+ * What the application opens with.
+ *
+ * It used to open with a Tehran density map hard-coded into it, title and all,
+ * which made a general purpose tool look like one specific map that happened to
+ * let you add layers to it. The project now starts empty and unnamed; the demo
+ * data is something you can load, not something you have to remove.
  */
-export const demoProject: MapProject = {
+export const emptyProject: MapProject = {
   schema: 3,
-  id: "demo",
-  name: "Tehran · population density 2024",
-  view: { center: [51.4, 35.715], zoom: 10.6, pitch: 0, bearing: 0 },
+  id: "untitled",
+  name: "Untitled map",
+  view: { center: [20, 25], zoom: 1.9, pitch: 0, bearing: 0 },
   basemap: BASEMAPS[0]!,
   environment: {},
-  chrome: { ...defaultChrome(), graticule: { ...defaultChrome().graticule, interval: 0.1 } },
+  chrome: { ...defaultChrome(), overview: true },
+  annotations: defaultAnnotations(),
+  bookmarks: [],
   sources: {
-    wards: {
-      type: "vector",
-      tiles: [`${location.origin}/api/tiles/wards/{z}/{x}/{y}.mvt`],
-      maxzoom: 16,
-    },
     // Open elevation tiles, no key required. Terrain and hillshade both read this.
     dem: {
       type: "raster-dem",
@@ -30,42 +31,45 @@ export const demoProject: MapProject = {
       attribution: "Elevation: Mapzen and partners",
     },
   },
-  tree: [
-    {
-      type: "group",
-      id: "census",
-      name: "Census 1400",
-      visible: true,
-      opacity: 1,
-      children: [
-        {
-          type: "layer",
-          id: "density",
-          name: "Population density",
-          slot: "data",
-          source: "wards",
-          sourceLayer: "wards",
-          geometry: "polygon",
-          visible: true,
-          opacity: 1,
-          scale: { minDenominator: 2000, maxDenominator: 2000000 },
-          symbology: {
-            kind: "graduated",
-            field: "density",
-            breaks: [900, 2100, 3900, 6200],
-            colors: ["#0f2438", "#1b4674", "#2e6fe0", "#6fa8ff", "#bbdaff"],
-            noDataColor: "#3a3a40",
-            stroke: { color: "#0a0a0b", width: 0.6 },
-          },
-          metadata: {
-            sourceCrs: "EPSG:32639",
-            fields: ["ward_id", "name", "density"],
-            extent: { west: 51.2, south: 35.6, east: 51.6, north: 35.83 },
-          },
-        },
-      ],
-    },
-  ],
+  tree: [],
+};
+
+/**
+ * The layer the shipped database is seeded with.
+ *
+ * Offered rather than assumed, so an empty database is not a broken first run
+ * and a full one is not stuck with somebody else's map.
+ */
+export const DEMO_LAYER: LayerNode = {
+  type: "layer",
+  id: "wards",
+  name: "Tehran population density",
+  slot: "data",
+  source: "wards",
+  sourceLayer: "wards",
+  geometry: "polygon",
+  visible: true,
+  opacity: 1,
+  scale: { minDenominator: 2000, maxDenominator: 2000000 },
+  symbology: {
+    kind: "graduated",
+    field: "density",
+    breaks: [900, 2100, 3900, 6200],
+    colors: ["#0f2438", "#1b4674", "#2e6fe0", "#6fa8ff", "#bbdaff"],
+    noDataColor: "#3a3a40",
+    stroke: { color: "#0a0a0b", width: 0.6 },
+  },
+  metadata: {
+    sourceCrs: "EPSG:32639",
+    fields: ["ward_id", "name", "pop_2024", "area_km2", "density", "updated_at"],
+    extent: { west: 51.2, south: 35.6, east: 51.6, north: 35.83 },
+  },
+};
+
+export const DEMO_SOURCE = {
+  type: "vector" as const,
+  tiles: [`${location.origin}/api/tiles/wards/{z}/{x}/{y}.mvt`],
+  maxzoom: 16,
 };
 
 export const HILLSHADE = {
@@ -85,7 +89,7 @@ export const HILLSHADE = {
 export const emptyStyle = {
   version: 8 as const,
   glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
-  projection: { type: demoProject.environment.projection ?? "mercator" },
+  projection: { type: emptyProject.environment.projection ?? "mercator" },
   sources: {},
   layers: [],
 };

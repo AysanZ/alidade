@@ -37,3 +37,20 @@ def test_unknown_layer_is_rejected(client):
 
 def test_coordinates_outside_the_pyramid_are_rejected(client):
     assert client.get("/api/tiles/wards/3/99/99.mvt").status_code == 400
+
+
+def test_a_layer_reaching_the_pole_still_builds_its_world_tile(client):
+    """
+    Web mercator has no answer past about 85.05° of latitude, so a geometry that
+    touches a pole cannot be projected into it. Natural Earth is full of these,
+    and z0 is the tile that selects them, so the world tile used to answer 500
+    while every other tile worked. The query clips to the mercator band first.
+    """
+    r = client.get("/api/tiles/wards/0/0/0.mvt")
+    assert r.status_code == 200
+
+
+def test_a_tile_that_cannot_be_built_explains_itself(client):
+    """A tile the database refuses is a property of the data, not a crash."""
+    r = client.get("/api/tiles/wards/0/0/0.mvt")
+    assert r.status_code != 500

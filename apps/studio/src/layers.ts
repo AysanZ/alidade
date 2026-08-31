@@ -1,0 +1,108 @@
+import type { Geometry, LayerNode, MapProject } from "@alidade/core";
+import { nextColor, representativeColor, singleSymbol } from "@alidade/core";
+
+import type { RegisteredLayer } from "./api";
+import { uniqueId, walk } from "./tree";
+
+export interface Extent {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+}
+
+/**
+ * PostGIS reports geometry types in upper case (`POINT`, `MULTIPOLYGON`), GDAL in
+ * mixed case. Matching on the wrong case silently produced a fill layer for a point
+ * table, which draws nothing at all: the layer was there, and invisible.
+ */
+const GEOMETRY: Record<string, Geometry> = {
+  point: "point",
+  multipoint: "point",
+  linestring: "line",
+  multilinestring: "line",
+  polygon: "polygon",
+  multipolygon: "polygon",
+  geometry: "polygon",
+  geometrycollection: "polygon",
+};
+
+export function geometryOf(reported: string | null): Geometry {
+  return GEOMETRY[(reported ?? "").trim().toLowerCase()] ?? "polygon";
+}
+
+/**
+ * What every layer already on the map is wearing.
+ *
+ * Imports all arrived as the same blue, so three of them on top of each other
+ * were one indistinguishable smear and the table of contents was the only way to
+ * tell which was which.
+ */
+export function colorsInUse(project: MapProject): string[] {
+  const colors: string[] = [];
+  walk(project.tree, (node) => {
+    if (node.type === "layer") colors.push(representativeColor(node.symbology));
+  });
+  return colors;
+}
+
+export function vectorLayer(layer: RegisteredLayer, id: string, color: string): LayerNode {
+  return {
+    type: "layer",
+    id,
+    name: layer.title,
+    slot: "data",
+    source: id,
+    // The layer name inside the vector tile is the registry id, not the node id.
+    sourceLayer: layer.id,
+    geometry: geometryOf(layer.geometryType),
+    visible: true,
+    opacity: 1,
+    // A point layer with a polygon stroke is a fill layer that draws nothing.
+    symbology: singleSymbol(color, geometryOf(layer.geometryType)),
+    metadata: {
+      sourceCrs: layer.sourceCrs ?? undefined,
+      featureCount: layer.featureCount ?? undefined,
+      fields: layer.fields,
+      extent: layer.extent ?? undefined,
+    },
+  };
+}
+
+/**
+ * Put a registered layer in the project and take the map to it.
+ *
+ * The registry id names the tile endpoint, but it cannot also name the node in
+ * the tree: adding the same layer twice gives the same id twice, and two nodes
+ * with one id compile to two engine layers with one id. The node gets a free
+ * name; the source keeps pointing at the real endpoint.
+ */
+export function place(
+  layer: RegisteredLayer,
+  edit: (change: (draft: MapProject) => MapProject) => void,
+  onAdded: (id: string) => void,
+  onFlyTo: (extent: Extent) => void,
+): void {
+  let placed = layer.id;
+  edit((draft) => {
+    placed = uniqueId(draft, layer.id);
+    draft.sources[placed] = {
+      type: "vector",
+      tiles: [`${location.origin}/api/tiles/${layer.id}/{z}/{x}/{y}.mvt`],
+      maxzoom: 16,
+    };
+    draft.tree.unshift(vectorLayer(layer, placed, nextColor(colorsInUse(draft))));
+    return draft;
+  });
+  onAdded(placed);
+  if (layer.extent) onFlyTo(layer.extent);
+}
+
+/** Whether a registered layer is already on the map, whatever its node is called. */
+export function alreadyAdded(project: MapProject, layer: RegisteredLayer): boolean {
+  let found = false;
+  walk(project.tree, (node) => {
+    if (node.type === "layer" && node.sourceLayer === layer.id) found = true;
+  });
+  return found;
+}
