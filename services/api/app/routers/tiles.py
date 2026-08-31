@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Response
 from .. import registry
 from ..config import settings
 from ..db import pool
-from ..naming import check_identifier
+from ..naming import check_identifier, quote_column
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ async def tile(layer_id: str, z: int, x: int, y: int) -> Response:
     # its name is more use than a 500 with a traceback in the container log.
     attributes = [c for c in layer.fields if c != layer.geometry_column]
     try:
-        checked = [check_identifier(c) for c in attributes]
+        checked = [quote_column(c) for c in attributes]
     except ValueError as error:
         raise HTTPException(422, f"{layer_id} has an unusable column name: {error}") from error
     columns = ", ".join(f"t.{c}" for c in checked) or "t.fid"

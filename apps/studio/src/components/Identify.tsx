@@ -4,6 +4,7 @@ export interface Identified {
   layer: LayerNode;
   properties: Record<string, unknown>;
   at: { x: number; y: number };
+  viewport?: { width: number; height: number };
   position: [number, number];
 }
 
@@ -30,12 +31,21 @@ export function Identify({
   );
   const title = pickTitle(found.properties) ?? found.layer.name;
 
-  /* Kept inside the viewport rather than half off the edge of it. */
-  const left = Math.min(found.at.x + 12, window.innerWidth - 300);
-  const top = Math.min(found.at.y + 12, window.innerHeight - 300);
+  /*
+   * Positioned in the map container's coordinates, beside the feature, and
+   * flipped to the other side of the cursor when there is no room.
+   */
+  const flipX = found.at.x > (found.viewport?.width ?? 0) - 300;
+  const flipY = found.at.y > (found.viewport?.height ?? 0) - 260;
+  const style = flipX
+    ? { right: (found.viewport?.width ?? 0) - found.at.x + 14 }
+    : { left: found.at.x + 14 };
+  const vertical = flipY
+    ? { bottom: (found.viewport?.height ?? 0) - found.at.y + 14 }
+    : { top: found.at.y - 10 };
 
   return (
-    <div className="identify" style={{ left, top }}>
+    <div className="identify" style={{ ...style, ...vertical }}>
       <header>
         <span className="swatch" style={{ background: found.layer.symbology.kind === "single" ? found.layer.symbology.color : "#4c8dff" }} />
         <b>{title}</b>

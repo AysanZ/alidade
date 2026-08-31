@@ -4,10 +4,12 @@ import type {
   GraduatedSymbol,
   LayerNode,
   MapProject,
+  MarkerSymbol,
   SingleSymbol,
   Symbology,
 } from "@alidade/core";
 import { CATEGORY_COLORS, RAMPS, equalIntervalBreaks, rampOf } from "@alidade/core";
+import { MARKER_GLYPHS } from "../markers";
 
 import { readStats, type FieldStats } from "../api";
 import { Field, Section, Switch } from "./Field";
@@ -94,6 +96,9 @@ export function Appearance({ layer, edit }: Props) {
 
   const available: { id: Kind; label: string; needsField: boolean }[] = [
     { id: "single", label: "Single", needsField: false },
+    ...(layer.geometry === "point"
+      ? [{ id: "marker" as Kind, label: "Marker", needsField: false }]
+      : []),
     { id: "graduated", label: "Graduated", needsField: true },
     { id: "categorized", label: "Categories", needsField: true },
     ...(layer.geometry === "polygon"
@@ -110,6 +115,9 @@ export function Appearance({ layer, edit }: Props) {
       const field = "field" in node.symbology ? node.symbology.field : fields[0] ?? "";
 
       if (next === "single") node.symbology = { kind: "single", color: colour, stroke };
+      else if (next === "marker") {
+        node.symbology = { kind: "marker", glyph: "📍", color: colour, size: 26, shape: "pin" };
+      }
       else if (next === "graduated") {
         // Left empty on purpose: the effect above fills it from the column's
         // real range as soon as the database answers.
@@ -155,6 +163,10 @@ export function Appearance({ layer, edit }: Props) {
             </button>
           ))}
         </div>
+
+        {kind === "marker" && (
+          <Marker symbology={layer.symbology as MarkerSymbol} edit={edit} />
+        )}
 
         {kind === "single" && (
           <Field label="Colour">
@@ -257,7 +269,7 @@ export function Appearance({ layer, edit }: Props) {
         )}
       </Section>
 
-      {layer.geometry !== "raster" && kind !== "extrusion" && (
+      {layer.geometry !== "raster" && kind !== "extrusion" && kind !== "marker" && (
         <Section title={layer.geometry === "point" ? "Marker" : "Outline"}>
           <Stroke layer={layer} edit={edit} />
         </Section>
@@ -355,6 +367,75 @@ function Graduated({
   );
 }
 
+function Marker({ symbology, edit }: { symbology: MarkerSymbol; edit: Props["edit"] }) {
+  return (
+    <>
+      <div className="glyphs">
+        {MARKER_GLYPHS.map((glyph) => (
+          <button
+            key={glyph}
+            className={symbology.glyph === glyph ? "on" : ""}
+            title={glyph}
+            onClick={() => edit((node) => void ((node.symbology as MarkerSymbol).glyph = glyph))}
+          >
+            {glyph}
+          </button>
+        ))}
+      </div>
+      <div className="row">
+        <span className="k">Or type one</span>
+        <input
+          className="text"
+          value={symbology.glyph}
+          maxLength={4}
+          onChange={(e) =>
+            edit((node) => void ((node.symbology as MarkerSymbol).glyph = e.target.value))
+          }
+        />
+      </div>
+      <Field label="Shape">
+        <select
+          value={symbology.shape}
+          onChange={(e) =>
+            edit((node) => {
+              (node.symbology as MarkerSymbol).shape = e.target.value as MarkerSymbol["shape"];
+            })
+          }
+        >
+          <option value="pin">Pin</option>
+          <option value="circle">Circle</option>
+          <option value="square">Square</option>
+          <option value="none">Glyph on its own</option>
+        </select>
+      </Field>
+      <Field label="Background">
+        <input
+          type="color"
+          value={symbology.color}
+          onChange={(e) =>
+            edit((node) => void ((node.symbology as MarkerSymbol).color = e.target.value))
+          }
+        />
+      </Field>
+      <Field label="Size" value={`${symbology.size} px`}>
+        <input
+          type="range"
+          min={14}
+          max={56}
+          value={symbology.size}
+          onChange={(e) =>
+            edit((node) => void ((node.symbology as MarkerSymbol).size = Number(e.target.value)))
+          }
+        />
+      </Field>
+      <p className="hint">
+        The glyph is drawn to an image by the browser and handed to the renderer. Vector tiles carry
+        no emoji, and the map's glyph set has none, so a text label would come out blank.
+      </p>
+    </>
+  );
+}
+
 function Categorized({
   symbology,
   edit,
@@ -442,9 +523,12 @@ function Categorized({
   );
 }
 
+/** The kinds that can carry an outline: everything but a marker or an extrusion. */
+type Strokeable = Exclude<Symbology, { kind: "extrusion" } | { kind: "marker" }>;
+
 function Stroke({ layer, edit }: Props) {
   const symbology = layer.symbology;
-  if (symbology.kind === "extrusion") return null;
+  if (symbology.kind === "extrusion" || symbology.kind === "marker") return null;
   const stroke = symbology.stroke;
 
   return (
@@ -454,7 +538,7 @@ function Stroke({ layer, edit }: Props) {
         on={Boolean(stroke)}
         onChange={(on) =>
           edit((node) => {
-            const s = node.symbology as Exclude<Symbology, { kind: "extrusion" }>;
+            const s = node.symbology as Strokeable;
             if (on) s.stroke = { color: "#0a0a0b", width: 0.8 };
             else delete s.stroke;
           })
@@ -468,7 +552,7 @@ function Stroke({ layer, edit }: Props) {
               value={stroke.color}
               onChange={(e) =>
                 edit((node) => {
-                  const s = node.symbology as Exclude<Symbology, { kind: "extrusion" }>;
+                  const s = node.symbology as Strokeable;
                   if (s.stroke) s.stroke.color = e.target.value;
                 })
               }
@@ -482,7 +566,7 @@ function Stroke({ layer, edit }: Props) {
               value={stroke.width * 10}
               onChange={(e) =>
                 edit((node) => {
-                  const s = node.symbology as Exclude<Symbology, { kind: "extrusion" }>;
+                  const s = node.symbology as Strokeable;
                   if (s.stroke) s.stroke.width = Number(e.target.value) / 10;
                 })
               }
@@ -493,7 +577,7 @@ function Stroke({ layer, edit }: Props) {
             on={Boolean(stroke.dash)}
             onChange={(on) =>
               edit((node) => {
-                const s = node.symbology as Exclude<Symbology, { kind: "extrusion" }>;
+                const s = node.symbology as Strokeable;
                 if (!s.stroke) return;
                 if (on) s.stroke.dash = [3, 2];
                 else delete s.stroke.dash;
@@ -587,6 +671,7 @@ const format = (n: number | null) =>
   n === null ? "—" : Number.isInteger(n) ? String(n) : n.toFixed(2);
 
 function representative(symbology: Symbology): string {
+  if (symbology.kind === "marker") return symbology.color;
   if (symbology.kind === "graduated") return symbology.colors[symbology.colors.length - 1] ?? "#4c8dff";
   if (symbology.kind === "categorized") return symbology.categories[0]?.color ?? symbology.fallbackColor;
   return symbology.color;
@@ -599,5 +684,6 @@ export function describeSymbology(project: MapProject, layer: LayerNode): string
   if (s.kind === "graduated") return `${s.breaks.length + 1} classes on ${s.field}`;
   if (s.kind === "categorized") return `${s.categories.length} categories on ${s.field}`;
   if (s.kind === "extrusion") return `extruded by ${s.heightField}`;
+  if (s.kind === "marker") return `${s.glyph} marker`;
   return "one colour";
 }

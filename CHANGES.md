@@ -382,3 +382,99 @@ layer, entries for a categorized one.
   failure is logged server-side.
 - `schema 3` is gone from the title bar.
 - catalogue entries in the 272px sidebar truncate instead of running off the end.
+
+
+---
+
+# Fifth round
+
+## Hover picked the wrong features
+
+Highlighting matched on whatever column happened to come first. For Natural Earth
+that is `scalerank`, which every country shares with dozens of others, so
+hovering one country lit up all of them.
+
+A key has to be unique or it is not a key. The server now works out which column
+is — `count(DISTINCT col) = count(*)`, tested rather than assumed, cached per
+layer — and returns it as `key` from `/api/layers/{id}` and `/features`. Layers
+carry it in `metadata.key`. A table with no unique column falls back to the first
+field and behaves as before, which is the honest outcome rather than a wrong one.
+
+## The identify panel opened in the wrong place
+
+It was positioned with `clientX`/`clientY`, which are relative to the window, but
+placed inside the map container, which starts after the rail and the sidebar. So
+it appeared about 320 pixels right and 40 down from the feature. It now uses
+`e.point`, which is what the container's coordinates are, and flips to the other
+side of the cursor when there is no room.
+
+## The overview flashed black on every hover
+
+Its basemap effect depended on the basemap object, and every edit to the project
+produces a fresh one because the manager deep-clones on update. Hovering the map
+edits the project once per feature, so the overview tore down and rebuilt its
+layers continuously. It now depends on the id, background and tile URLs — what it
+actually draws, rather than the identity of the object holding it.
+
+## 500 when importing some Natural Earth files
+
+`check_identifier` only accepted `^[a-z][a-z0-9_]{0,50}$`. Natural Earth breaks
+that three ways: uppercase names, leading underscores, and names over fifty one
+characters. A file with one of those registered fine and then answered 500 on the
+first query that named its columns — with the reason only in the container log.
+
+Column names now go through `quote_column`, which validates against a wider but
+still injection-proof pattern and double-quotes the result, so PostgreSQL takes
+it literally. A name that still cannot be used answers 422 saying which one, via
+a `ValueError` handler on the app.
+
+Table names are unchanged: a table name is ours to choose, a column name arrives
+with the data.
+
+## Enabling globe threw the camera into orbit
+
+It eased to zoom 2.2. Now 4, which is still perfectly round and still shows you
+roughly where you were.
+
+## The table of contents
+
+Rebuilt. It was eleven-pixel rows with a swatch the size of a full stop and an
+add button that was a bare `+` in a corner.
+
+- 34px rows, a real swatch, and a second line saying what the layer is —
+  geometry, how many classes and on which field, whether it is filtered
+- a full-width **Add layer** button
+- drag and drop reordering, within a list; dragging between groups is a different
+  gesture and pretending a plain drop does it would move layers nowhere anyone
+  asked for
+- open and closed eye icons rather than `◉` and `○`
+- slot headings say what they mean on hover and count what is in them
+
+## Markers
+
+Point layers can be drawn as an emoji or glyph on a pin, circle, square, or on
+its own, with a colour and a size.
+
+Vector tiles carry no emoji and the map's glyph set has none, so `text-field`
+comes out blank — the glyph is rasterised to a canvas by the browser, which does
+have emoji fonts, and registered with `addImage`. The image is named after the
+symbology, so two layers using the same pin share one image and changing the
+glyph asks for a different name rather than mutating one already being drawn.
+
+## Open data tab
+
+Sixteen Natural Earth datasets — boundaries, places, physical, transport,
+reference — importable with one click through the ordinary from-url route.
+Nothing is special-cased; each lands in PostGIS and comes back as vector tiles.
+
+## On using turf for the zoom
+
+Turf computes a bounding box from geometry. The bounding boxes here come from
+PostGIS (`ST_XMin` and friends, and per-row in the features endpoint), which is
+the same number computed by the database that holds the data, without shipping
+the geometry to the browser to measure it.
+
+What turf does not do is work out a camera position, and that is the part that
+was wrong. It now lives in `packages/core/src/frame.ts` with eighteen tests,
+including one asserting that the flat and round centres of a worldwide extent
+differ by more than five degrees — which was the bug.

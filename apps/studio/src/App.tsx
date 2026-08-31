@@ -34,6 +34,7 @@ import { ScenePanel } from "./components/ScenePanel";
 import { TitleBar } from "./components/TitleBar";
 import { emptyProject, emptyStyle } from "./project";
 import { allLayers, bundleIdsOf, duplicateNode, findLayer, removeNode, withNode } from "./tree";
+import { registerMarkers } from "./markers";
 import { useDrawing } from "./useDrawing";
 import { useProject } from "./useProject";
 import { stampedPng } from "./export";
@@ -182,7 +183,11 @@ export default function App() {
       setFound({
         layer: under.owner,
         properties: (under.feature.properties ?? {}) as Record<string, unknown>,
-        at: { x: e.originalEvent.clientX, y: e.originalEvent.clientY },
+        // e.point is relative to the map container, which is what the popup is
+        // positioned inside. clientX/clientY are relative to the window, so the
+        // popup landed the width of the rail and sidebar away from the click.
+        at: { x: e.point.x, y: e.point.y },
+        viewport: { width: map.getCanvas().clientWidth, height: map.getCanvas().clientHeight },
         position: [e.lngLat.lng, e.lngLat.lat],
       });
     });
@@ -209,7 +214,11 @@ export default function App() {
    */
   useEffect(() => {
     if (found) return;
-    const key = hover ? (findLayer(project, hover.layer)?.metadata?.fields ?? [])[0] : undefined;
+    // The layer's key column, not whatever field happened to be first: for
+    // Natural Earth that is `scalerank`, so hovering one country used to light up
+    // every country that shared its rank.
+    const node = hover ? findLayer(project, hover.layer) : undefined;
+    const key = node?.metadata?.key ?? node?.metadata?.fields?.[0];
     const value = key ? hover?.properties[key] : undefined;
     edit((d) => {
       const wanted =
@@ -228,6 +237,16 @@ export default function App() {
     // `project` is deliberately not a dependency: this reacts to the pointer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hover, found, edit]);
+
+  /*
+   * Marker images have to exist before the layer that names them is drawn, so
+   * they are registered ahead of every edit rather than in response to one.
+   */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+    registerMarkers(map, project);
+  }, [project]);
 
   /* the pointer becomes a crosshair while a drawing is open */
   useEffect(() => {
@@ -370,8 +389,13 @@ export default function App() {
     });
     const map = mapRef.current;
     if (!map) return;
+    /*
+     * Far enough out that the sphere reads as one, and no further. Going to 2.2
+     * threw the camera into orbit; the sphere is still perfectly round at 4 and
+     * you can still see where you were.
+     */
     if (projection !== "mercator" && map.getZoom() > GLOBE_IS_ROUND_BELOW) {
-      map.easeTo({ zoom: 2.2, pitch: 0, bearing: 0, duration: 1400 });
+      map.easeTo({ zoom: 4, pitch: 0, bearing: 0, duration: 1200 });
     }
   };
 
@@ -438,14 +462,7 @@ export default function App() {
         <Rail active={pane} onSelect={setPane} />
 
         <aside className="panel">
-          <div className="phead">
-            {TITLES[pane]}
-            {pane === "layers" && (
-              <button className="add" onClick={() => setAdding(true)} title="Add data">
-                +
-              </button>
-            )}
-          </div>
+          <div className="phead">{TITLES[pane]}</div>
           {pane === "layers" && (
             <LayerTree
               project={project}
@@ -527,7 +544,7 @@ export default function App() {
                 })
               }
               onOpenTable={() => {
-                const key = (found.layer.metadata?.fields ?? [])[0];
+                const key = found.layer.metadata?.key ?? (found.layer.metadata?.fields ?? [])[0];
                 const value = key ? found.properties[key] : undefined;
                 setTable(found.layer.id);
                 if (key && (typeof value === "string" || typeof value === "number")) {

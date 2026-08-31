@@ -5,9 +5,10 @@ import { wmsSource } from "@alidade/core";
 import { addFromUrl, readCapabilities, uploadFile, type RegisteredLayer } from "../api";
 import { place, type Extent } from "../layers";
 import { uniqueId } from "../tree";
+import { SAMPLES, SAMPLE_GROUPS } from "../samples";
 import { Catalogue } from "./Catalogue";
 
-type Tab = "catalogue" | "file" | "url" | "wms";
+type Tab = "catalogue" | "samples" | "file" | "url" | "wms";
 
 export type { Extent };
 
@@ -33,9 +34,17 @@ export function AddData(props: Props) {
           </button>
         </div>
         <div className="mtabs">
-          {(["catalogue", "file", "url", "wms"] as Tab[]).map((id) => (
+          {(["catalogue", "samples", "file", "url", "wms"] as Tab[]).map((id) => (
             <button key={id} className={tab === id ? "on" : ""} onClick={() => setTab(id)}>
-              {id === "catalogue" ? "In the database" : id === "file" ? "File" : id === "url" ? "Link" : "WMS"}
+              {id === "catalogue"
+                ? "In the database"
+                : id === "samples"
+                  ? "Open data"
+                  : id === "file"
+                    ? "File"
+                    : id === "url"
+                      ? "Link"
+                      : "WMS"}
             </button>
           ))}
         </div>
@@ -51,6 +60,7 @@ export function AddData(props: Props) {
               onFlyTo={props.onFlyTo}
             />
           )}
+          {tab === "samples" && <SamplesTab {...props} />}
           {tab === "file" && <FileTab {...props} />}
           {tab === "url" && <UrlTab {...props} />}
           {tab === "wms" && <WmsTab {...props} />}
@@ -135,6 +145,64 @@ function Facts({ layer }: { layer: RegisteredLayer }) {
         <dd>{layer.featureCount ?? "—"}</dd>
       </div>
     </dl>
+  );
+}
+
+/**
+ * Open datasets, imported through the ordinary from-url route.
+ *
+ * Nothing here is special-cased: each one goes through GDAL into PostGIS and
+ * comes back as vector tiles, exactly as a link you typed would. The list exists
+ * because a fresh install has one demo layer in it and nothing to look at.
+ */
+function SamplesTab({ edit, onAdded, onFlyTo }: Props) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<string[]>([]);
+
+  const bring = async (name: string, url: string) => {
+    setBusy(url);
+    setError(null);
+    try {
+      const layer = await addFromUrl(url, `${name}.geojson`);
+      place(layer, edit, onAdded, onFlyTo);
+      setDone((previous) => [...previous, url]);
+    } catch (e) {
+      setError(`${name}: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <>
+      <p className="hint">
+        Public domain data from Natural Earth. Each one is read over HTTP by GDAL and written to
+        PostGIS, so it is yours after the first import and the dialog is not needed again.
+      </p>
+      {error && <p className="error">{error}</p>}
+
+      {SAMPLE_GROUPS.map((group) => (
+        <section className="sect" key={group}>
+          <h2>{group}</h2>
+          <ul className="picker">
+            {SAMPLES.filter((sample) => sample.group === group).map((sample) => (
+              <li
+                key={sample.url}
+                className={done.includes(sample.url) ? "used" : ""}
+                onClick={() => !busy && !done.includes(sample.url) && void bring(sample.name, sample.url)}
+              >
+                <b>{sample.name}</b>
+                <span>{sample.about}</span>
+                <em>
+                  {busy === sample.url ? "importing…" : done.includes(sample.url) ? "added" : "add"}
+                </em>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </>
   );
 }
 

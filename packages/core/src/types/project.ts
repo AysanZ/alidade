@@ -85,6 +85,24 @@ export interface CategorizedSymbol {
   stroke?: Stroke;
 }
 
+/**
+ * A point drawn as a glyph rather than a dot.
+ *
+ * The glyph is rasterised by the application and handed to the renderer as an
+ * image, because a vector tile has no idea what an emoji is and the demo glyph
+ * set has no emoji in it. The document stores the character, not the pixels.
+ */
+export interface MarkerSymbol {
+  kind: "marker";
+  /** An emoji, or any single character. */
+  glyph: string;
+  /** Behind the glyph. Set to "none" for the glyph on its own. */
+  color: string;
+  size: number;
+  /** Drawn as a pin with a point, or as a plain badge. */
+  shape: "pin" | "circle" | "square" | "none";
+}
+
 export interface ExtrusionSymbol {
   kind: "extrusion";
   color: string;
@@ -96,6 +114,7 @@ export type Symbology =
   | SingleSymbol
   | GraduatedSymbol
   | CategorizedSymbol
+  | MarkerSymbol
   | ExtrusionSymbol;
 
 export interface LabelStyle {
@@ -145,6 +164,12 @@ export interface LayerNode {
     sourceCrs?: string;
     featureCount?: number;
     fields?: string[];
+    /**
+     * The column whose value picks out exactly one feature, when the table has
+     * one. Highlighting needs a key, and the first field is not one: for Natural
+     * Earth it is `scalerank`, which every country shares with dozens of others.
+     */
+    key?: string;
     extent?: { west: number; south: number; east: number; north: number };
   };
 }

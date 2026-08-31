@@ -4,6 +4,8 @@ import { nextColor, representativeColor, singleSymbol } from "@alidade/core";
 import type { RegisteredLayer } from "./api";
 import { uniqueId, walk } from "./tree";
 
+import { readLayer } from "./api";
+
 export interface Extent {
   west: number;
   south: number;
@@ -64,6 +66,7 @@ export function vectorLayer(layer: RegisteredLayer, id: string, color: string): 
       sourceCrs: layer.sourceCrs ?? undefined,
       featureCount: layer.featureCount ?? undefined,
       fields: layer.fields,
+      key: layer.key ?? undefined,
       extent: layer.extent ?? undefined,
     },
   };
@@ -96,6 +99,29 @@ export function place(
   });
   onAdded(placed);
   if (layer.extent) onFlyTo(layer.extent);
+
+  /*
+   * The key column takes a query per candidate to find, so the list endpoint does
+   * not compute it. Fetched here, after the layer is already on the map, because
+   * highlighting is the only thing that needs it and it can wait a beat.
+   */
+  if (!layer.key) {
+    void readLayer(layer.id)
+      .then((full) => {
+        if (!full.key) return;
+        edit((draft) => {
+          walk(draft.tree, (node) => {
+            if (node.type === "layer" && node.id === placed && node.metadata) {
+              node.metadata.key = full.key ?? undefined;
+            }
+          });
+          return draft;
+        });
+      })
+      .catch(() => {
+        // Highlighting falls back to the first field. Not worth a message.
+      });
+  }
 }
 
 /** Whether a registered layer is already on the map, whatever its node is called. */

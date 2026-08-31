@@ -68,7 +68,16 @@ export function Minimap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* the basemap, rebuilt whenever the main map's changes */
+  /*
+   * Rebuilt only when the basemap really changes.
+   *
+   * The dependency was the basemap object, and every edit to the project — every
+   * mouse move that changed a hover highlight — produced a fresh one, because the
+   * manager deep-clones on update. So the overview tore down and rebuilt its
+   * layers continuously and flashed black. Identity is not change; the tiles are.
+   */
+  const signature = `${basemap.id}|${basemap.background}|${(basemap.raster?.tiles ?? []).join(",")}`;
+
   useEffect(() => {
     const overview = map.current;
     if (!overview) return;
@@ -97,7 +106,9 @@ export function Minimap({
     return () => {
       cancelled = true;
     };
-  }, [basemap]);
+    // Keyed on what the overview actually draws, not on the object holding it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signature]);
 
   /* follow the main camera */
   useEffect(() => {

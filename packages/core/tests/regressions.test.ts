@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { compile } from "../src/compile";
-import { colorExpression } from "../src/symbology";
+import { compile, markerImageId, markersIn } from "../src/compile";
+import { colorExpression, strokePaint } from "../src/symbology";
 import { frameExtent, needsFraming } from "../src/frame";
 import { reconcile } from "../src/reconcile";
 import { gridKey, padded, squareGridGeoJSON, utmGridGeoJSON } from "../src/grids";
@@ -320,5 +320,46 @@ describe("framing after adding a layer", () => {
   it("keeps a sphere filling the viewport rather than shrinking it", () => {
     const frame = frameExtent(world, screen, { projection: "globe" });
     expect(frame.zoom).toBeGreaterThanOrEqual(1.7);
+  });
+});
+
+/**
+ * Hovering one country lit up every country that shared its `scalerank`, because
+ * highlighting matched on whatever field happened to come first. A key has to be
+ * unique or it is not a key; the server works out which column is.
+ */
+describe("marker symbology", () => {
+  it("names an image from the symbology, so two layers sharing a pin share it", () => {
+    const pin = { kind: "marker" as const, glyph: "📍", color: "#ff0000", size: 26, shape: "pin" as const };
+    expect(markerImageId(pin)).toBe(markerImageId({ ...pin }));
+    expect(markerImageId(pin)).not.toBe(markerImageId({ ...pin, glyph: "⭐" }));
+    expect(markerImageId(pin)).not.toBe(markerImageId({ ...pin, shape: "circle" }));
+  });
+
+  it("compiles a point layer to one symbol layer, not a circle", () => {
+    const withMarker = project();
+    const layer = withMarker.tree[0] as LayerNode;
+    layer.geometry = "point";
+    layer.symbology = { kind: "marker", glyph: "📍", color: "#ff0000", size: 26, shape: "pin" };
+
+    const layers = compile(withMarker).layers;
+    const drawn = layers.find((l) => l.id.startsWith("roads:"));
+    expect(drawn?.type).toBe("symbol");
+    expect(drawn?.layout["icon-image"]).toBe(markerImageId(layer.symbology));
+  });
+
+  it("lists every distinct marker in the project once", () => {
+    const withMarkers = project();
+    const first = withMarkers.tree[0] as LayerNode;
+    first.geometry = "point";
+    first.symbology = { kind: "marker", glyph: "📍", color: "#ff0000", size: 26, shape: "pin" };
+    withMarkers.tree.push(JSON.parse(JSON.stringify({ ...first, id: "copy" })));
+    expect(markersIn(withMarkers)).toHaveLength(1);
+  });
+
+  it("gives a marker no stroke to set", () => {
+    expect(
+      strokePaint({ kind: "marker", glyph: "x", color: "#fff", size: 20, shape: "pin" }, 1),
+    ).toBe(null);
   });
 });

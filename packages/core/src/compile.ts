@@ -5,6 +5,7 @@ import type {
   MapProject,
   Slot,
   Source,
+  Symbology,
   TreeNode,
 } from "./types/project";
 import { SLOT_ORDER } from "./types/project";
@@ -28,6 +29,7 @@ export interface Compiled {
 export function bundleFor(layer: LayerNode): string[] {
   const ids: string[] = [];
   if (layer.geometry === "raster") ids.push(`${layer.id}:raster`);
+  else if (layer.symbology.kind === "marker") ids.push(`${layer.id}:marker`);
   else if (layer.geometry === "polygon") {
     ids.push(layer.symbology.kind === "extrusion" ? `${layer.id}:extrusion` : `${layer.id}:fill`);
     if (layer.symbology.kind !== "extrusion" && layer.symbology.stroke) ids.push(`${layer.id}:line`);
@@ -444,6 +446,25 @@ function engineLayersFor(entry: Flat, latitude: number): EngineLayer[] {
         layout: layout(labelLayout(layer.labels!)),
         ...(layer.labels!.scale ? zoomRange(layer.labels!.scale, latitude) : {}),
       });
+    } else if (role === "marker") {
+      /*
+       * The icon is registered by the application under an id derived from the
+       * symbology, so changing the glyph changes the name and the renderer picks
+       * up a different image rather than being asked to mutate one in place.
+       */
+      const marker = layer.symbology as Extract<Symbology, { kind: "marker" }>;
+      out.push({
+        ...base,
+        id,
+        type: "symbol",
+        paint: { "icon-opacity": opacity },
+        layout: layout({
+          "icon-image": markerImageId(marker),
+          "icon-size": 1,
+          "icon-allow-overlap": true,
+          "icon-anchor": marker.shape === "pin" ? "bottom" : "center",
+        }),
+      });
     } else if (role === "line" && layer.geometry === "polygon") {
       out.push({
         ...base,
@@ -472,5 +493,39 @@ function engineLayersFor(entry: Flat, latitude: number): EngineLayer[] {
       });
     }
   }
+  return out;
+}
+
+
+/**
+ * A stable name for a marker image.
+ *
+ * Derived from the symbology rather than from the layer, so two layers using the
+ * same pin share one image, and so changing the glyph asks the renderer for a
+ * different name instead of asking it to mutate an image it is already drawing.
+ */
+export function markerImageId(marker: Extract<Symbology, { kind: "marker" }>): string {
+  const glyph = [...marker.glyph].map((c) => c.codePointAt(0)!.toString(16)).join("-");
+  return `marker:${marker.shape}:${marker.color.replace("#", "")}:${Math.round(marker.size)}:${glyph}`;
+}
+
+/** Every marker image a project needs, so they can be registered before drawing. */
+export function markersIn(project: MapProject): Extract<Symbology, { kind: "marker" }>[] {
+  const out: Extract<Symbology, { kind: "marker" }>[] = [];
+  const seen = new Set<string>();
+  const visit = (nodes: TreeNode[]) => {
+    for (const node of nodes) {
+      if (node.type === "group") visit(node.children);
+      else if (node.symbology.kind === "marker") {
+        const marker = node.symbology;
+        const id = markerImageId(marker);
+        if (!seen.has(id)) {
+          seen.add(id);
+          out.push(marker);
+        }
+      }
+    }
+  };
+  visit(project.tree);
   return out;
 }

@@ -6,6 +6,9 @@ export function paintFor(
   geometry: Geometry,
   opacity: number,
 ): Record<string, unknown> {
+  // A marker is drawn from an image, so it has no colour of its own to set.
+  if (sym.kind === "marker") return { "icon-opacity": opacity };
+
   if (sym.kind === "extrusion") {
     return {
       "fill-extrusion-color": sym.color,
@@ -42,6 +45,9 @@ export function paintFor(
  */
 export function colorExpression(sym: Symbology): unknown {
   switch (sym.kind) {
+    case "marker":
+      return sym.color;
+
     case "single":
       return sym.color;
 
@@ -77,7 +83,7 @@ export function colorExpression(sym: Symbology): unknown {
 }
 
 export function strokePaint(sym: Symbology, opacity: number): Record<string, unknown> | null {
-  if (sym.kind === "extrusion" || !sym.stroke) return null;
+  if (sym.kind === "extrusion" || sym.kind === "marker" || !sym.stroke) return null;
   const paint: Record<string, unknown> = {
     "line-color": sym.stroke.color,
     "line-width": sym.stroke.width,

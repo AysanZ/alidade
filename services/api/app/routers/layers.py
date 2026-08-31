@@ -9,7 +9,7 @@ from .. import registry
 from ..config import settings
 from ..ingest import EXTENSIONS, IngestError, import_file, import_url
 from ..db import pool
-from ..naming import check_identifier, slug
+from ..naming import check_identifier, is_usable_column, quote_column, slug
 from ..net import UnsafeUrl
 
 router = APIRouter(prefix="/api/layers", tags=["layers"])
@@ -79,6 +79,40 @@ async def upload(file: UploadFile) -> dict:
     return await _register(name, imported)
 
 
+# Which column identifies a row, worked out once per layer and remembered.
+_KEYS: dict[str, str | None] = {}
+
+
+async def key_column(layer) -> str | None:
+    """
+    A column whose value picks out exactly one feature.
+
+    Highlighting used to match on whatever field happened to be first, which for
+    Natural Earth is `scalerank` — so hovering one country lit up every country
+    that shared its rank. A key has to be unique or it is not a key. Tested
+    rather than assumed, because nothing in a shapefile promises one exists.
+    """
+    if layer.id in _KEYS:
+        return _KEYS[layer.id]
+
+    attributes = [
+        c for c in layer.fields if c != layer.geometry_column and is_usable_column(c)
+    ]
+    found: str | None = None
+    async with pool().acquire() as conn:
+        total = await conn.fetchval(f"SELECT count(*) FROM {layer.table}")
+        for candidate in attributes:
+            distinct = await conn.fetchval(
+                f"SELECT count(DISTINCT {quote_column(candidate)}) FROM {layer.table}"
+            )
+            if distinct == total and total > 0:
+                found = candidate
+                break
+
+    _KEYS[layer.id] = found
+    return found
+
+
 @router.get("/{layer_id}/features")
 async def features(
     layer_id: str,
@@ -99,20 +133,22 @@ async def features(
     if layer is None:
         raise HTTPException(404, f"No layer named {layer_id}.")
 
-    attributes = [c for c in layer.fields if c != layer.geometry_column]
+    attributes = [
+        c for c in layer.fields if c != layer.geometry_column and is_usable_column(c)
+    ]
     if not attributes:
         return {"fields": [], "rows": [], "total": 0, "key": None}
 
-    columns = ", ".join(check_identifier(c) for c in attributes)
+    columns = ", ".join(quote_column(c) for c in attributes)
     geom = check_identifier(layer.geometry_column)
-    sort = check_identifier(order) if order else attributes[0]
+    sort = quote_column(order) if order else quote_column(attributes[0])
     direction = "DESC" if descending else "ASC"
     limit = max(1, min(limit, 1000))
 
     # Free text over every column, cast to text. Slow on a big table and honest
     # about it: this is a table browser, not a search index.
     haystack = " || ' ' || ".join(
-        f"coalesce({check_identifier(c)}::text, '')" for c in attributes
+        f"coalesce({quote_column(c)}::text, '')" for c in attributes
     )
     pattern = f"%{search}%" if search else None
 
@@ -170,9 +206,8 @@ async def features(
         "fields": attributes,
         "rows": out,
         "total": total,
-        # Whichever column the client should match on to highlight a row. The
-        # first one is a guess, but it is the same guess the sort makes.
-        "key": attributes[0],
+        # The column that identifies a row, or nothing if this table has none.
+        "key": await key_column(layer),
     }
 
 
@@ -200,7 +235,8 @@ async def stats(layer_id: str, field: str) -> dict:
     if field not in layer.fields:
         raise HTTPException(400, f"{layer_id} has no column called {field}.")
 
-    column = check_identifier(field)
+    # The quoted form goes into SQL; the raw name is what a lookup compares against.
+    column = quote_column(field)
 
     async with pool().acquire() as conn:
         kind = await conn.fetchval(
@@ -209,7 +245,7 @@ async def stats(layer_id: str, field: str) -> dict:
             WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2
             """,
             layer.table,
-            column,
+            field,
         )
         numeric = kind in {
             "smallint", "integer", "bigint", "numeric", "real",
@@ -258,4 +294,4 @@ async def get_layer(layer_id: str) -> dict:
     layer = await registry.get(layer_id)
     if layer is None:
         raise HTTPException(404, f"No layer named {layer_id}.")
-    return layer.as_dict()
+    return {**layer.as_dict(), "key": await key_column(layer)}

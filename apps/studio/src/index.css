@@ -985,3 +985,151 @@ input.doc:focus { border-color: var(--accent); color: var(--txt); outline: none;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ------------------------------------------------- table of contents, rebuilt */
+
+/*
+ * The first version was eleven pixel rows with a swatch the size of a full stop
+ * and an add button that was a bare `+` in a corner. A table of contents is the
+ * control surface of a GIS; it can afford the space.
+ */
+.addlayer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: calc(100% - 22px);
+  margin: 10px 11px;
+  padding: 7px 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--txt-2);
+  font-size: 11.5px;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+}
+.addlayer svg { width: 14px; height: 14px; }
+.addlayer:hover {
+  border-color: var(--accent);
+  color: var(--txt);
+  background: rgba(76, 141, 255, 0.08);
+}
+
+.slot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px 4px;
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--txt-3);
+}
+.slot em {
+  font-style: normal;
+  letter-spacing: 0;
+  font-size: 10px;
+  color: var(--txt-3);
+}
+
+.node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px 6px 0;
+  min-height: 34px;
+  cursor: pointer;
+  border-inline-start: 2px solid transparent;
+}
+.node .grip {
+  color: #34343a;
+  font-size: 11px;
+  line-height: 1;
+  cursor: grab;
+  flex: none;
+  letter-spacing: -1px;
+}
+.node:hover .grip { color: var(--txt-3); }
+.node.lifting { opacity: 0.4; }
+.node.target { box-shadow: inset 0 2px 0 var(--accent); }
+
+.node .eye {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  color: var(--txt-3);
+  display: grid;
+  place-items: center;
+}
+.node .eye svg { width: 15px; height: 15px; }
+.node.on .eye { color: var(--accent); }
+.node.off .eye { color: #3a3a40; }
+
+.node .swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  flex: none;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.node .swatch.folder {
+  border: 1px solid var(--txt-3);
+  background: none;
+  border-radius: 2px;
+}
+
+.node .body { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 1px; }
+.node .name {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.node .sub {
+  font-size: 9.5px;
+  color: var(--txt-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.node.off .name { color: var(--txt-3); text-decoration: none; }
+.node.off .swatch { filter: grayscale(1); opacity: 0.4; }
+.node.on {
+  background: rgba(76, 141, 255, 0.1);
+  border-inline-start-color: var(--accent);
+}
+.node.system { cursor: default; min-height: 30px; }
+.node.system .grip { visibility: hidden; }
+
+.node .more {
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  color: var(--txt-3);
+  opacity: 0;
+  flex: none;
+}
+.node:hover .more, .node.on .more { opacity: 1; }
+
+/* ---------------------------------------------------------------- markers */
+
+.glyphs {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 3px;
+  padding: 4px 11px 8px;
+}
+.glyphs button {
+  aspect-ratio: 1;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  font-size: 15px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+}
+.glyphs button:hover { background: var(--raise); }
+.glyphs button.on { border-color: var(--accent); background: rgba(76, 141, 255, 0.13); }
+
+/* The open data tab is a long list, so its sections need breathing room. */
+.mbody .sect { border-bottom: 0; padding-bottom: 0; margin-bottom: 6px; }
+.mbody .picker { max-height: none; }

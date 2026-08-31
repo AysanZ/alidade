@@ -8,6 +8,8 @@ export interface RegisteredLayer {
   sourceCrs: string | null;
   featureCount: number | null;
   fields: string[];
+  /** The column that identifies one feature, when the table has one. */
+  key?: string | null;
   extent: { west: number; south: number; east: number; north: number } | null;
 }
 
@@ -111,6 +113,11 @@ export function normaliseFeaturePage(body: unknown): FeaturePage {
     total: typeof source["total"] === "number" ? (source["total"] as number) : rows.length,
     key: typeof source["key"] === "string" ? (source["key"] as string) : (fields[0] ?? null),
   };
+}
+
+/** One layer, with the key column the list endpoint is too busy to compute. */
+export async function readLayer(id: string): Promise<RegisteredLayer> {
+  return json<RegisteredLayer>(await fetch(`/api/layers/${id}`));
 }
 
 export async function listLayers(): Promise<RegisteredLayer[]> {
