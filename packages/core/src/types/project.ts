@@ -86,11 +86,11 @@ export interface CategorizedSymbol {
 }
 
 /**
- * A point drawn as a glyph rather than a dot.
+ * A point drawn as a glyph instead of a dot.
  *
- * The glyph is rasterised by the application and handed to the renderer as an
- * image, because a vector tile has no idea what an emoji is and the demo glyph
- * set has no emoji in it. The document stores the character, not the pixels.
+ * @deprecated Superseded by `LayerNode.marker`, which sits over the layer's own
+ * symbology rather than replacing it. Old documents still hold this shape, so
+ * the compiler reads it and translates; nothing new writes it.
  */
 export interface MarkerSymbol {
   kind: "marker";
@@ -116,6 +116,70 @@ export type Symbology =
   | CategorizedSymbol
   | MarkerSymbol
   | ExtrusionSymbol;
+
+export type MarkerShape = "pin" | "circle" | "square" | "none";
+
+/**
+ * Where the marker image sits relative to the place it belongs to.
+ *
+ * `above` floats it clear of the feature, the way a pin stands over the spot it
+ * names, and leaves the feature's own symbol readable underneath. `on` centres
+ * it, which is what you want for a glyph that is meant to *be* the symbol.
+ */
+export type MarkerAnchor = "above" | "on";
+
+/**
+ * How a marker is spread over a feature that is not a single position.
+ *
+ * `centre` is one marker per feature, at the middle of the line or inside the
+ * polygon. `along` repeats it down a line, which is how a route gets arrows.
+ */
+export type MarkerPlacement = "centre" | "along";
+
+/**
+ * A glyph drawn over a layer, on top of whatever the layer is already wearing.
+ *
+ * This is a decoration, not a classification: a graduated choropleth can carry a
+ * marker and stay graduated. It used to be a `Symbology` kind, which meant
+ * choosing a marker threw away the layer's colours and replaced the geometry
+ * with an icon — the point stopped being a point and became the emoji.
+ *
+ * The glyph is rasterised by the application and handed to the renderer as an
+ * image, because a vector tile has no idea what an emoji is and the demo glyph
+ * set has no emoji in it. The document stores the character, not the pixels.
+ */
+export interface MarkerStyle {
+  /** An emoji, or any short run of characters. */
+  glyph: string;
+  /** Behind the glyph. Ignored when `shape` is "none". */
+  color: string;
+  size: number;
+  /** Drawn as a pin with a point, as a plain badge, or not at all. */
+  shape: MarkerShape;
+  /** Default "above", so the feature underneath stays visible. */
+  anchor: MarkerAnchor;
+  /** Only consulted for line and polygon layers. Default "centre". */
+  placement?: MarkerPlacement;
+  /** Metres between repeats when `placement` is "along". Default 200. */
+  spacing?: number;
+}
+
+/**
+ * What a marker is before anyone has an opinion about it.
+ *
+ * The glyph on its own, centred on the feature. The pin was the default and it
+ * was the wrong one: asking for an emoji on a point and getting a coloured
+ * badge with the emoji inside it, standing above the place it names, is a
+ * decoration nobody asked for. The shapes are still there for whoever wants one.
+ */
+export const defaultMarker = (color = "#4c8dff"): MarkerStyle => ({
+  glyph: "📍",
+  color,
+  size: 22,
+  shape: "none",
+  anchor: "on",
+  placement: "centre",
+});
 
 export interface LabelStyle {
   /** Template over field names, for example "{name} · {density}". */
@@ -157,6 +221,12 @@ export interface LayerNode {
   opacity: number;
   scale?: ScaleRange;
   symbology: Symbology;
+  /**
+   * A glyph drawn over the layer, in addition to its symbology. Works on every
+   * vector geometry: over the dot for a point layer, at the middle of a line,
+   * inside a polygon.
+   */
+  marker?: MarkerStyle;
   labels?: LabelStyle;
   filter?: FilterNode;
   /** Kept for the interface, never used for rendering. */
@@ -352,6 +422,17 @@ export interface Selection {
   layer: string;
   field: string;
   values: (string | number)[];
+  /**
+   * Further columns that all have to match, which is how a feature is picked out
+   * of a table with no key.
+   *
+   * One column is only enough when that column is unique. For Natural Earth the
+   * first column is `scalerank`, which every feature shares with dozens of
+   * others, so hovering one airport ringed every airport of the same rank. The
+   * pointer now hands over the whole property bag of the feature it is actually
+   * over, and the highlight matches on all of it.
+   */
+  where?: { field: string; value: string | number | boolean }[];
   /** A hover is drawn more quietly than a click, and is not kept. */
   hover?: boolean;
 }

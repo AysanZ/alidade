@@ -15,22 +15,61 @@ export interface Extent {
 
 /**
  * PostGIS reports geometry types in upper case (`POINT`, `MULTIPOLYGON`), GDAL in
- * mixed case. Matching on the wrong case silently produced a fill layer for a point
- * table, which draws nothing at all: the layer was there, and invisible.
+ * mixed case, and `ST_GeometryType` with an `ST_` on the front. Matching on the
+ * wrong case silently produced a fill layer for a point table, which draws
+ * nothing at all: the layer was there, and invisible.
  */
 const GEOMETRY: Record<string, Geometry> = {
   point: "point",
   multipoint: "point",
   linestring: "line",
   multilinestring: "line",
+  linearring: "line",
+  curve: "line",
+  multicurve: "line",
+  compoundcurve: "line",
+  circularstring: "line",
   polygon: "polygon",
   multipolygon: "polygon",
-  geometry: "polygon",
-  geometrycollection: "polygon",
+  surface: "polygon",
+  multisurface: "polygon",
+  curvepolygon: "polygon",
+  triangle: "polygon",
+  polyhedralsurface: "polygon",
+  tin: "polygon",
 };
 
+/**
+ * Everything a table can say about its geometry that does not name a shape.
+ *
+ * A column declared `geometry(Geometry, 4326)` is what ogr2ogr leaves behind
+ * whenever the source held more than one shape, and it says nothing at all about
+ * what is in it.
+ */
+const VAGUE = new Set(["", "geometry", "geometrycollection", "multigeometry", "unknown", "none"]);
+
+/**
+ * What to draw when the table will not say.
+ *
+ * This used to be `polygon`, and getting it wrong that way is not a small
+ * mistake: a renderer asked to fill a line closes it into a ring first, so a
+ * coastline file became a continent-sized green wedge lying across the Pacific.
+ * Drawing a polygon as a line is the same map with the fill missing — wrong, but
+ * legible, and obviously wrong rather than alarming. So the guess is a line, and
+ * `LayerNode.geometry` is editable in the inspector for when the guess is off.
+ */
+const WHEN_UNKNOWN: Geometry = "line";
+
 export function geometryOf(reported: string | null): Geometry {
-  return GEOMETRY[(reported ?? "").trim().toLowerCase()] ?? "polygon";
+  const cleaned = (reported ?? "")
+    .trim()
+    .toLowerCase()
+    // ST_MultiLineString -> multilinestring
+    .replace(/^st_/, "")
+    // MULTIPOLYGONZM, POINT Z, LINESTRINGM -> the shape on its own
+    .replace(/\s*z?m?$/, "");
+  if (VAGUE.has(cleaned)) return WHEN_UNKNOWN;
+  return GEOMETRY[cleaned] ?? WHEN_UNKNOWN;
 }
 
 /**

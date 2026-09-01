@@ -71,7 +71,18 @@ export function colorExpression(sym: Symbology): unknown {
        * intermediate state, not an error.
        */
       if (sym.categories.length === 0) return sym.fallbackColor;
-      const match: unknown[] = ["match", ["to-string", ["get", sym.field], ""]];
+      /*
+       * `to-string` takes exactly one argument. This was written as
+       * `["to-string", ["get", field], ""]`, reading the "" as a default for a
+       * missing value the way `coalesce` would — and the renderer rejected the
+       * whole paint property with `circle-color[1]: Expected one argument.`, so
+       * a categorized layer kept whatever colour it had and the error sat in the
+       * corner of the map.
+       *
+       * A missing property is a `match` that hits nothing, which is what
+       * `fallbackColor` is the answer to.
+       */
+      const match: unknown[] = ["match", ["to-string", ["get", sym.field]]];
       for (const c of sym.categories) match.push(String(c.value), c.color);
       match.push(sym.fallbackColor);
       return match;

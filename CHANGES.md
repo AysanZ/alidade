@@ -1,5 +1,259 @@
 # What changed
 
+## Third round
+
+`pnpm test` runs 222 tests in Node, with no browser and no WebGL.
+
+### 1. The badge is gone
+
+The default marker was a pin: a coloured badge with the glyph inside it,
+standing above the place it names. Asking for an emoji on a point and getting
+that is a decoration nobody asked for.
+
+A marker is now the glyph, where the point is — `shape: "none"`, `anchor: "on"`.
+The pin, circle and square are still in the list for whoever wants one, but
+"Just the glyph" is first and is what you get.
+
+### 2. Emoji were being sliced off at the edges
+
+A bare glyph was drawn at 0.95 of a canvas exactly `size` across. An emoji is not
+`size` wide: the pictures in a colour emoji font run to about 1.17em, and the
+dark outline a bare glyph is given adds more. Every one of them lost its edges.
+
+The canvas is now 1.4× the glyph, so **Size: 22 px** means a 22px glyph rather
+than a 22px box with a glyph crammed into it.
+
+### 3. A better set of glyphs
+
+The old list was twenty-four, picked for variety. The new one is eighty, grouped
+the way somebody looking for one would scan: plain marks, then places, then
+transport, then utilities and hazards, then land and water. Everything in it is
+something people put on maps.
+
+It is long enough to scroll rather than own the panel, and a test holds it to
+whole rows of eight, no duplicates, and nothing whose code points cannot survive
+being written into an image name and read back.
+
+### 4. Glyphs sat wedged in the corner of their cells
+
+A `button` carries the browser's own padding — `1px 6px` — which left about 14px
+of content box for a 15px glyph. Flex centring on a box with no padding of its
+own puts the picture where the selection ring is.
+
+### 5. The colour picker did nothing, most of the time
+
+A colour emoji ignores `fillStyle` and paints itself, so a colour control under
+one is a control that does nothing. It is now shown only when it has an effect:
+for a badge, whose background it sets, and for a plain character like an arrow or
+a tick, which does take the colour it is given.
+
+### 6. Attribute table columns are centred
+
+Header and cell together, so a column reads as one column. The number columns
+keep their monospaced face and gain `tabular-nums`, so the digits still line up
+under each other now that they are no longer flush right.
+
+---
+
+## Second round
+
+Six things, and finding the cause of one of them turned up a seventh that had
+never been reported.
+
+`pnpm test` covers everything below.
+
+### 1. `circle-color[1]: Expected one argument.`
+
+The categorized colour expression was written as
+
+```ts
+["match", ["to-string", ["get", sym.field], ""], ...]
+```
+
+reading the `""` as a default for a missing value, the way `coalesce` takes one.
+`to-string` takes exactly one argument. The renderer therefore rejected the
+whole paint property, the layer **kept the colours it already had**, and the only
+sign of it was one line in the corner of the map. Switching a layer to Categories
+looked like it did nothing.
+
+A missing property is a `match` that hits nothing, which is what `fallbackColor`
+already answers, so the argument is simply gone.
+
+### 2. The one that was never reported
+
+Reading an expression and believing it is correct is how the above got shipped,
+so `packages/core/tests/expressions.test.ts` now runs the **real parser from the
+real MapLibre style specification** over every paint value, layout value, label
+template and filter the compiler can produce.
+
+It failed on the first run, on something nobody had mentioned:
+
+```ts
+default: return [node.op, ["get", node.field], node.value];
+```
+
+The document spells equality `=`, because that is what a person writing a filter
+types. Expressions spell it `==` and reject `=` as an unknown operator — and a
+rejected operator fails the *entire* filter, so `setFilter` threw and the layer
+went on showing every feature. **The commonest filter anybody writes did
+nothing.** SQL still gets `=`, which is what SQL wants.
+
+### 3. A marker floated over its own dot
+
+A pin standing above a blue circle is two things where there is one. On a point
+layer the marker is now the point: the circle is not drawn at all. A line or an
+area cannot be replaced by an icon, so there the marker is still drawn in
+addition, at the middle of each feature.
+
+The legend follows: on a marked point layer the classification draws nothing, so
+its colours are no longer listed under it.
+
+### 4. Markers vanished when you changed their colour or size
+
+Both are part of the name of the image a marker asks for, and registration lived
+in an effect — which runs *after* the edit it is reacting to has already reached
+the renderer. For one frame every marker pointed at an image that did not exist.
+They came back on the next zoom, when the renderer looked again and the effect
+had long since run, which is why it looked like a rendering glitch.
+
+The name carries everything the picture is made of, so `parseMarkerId` reads it
+back and `styleimagemissing` answers the renderer the instant it asks. The race
+cannot be lost now, whatever order anything happens in. The eager registration
+stays as a fast path, minus its `isStyleLoaded()` guard — that is false for a
+moment after every basemap swap, so the registration that mattered was the one
+being skipped.
+
+### 5. The marker palette hung out of the panel
+
+`repeat(8, 1fr)` means `repeat(8, minmax(auto, 1fr))`, and a grid item's
+automatic minimum is its own content. Eight emoji wider than the panel pushed the
+whole grid out through the right-hand edge. The tracks now have a zero minimum
+and auto-fill, so the palette fits any panel width.
+
+### 6. The error toast was 620px whatever was in it
+
+`inset-inline: 60px` with `max-width: 620px` is a fixed-width box: a short
+message sat in the middle of a wide empty panel. It is now as wide as its text,
+up to what the map can spare, and long unbroken renderer messages wrap instead of
+overflowing.
+
+### 7. Placeholders were larger than the text that replaced them
+
+`button` was given `font: inherit`. `input`, `select` and `textarea` were not, so
+they fell back to the browser's own font — Arial at 13.33px — and a placeholder
+came out visibly bigger than the value typed over it. Form controls now inherit
+the document font, and `::placeholder` inherits from the control.
+
+---
+
+## First round
+
+Four things were reported: markers landed in two different places depending on
+which one you picked, line layers could not be hovered or identified, hovering
+one point lit up several, and a green area appeared over the Pacific that nobody
+had drawn. The last one turned out to have nothing to do with drawing.
+
+Everything below is covered by a test.
+
+## Fixes
+
+### 1. A marker replaced the point instead of marking it
+
+`bundleFor` treated a marker as a `Symbology` kind:
+
+```ts
+else if (layer.symbology.kind === "marker") ids.push(`${layer.id}:marker`);
+```
+
+Choosing a marker therefore deleted the layer's own drawing and put an icon
+where it had been — the point stopped being a point and became the emoji, and
+the layer's colours and classification went with it. Where the icon then landed
+was decided by its shape:
+
+```ts
+"icon-anchor": marker.shape === "pin" ? "bottom" : "center",
+```
+
+so a pin stood above the spot and an emoji sat on top of it. One control, two
+different maps, depending on a choice that was supposed to be about appearance.
+Markers were also offered for point layers only.
+
+A marker is now a decoration on the layer (`LayerNode.marker`) rather than a
+classification of it:
+
+- it is drawn **over** the layer's own symbol, so the point stays a point
+- `anchor` is an explicit choice — above the feature or on it — and means the
+  same thing for every shape. A badge is lifted 4px clear of what is underneath;
+  a pin already ends in a point, so its bottom edge is the spot
+- it works on lines and areas, where the renderer puts one at the middle of each
+  feature, with an option to repeat it along a line
+- a graduated layer can carry one and stay graduated
+
+Documents written against the old shape still load: `normalise` translates them
+on the way into the compiler, and the point they used to hide comes back.
+
+### 2. A line layer could not be hovered or identified
+
+Hit testing asked `queryRenderedFeatures` about a single pixel. That is a fair
+question for a country and an impossible one for a 0.8px coastline, so line
+layers were decoration — the pointer never found them and the identify popup
+never opened on one.
+
+The exact query runs first, so a click between two touching polygons still lands
+on the one under the cursor. Only when it finds nothing does a four-pixel box run
+as a fallback.
+
+### 3. Hovering one airport ringed every airport
+
+The highlight matched on one column, and when the server had not found a key
+column it fell back to the first field. For Natural Earth that is `scalerank`,
+which every feature shares with dozens of others, so pointing at one airport
+selected all of them — which is what the yellow rings scattered across the
+Pacific in the report were.
+
+A `Selection` now carries `where`: further columns that all have to match.
+Pointing at a feature takes its identity from the feature itself — up to a dozen
+of its own attributes — so the highlight is the thing being pointed at and
+nothing else. Everything is compared as text, because a vector tile hands back
+`3` where the database held `3.0`.
+
+### 4. A green wedge the size of the Pacific
+
+This was reported as something the drawing tools created. They did not: drawing
+caused a recompile, and the recompile is when the layer appeared.
+
+The shape was `ne_50m_geographic_lines` — a table of lines — being drawn as an
+area. `ogr2ogr` leaves a column typed plain `GEOMETRY` behind whenever the source
+file held more than one shape, `geometry_columns.type` then reports `GEOMETRY`,
+and the client's fallback for anything it did not recognise was:
+
+```ts
+return GEOMETRY[(reported ?? "").trim().toLowerCase()] ?? "polygon";
+```
+
+A renderer asked to fill a line closes it into a ring first. Every coastline
+became an area the size of the ocean it borders.
+
+Fixed in three places, because one was not enough:
+
+- **The server now knows.** When the declared type is the useless kind,
+  `geometry_type_of` samples `ST_GeometryType` over the rows and reports the
+  commonest shape.
+- **Re-importing now helps.** `ON CONFLICT DO UPDATE` did not update
+  `geometry_type` or `source_crs`, so a layer registered once with a bad type
+  kept it for ever — re-importing the file fixed the table and changed nothing
+  the studio could see.
+- **The guess is safer.** `geometryOf` understands `ST_` prefixes and `Z`/`M`
+  suffixes, and when the table will not say it guesses a line. Drawing an area as
+  a line is the same map with the fill missing. Filling a line is a continent.
+
+Detection can still be wrong, so **Drawn as** in the inspector lets you say what
+a layer is without re-importing it.
+
+---
+
+## Earlier
+
 Two things were reported: layers did not appear when they were added, and picking
 Globe did not produce a globe. The first turned out to be five separate defects
 that happened to share a symptom. The second was one defect and a

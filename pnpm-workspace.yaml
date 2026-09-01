@@ -2,6 +2,9 @@ packages:
   - "packages/*"
   - "apps/*"
 
+allowBuilds:
+  esbuild: set this to true or false
+
 # pnpm 10 and later read this here rather than from package.json.
 onlyBuiltDependencies:
   - esbuild

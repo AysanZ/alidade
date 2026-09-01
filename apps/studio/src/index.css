@@ -23,6 +23,15 @@ body {
   overflow: hidden;
 }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+/*
+ * A form control does not inherit the document's font unless it is told to. Only
+ * `button` was, so every input, select and textarea fell back to the browser's
+ * own — Arial at 13.33px — and a placeholder came out visibly larger than the
+ * value that replaced it. The specific rules below still set their own sizes;
+ * this is the floor they sit on.
+ */
+input, select, textarea { font: inherit; color: inherit; }
+::placeholder { font: inherit; color: var(--txt-3); opacity: 1; }
 :focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 ::-webkit-scrollbar { width: 9px; }
 ::-webkit-scrollbar-thumb { background: #2a2a2e; border: 2px solid var(--panel); border-radius: 6px; }
@@ -145,6 +154,9 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   color: var(--txt-2);
 }
 .row .k { width: 78px; flex: none; }
+/* A flex item will not shrink below its content unless it is allowed to, and a
+   select holding a long option name pushed the whole row past the panel edge. */
+.row select, .row .text, .row input { min-width: 0; }
 .row.check { cursor: pointer; }
 .row input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
 .row b {
@@ -526,7 +538,8 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   background: #131315;
   border-bottom: 1px solid var(--line);
   padding: 5px 9px;
-  text-align: start;
+  /* Header and cell are centred together, so a column reads as one column. */
+  text-align: center;
   white-space: nowrap;
   cursor: pointer;
   font-family: "IBM Plex Sans Condensed", sans-serif;
@@ -541,12 +554,19 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   padding: 4px 9px;
   border-bottom: 1px solid var(--line-soft);
   white-space: nowrap;
+  text-align: center;
   color: var(--txt-2);
 }
 .dock tbody td.num {
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  text-align: end;
   color: var(--txt);
+  /*
+   * A number column stays monospaced so the digits line up under each other,
+   * which is the whole reason to reach for a mono face in a table. It used to
+   * be flush right; it is centred with the rest now, and the fixed advance
+   * width keeps the figures in step regardless.
+   */
+  font-variant-numeric: tabular-nums;
 }
 .dock tbody tr:hover td { background: rgba(76, 141, 255, 0.05); }
 .dock .rownum { color: var(--txt-3); font-family: "IBM Plex Mono", ui-monospace, monospace; }
@@ -556,13 +576,20 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .problem {
   position: absolute;
   bottom: 14px;
-  inset-inline: 60px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 5;
   display: flex;
   gap: 10px;
   align-items: flex-start;
-  margin-inline: auto;
-  max-width: 620px;
+  /*
+   * `inset-inline: 60px` with `max-width: 620px` made this a 620px box whatever
+   * was in it, so a short message sat in the middle of a wide empty panel and a
+   * long one had nowhere to go. It is now as wide as its text, up to whatever
+   * the map can spare.
+   */
+  width: max-content;
+  max-width: min(620px, calc(100% - 120px));
   padding: 8px 11px;
   background: rgba(20, 12, 12, 0.94);
   border: 1px solid rgba(240, 97, 107, 0.35);
@@ -571,6 +598,8 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   font-size: 11px;
   line-height: 1.5;
 }
+/* A renderer's complaint is one long unbroken token more often than not. */
+.problem span { min-width: 0; overflow-wrap: anywhere; }
 .problem button { color: var(--txt-3); flex: none; }
 
 /* ---------------------------------------------------------------- drawing */
@@ -978,6 +1007,16 @@ input.doc:focus { border-color: var(--accent); color: var(--txt); outline: none;
   flex: none;
   display: block;
 }
+/* A marker's key is the glyph itself, so it needs room a colour chip does not. */
+.legend .key i.glyph {
+  width: 12px;
+  height: 12px;
+  background: none;
+  font-style: normal;
+  font-size: 11px;
+  line-height: 12px;
+  text-align: center;
+}
 .legend .key span {
   font-size: 10px;
   color: var(--txt-2);
@@ -1114,18 +1153,42 @@ input.doc:focus { border-color: var(--accent); color: var(--txt); outline: none;
 
 .glyphs {
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
+  /*
+   * `repeat(8, 1fr)` is `minmax(auto, 1fr)`, and a grid item's auto minimum is
+   * its content — so eight emoji wider than the panel pushed the whole grid out
+   * through the right-hand edge. A zero minimum lets the track win, and
+   * auto-fill keeps the buttons a sensible size at any panel width.
+   */
+  grid-template-columns: repeat(auto-fill, minmax(28px, 1fr));
   gap: 3px;
   padding: 4px 11px 8px;
+  /* The set is long enough to be worth scrolling rather than owning the panel. */
+  max-height: 168px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .glyphs button {
   aspect-ratio: 1;
+  min-width: 0;
+  /*
+   * A button carries the browser's own padding — 1px 6px — which left about
+   * 14px of content box for a 15px glyph, so the emoji sat wedged against the
+   * edges of its cell instead of in the middle of it. Flex centring on a box
+   * with no padding of its own puts it where the highlight ring is.
+   */
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid transparent;
   border-radius: 3px;
   font-size: 15px;
+  /*
+   * An emoji font's line box is much taller than its glyph and is not
+   * symmetrical about it, so a line height of 1 is what keeps the picture
+   * centred rather than sitting high in its cell.
+   */
   line-height: 1;
-  display: grid;
-  place-items: center;
 }
 .glyphs button:hover { background: var(--raise); }
 .glyphs button.on { border-color: var(--accent); background: rgba(76, 141, 255, 0.13); }

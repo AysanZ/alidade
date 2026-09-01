@@ -80,12 +80,42 @@ async def columns_of(table: str) -> list[str]:
     return [r["column_name"] for r in rows if r["column_name"] not in INTERNAL]
 
 
+# Declared types that name no shape. `ogr2ogr` leaves a column typed plain
+# GEOMETRY behind whenever the source file held more than one kind, which is
+# most of Natural Earth, so this is the common case and not the odd one.
+VAGUE_GEOMETRY = {"", "GEOMETRY", "GEOMETRYCOLLECTION", "UNKNOWN"}
+
+
 async def geometry_type_of(table: str) -> str | None:
+    """
+    What shape the table actually holds.
+
+    The declaration on the column is asked first, because it is free. When the
+    declaration is the useless kind, the rows are asked instead: the commonest
+    shape in a sample wins. Reporting GEOMETRY here used to send the studio to
+    its fallback, which drew a fill — and a renderer told to fill a line closes
+    it into a ring first, so a file of coastlines came out as a solid wedge the
+    size of an ocean.
+    """
     table = check_identifier(table)
     async with pool().acquire() as conn:
-        return await conn.fetchval(
+        declared = await conn.fetchval(
             "SELECT type FROM geometry_columns WHERE f_table_name = $1 LIMIT 1", table
         )
+        if declared and declared.strip().upper() not in VAGUE_GEOMETRY:
+            return declared
+
+        # A sample, not the whole table: this runs on import, and the answer is
+        # the same after a thousand rows as after a million.
+        return await conn.fetchval(
+            f"""
+            SELECT replace(upper(ST_GeometryType(geom)), 'ST_', '') AS shape
+            FROM (SELECT geom FROM {table} WHERE geom IS NOT NULL LIMIT 1000) AS sample
+            GROUP BY shape
+            ORDER BY count(*) DESC
+            LIMIT 1
+            """
+        ) or declared
 
 
 async def register(
@@ -123,7 +153,12 @@ async def register(
             ON CONFLICT (id) DO UPDATE SET
                 title = excluded.title, table_name = excluded.table_name,
                 feature_count = excluded.feature_count, fields = excluded.fields,
-                extent = excluded.extent
+                extent = excluded.extent,
+                -- These two were left out, so a layer registered once with a bad
+                -- geometry type kept it for ever: re-importing the file fixed
+                -- the table and changed nothing the studio could see.
+                geometry_type = excluded.geometry_type,
+                source_crs = excluded.source_crs
             """,
             layer_id,
             title,

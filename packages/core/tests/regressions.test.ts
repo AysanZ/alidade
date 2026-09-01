@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { compile, markerImageId, markersIn } from "../src/compile";
+import {
+  bundleFor,
+  compile,
+  markerImageId,
+  markerLayout,
+  markersIn,
+  normalise,
+  selectionFilter,
+} from "../src/compile";
 import { colorExpression, strokePaint } from "../src/symbology";
 import { frameExtent, needsFraming } from "../src/frame";
 import { reconcile } from "../src/reconcile";
@@ -328,33 +336,144 @@ describe("framing after adding a layer", () => {
  * highlighting matched on whatever field happened to come first. A key has to be
  * unique or it is not a key; the server works out which column is.
  */
-describe("marker symbology", () => {
-  it("names an image from the symbology, so two layers sharing a pin share it", () => {
-    const pin = { kind: "marker" as const, glyph: "📍", color: "#ff0000", size: 26, shape: "pin" as const };
+describe("markers", () => {
+  const pin = {
+    glyph: "\ud83d\udccd",
+    color: "#ff0000",
+    size: 26,
+    shape: "pin" as const,
+    anchor: "above" as const,
+  };
+
+  it("names an image from the marker, so two layers sharing a pin share it", () => {
     expect(markerImageId(pin)).toBe(markerImageId({ ...pin }));
-    expect(markerImageId(pin)).not.toBe(markerImageId({ ...pin, glyph: "⭐" }));
+    expect(markerImageId(pin)).not.toBe(markerImageId({ ...pin, glyph: "\u2b50" }));
     expect(markerImageId(pin)).not.toBe(markerImageId({ ...pin, shape: "circle" }));
   });
 
-  it("compiles a point layer to one symbol layer, not a circle", () => {
+  it("moves the same image around rather than making a new one", () => {
+    // Anchor and placement are layout, not pixels. Naming a new image for them
+    // would make the renderer rasterise the same pin twice.
+    expect(markerImageId({ ...pin, anchor: "on" })).toBe(markerImageId(pin));
+    expect(markerImageId({ ...pin, placement: "along" })).toBe(markerImageId(pin));
+  });
+
+  /*
+   * The bug: a marker was a symbology kind, so choosing one replaced the layer's
+   * drawing. A point stopped being a point and became the emoji, which meant the
+   * layer's colours and classification were gone as long as the marker was on.
+   */
+  /*
+   * A pin standing over its own blue dot is two things where there is one. On a
+   * point layer the marker *is* the point, so the circle is not drawn at all.
+   */
+  it("stands in for the point rather than hovering over it", () => {
     const withMarker = project();
     const layer = withMarker.tree[0] as LayerNode;
     layer.geometry = "point";
-    layer.symbology = { kind: "marker", glyph: "📍", color: "#ff0000", size: 26, shape: "pin" };
+    layer.marker = { ...pin };
+
+    expect(bundleFor(layer)).toEqual(["roads:marker"]);
 
     const layers = compile(withMarker).layers;
-    const drawn = layers.find((l) => l.id.startsWith("roads:"));
+    expect(layers.find((l) => l.id === "roads:circle")).toBeUndefined();
+    const drawn = layers.find((l) => l.id === "roads:marker");
     expect(drawn?.type).toBe("symbol");
-    expect(drawn?.layout["icon-image"]).toBe(markerImageId(layer.symbology));
+    expect(drawn?.layout["icon-image"]).toBe(markerImageId(pin));
+  });
+
+  it("gives the point its dot back when the marker is turned off", () => {
+    const layer = project().tree[0] as LayerNode;
+    layer.geometry = "point";
+    expect(bundleFor(layer)).toEqual(["roads:circle"]);
+  });
+
+  /* A line cannot be replaced by an icon, so there both are drawn. */
+  it("adds to a line or an area instead of replacing it", () => {
+    const line = project().tree[0] as LayerNode;
+    line.marker = { ...pin };
+    expect(bundleFor(line)).toEqual(["roads:line", "roads:marker"]);
+  });
+
+  /*
+   * The bug: a pin was anchored at its bottom and everything else at its centre,
+   * so the same control produced two different maps depending on which shape you
+   * picked. Position is one decision now and it belongs to the user.
+   */
+  it("anchors every shape the way the user asked, not the way the shape suggests", () => {
+    for (const shape of ["pin", "circle", "square", "none"] as const) {
+      expect(markerLayout({ ...pin, shape }, "point")["icon-anchor"]).toBe("bottom");
+      expect(markerLayout({ ...pin, shape, anchor: "on" }, "point")["icon-anchor"]).toBe("center");
+    }
+  });
+
+  it("lifts a badge clear of the feature, and leaves a pin on its own point", () => {
+    // A pin already ends in a point, so its bottom edge is the spot.
+    expect(markerLayout(pin, "point")["icon-offset"]).toBeUndefined();
+    expect(markerLayout({ ...pin, shape: "circle" }, "point")["icon-offset"]).toEqual([0, -4]);
+    expect(markerLayout({ ...pin, shape: "circle", anchor: "on" }, "point")["icon-offset"])
+      .toBeUndefined();
+  });
+
+  it("puts one marker in the middle of a line or an area", () => {
+    expect(markerLayout(pin, "line")["symbol-placement"]).toBe("point");
+    expect(markerLayout(pin, "polygon")["symbol-placement"]).toBe("point");
+  });
+
+  it("repeats along a line when asked, but never around a polygon's ring", () => {
+    const along = { ...pin, placement: "along" as const, spacing: 120 };
+    expect(markerLayout(along, "line")["symbol-placement"]).toBe("line");
+    expect(markerLayout(along, "line")["symbol-spacing"]).toBe(120);
+    // A polygon compiled with line placement draws markers around its outline,
+    // which is not what anybody means by a marker on an area.
+    expect(markerLayout(along, "polygon")["symbol-placement"]).toBe("point");
+  });
+
+  it("carries a marker on a graduated layer without disturbing the classification", () => {
+    const withMarker = project();
+    const layer = withMarker.tree[0] as LayerNode;
+    layer.geometry = "polygon";
+    layer.symbology = {
+      kind: "graduated",
+      field: "density",
+      breaks: [10, 20],
+      colors: ["#111", "#222", "#333"],
+      noDataColor: "#000",
+      stroke: { color: "#0a0a0b", width: 0.6 },
+    };
+    layer.marker = { ...pin };
+
+    expect(bundleFor(layer)).toEqual(["roads:fill", "roads:line", "roads:marker"]);
+    const fill = compile(withMarker).layers.find((l) => l.id === "roads:fill");
+    expect(fill?.paint["fill-color"]).toEqual(colorExpression(layer.symbology));
   });
 
   it("lists every distinct marker in the project once", () => {
     const withMarkers = project();
     const first = withMarkers.tree[0] as LayerNode;
     first.geometry = "point";
-    first.symbology = { kind: "marker", glyph: "📍", color: "#ff0000", size: 26, shape: "pin" };
+    first.marker = { ...pin };
     withMarkers.tree.push(JSON.parse(JSON.stringify({ ...first, id: "copy" })));
     expect(markersIn(withMarkers)).toHaveLength(1);
+  });
+
+  /*
+   * Documents written before markers became a decoration still hold the old
+   * shape. They are translated on the way in, and the point they used to hide
+   * comes back.
+   */
+  it("reads a document that still holds a marker as its symbology", () => {
+    const old = project();
+    const layer = old.tree[0] as LayerNode;
+    layer.geometry = "point";
+    layer.symbology = { kind: "marker", glyph: "\ud83d\udccd", color: "#ff0000", size: 26, shape: "pin" };
+
+    expect(bundleFor(layer)).toEqual(["roads:marker"]);
+    const read = normalise(layer);
+    expect(read.symbology.kind).toBe("single");
+    expect(read.marker?.glyph).toBe("\ud83d\udccd");
+    expect(read.marker?.anchor).toBe("above");
+    expect(markersIn(old)).toHaveLength(1);
   });
 
   it("gives a marker no stroke to set", () => {
@@ -363,3 +482,71 @@ describe("marker symbology", () => {
     ).toBe(null);
   });
 });
+
+/**
+ * Hovering one airport ringed every airport that shared its `scalerank`, because
+ * a highlight matched on one column and that column was not a key. A key has to
+ * be unique or it is not a key.
+ */
+describe("selection filters", () => {
+  it("matches on one column when the layer has a real key", () => {
+    expect(selectionFilter({ layer: "roads", field: "gid", values: [7] })).toEqual([
+      "in",
+      ["to-string", ["get", "gid"]],
+      ["literal", ["7"]],
+    ]);
+  });
+
+  it("narrows to one feature when the first column is shared", () => {
+    const filter = selectionFilter({
+      layer: "airports",
+      field: "scalerank",
+      values: [2],
+      where: [
+        { field: "name", value: "Heathrow" },
+        { field: "iata_code", value: "LHR" },
+      ],
+    }) as unknown[];
+
+    expect(filter[0]).toBe("all");
+    expect(filter).toHaveLength(4);
+    expect(filter[2]).toEqual(["==", ["to-string", ["get", "name"]], "Heathrow"]);
+    expect(filter[3]).toEqual(["==", ["to-string", ["get", "iata_code"]], "LHR"]);
+  });
+
+  it("does not constrain the same column twice", () => {
+    const filter = selectionFilter({
+      layer: "airports",
+      field: "name",
+      values: ["Heathrow"],
+      where: [{ field: "name", value: "Heathrow" }],
+    }) as unknown[];
+    expect(filter[0]).toBe("in");
+  });
+
+  it("compares as text, because a tile and a table disagree about numbers", () => {
+    // The database holds 3.0 and the tile hands back 3; neither == the other.
+    const filter = selectionFilter({
+      layer: "wards",
+      field: "id",
+      values: [3],
+      where: [{ field: "rank", value: 2 }],
+    }) as unknown[];
+    expect(filter[2]).toEqual(["==", ["to-string", ["get", "rank"]], "2"]);
+  });
+
+  it("reaches the highlight layers the compiler builds", () => {
+    const withSelection = project();
+    withSelection.selection = {
+      layer: "roads",
+      field: "scalerank",
+      values: [2],
+      where: [{ field: "name", value: "A1" }],
+      hover: true,
+    };
+    const highlight = compile(withSelection).layers.find((l) => l.id.startsWith("chrome:selection"));
+    expect((highlight?.filter as unknown[])[0]).toBe("all");
+  });
+});
+
+

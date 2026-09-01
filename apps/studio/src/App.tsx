@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Map as MapLibreMap, type MapMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import type { Bookmark, Extent, Projection } from "@alidade/core";
+import type { Bookmark, Extent, LayerNode, Projection, Selection } from "@alidade/core";
 import {
   GLOBE_IS_ROUND_BELOW,
   denominatorAt,
@@ -34,10 +34,20 @@ import { ScenePanel } from "./components/ScenePanel";
 import { TitleBar } from "./components/TitleBar";
 import { emptyProject, emptyStyle } from "./project";
 import { allLayers, bundleIdsOf, duplicateNode, findLayer, removeNode, withNode } from "./tree";
-import { registerMarkers } from "./markers";
+import { markerImageFor, registerMarkers } from "./markers";
 import { useDrawing } from "./useDrawing";
 import { useProject } from "./useProject";
 import { stampedPng } from "./export";
+
+/**
+ * How far off a feature the pointer may be and still count as over it.
+ *
+ * Only used when an exact query found nothing, so it never steals a click from
+ * something the user really is pointing at. Four pixels is about the slack a
+ * hand has on a mouse, and it is the difference between a hairline coastline
+ * being identifiable and being decoration.
+ */
+const HIT_TOLERANCE = 4;
 
 const TITLES: Record<PaneId, string> = {
   layers: "Layers",
@@ -156,11 +166,31 @@ export default function App() {
       return ids;
     };
 
+    /** The same query with a few pixels of slack, for geometry too thin to hit. */
+    const nearby = (event: MapMouseEvent, layers: string[]) => {
+      const { x, y } = event.point;
+      const box: [[number, number], [number, number]] = [
+        [x - HIT_TOLERANCE, y - HIT_TOLERANCE],
+        [x + HIT_TOLERANCE, y + HIT_TOLERANCE],
+      ];
+      return map.queryRenderedFeatures(box, { layers });
+    };
+
+    /*
+     * What the pointer is over.
+     *
+     * A query at a single point asks whether that exact pixel was painted, which
+     * is a fair question for a country and an impossible one for a 0.8px
+     * coastline: a line layer could not be hovered or identified at all, because
+     * hitting it needed pixel-perfect aim. Ask the precise question first, so a
+     * click between two touching polygons still lands on the one under the
+     * cursor, and only widen the net when nothing was there.
+     */
     const hit = (event: MapMouseEvent) => {
       const layers = dataLayers();
       if (layers.length === 0) return null;
-      const features = map.queryRenderedFeatures(event.point, { layers });
-      const feature = features[0];
+      const exact = map.queryRenderedFeatures(event.point, { layers });
+      const feature = exact[0] ?? nearby(event, layers)[0];
       if (!feature) return null;
       const owner = allLayers(latest.current).find((node) =>
         bundleIdsOf(node).includes(feature.layer.id),
@@ -191,6 +221,19 @@ export default function App() {
         position: [e.lngLat.lng, e.lngLat.lat],
       });
     });
+    /*
+     * The renderer asking for a picture it does not have is not an error, it is
+     * a question, and the id it asks with says exactly what to draw. Answering
+     * here rather than only in an effect means a marker cannot disappear for the
+     * frame between changing its colour and the effect that registers the new
+     * image running.
+     */
+    map.on("styleimagemissing", (e: { id: string }) => {
+      if (map.hasImage(e.id)) return;
+      const image = markerImageFor(e.id);
+      if (image) map.addImage(e.id, image, { pixelRatio: 2 });
+    });
+
     // Without this, a failing tile request is invisible and looks like an empty map.
     map.on("error", (e: { error?: Error }) => {
       const message = e.error?.message ?? "The renderer reported a problem.";
@@ -208,28 +251,28 @@ export default function App() {
 
   /*
    * The hover becomes a selection on the project, which is what the compiler
-   * turns into a highlight layer. It is keyed on the layer's first field, the
-   * same column the attribute table matches on, so hovering the map and hovering
-   * a row light up the same feature.
+   * turns into a highlight layer.
+   *
+   * It used to be keyed on one column — the layer's `key` if the server had
+   * found one, and otherwise whatever field came first. For Natural Earth the
+   * first field is `scalerank`, which every feature shares with dozens of
+   * others, so pointing at one airport ringed every airport of the same rank.
+   * The identity of the feature under the pointer is now taken from the feature
+   * itself, so the highlight is the thing being pointed at and nothing else.
    */
   useEffect(() => {
     if (found) return;
-    // The layer's key column, not whatever field happened to be first: for
-    // Natural Earth that is `scalerank`, so hovering one country used to light up
-    // every country that shared its rank.
     const node = hover ? findLayer(project, hover.layer) : undefined;
-    const key = node?.metadata?.key ?? node?.metadata?.fields?.[0];
-    const value = key ? hover?.properties[key] : undefined;
+    const wanted =
+      hover && node ? selectionFor(hover.layer, node, hover.properties) : undefined;
+
     edit((d) => {
-      const wanted =
-        hover && key && (typeof value === "string" || typeof value === "number")
-          ? { layer: hover.layer, field: key, values: [value], hover: true }
-          : undefined;
       // Only touch the document when the highlight is actually different, or a
       // mouse moving across a polygon would emit an edit per frame.
       const now = d.selection;
-      if (!wanted && now?.hover) delete d.selection;
-      else if (wanted && (now?.hover !== true || now.values[0] !== wanted.values[0] || now.layer !== wanted.layer)) {
+      if (!wanted) {
+        if (now?.hover) delete d.selection;
+      } else if (now?.hover !== true || fingerprint(now) !== fingerprint(wanted)) {
         d.selection = wanted;
       }
       return d;
@@ -244,7 +287,10 @@ export default function App() {
    */
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
+    // `isStyleLoaded` was the guard here, and it is false for a moment after
+    // every basemap swap, so the registration that mattered was the one that got
+    // skipped. `styleimagemissing` is the backstop either way.
+    if (!map?.style) return;
     registerMarkers(map, project);
   }, [project]);
 
@@ -636,4 +682,62 @@ export default function App() {
       </footer>
     </div>
   );
+}
+
+/**
+ * How many of a feature's own columns are used to tell it apart from its
+ * neighbours when the table has no key.
+ *
+ * Every column would be exact and would also put a filter the size of the
+ * attribute row into the style on every mouse move. A dozen is far more than
+ * enough to separate two features that a person could confuse.
+ */
+const IDENTIFYING_FIELDS = 12;
+
+/**
+ * A selection that names one feature.
+ *
+ * With a real key column this is one equality and nothing more. Without one —
+ * and most imported tables have none — the feature's own attributes are the
+ * identity: two rows that agree on a dozen columns are the same row for any
+ * purpose a highlight serves.
+ */
+function selectionFor(
+  layerId: string,
+  node: LayerNode,
+  properties: Record<string, unknown>,
+): Selection | undefined {
+  const scalar = (value: unknown): value is string | number | boolean =>
+    typeof value === "string" || typeof value === "number" || typeof value === "boolean";
+
+  const key = node.metadata?.key;
+  if (key && scalar(properties[key])) {
+    const value = properties[key];
+    return { layer: layerId, field: key, values: [value as string | number], hover: true };
+  }
+
+  /*
+   * The declared field order, so the same feature produces the same filter
+   * whichever tile it arrived in. `Object.keys` on a decoded tile feature is not
+   * guaranteed to be stable, and an unstable filter is an edit per frame.
+   */
+  const fields = (node.metadata?.fields ?? Object.keys(properties))
+    .filter((field) => scalar(properties[field]))
+    .slice(0, IDENTIFYING_FIELDS);
+  if (fields.length === 0) return undefined;
+
+  const [first, ...rest] = fields as [string, ...string[]];
+  return {
+    layer: layerId,
+    field: first,
+    values: [properties[first] as string | number],
+    where: rest.map((field) => ({ field, value: properties[field] as string | number | boolean })),
+    hover: true,
+  };
+}
+
+/** Enough of a selection to tell whether the highlight would actually change. */
+function fingerprint(selection: Selection): string {
+  const where = (selection.where ?? []).map((c) => `${c.field}=${String(c.value)}`).join("\u0000");
+  return `${selection.layer}\u0000${selection.field}\u0000${selection.values.join(",")}\u0000${where}`;
 }

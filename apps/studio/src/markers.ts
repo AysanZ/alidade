@@ -1,8 +1,8 @@
 import type { Map as MapLibreMap } from "maplibre-gl";
-import type { MapProject, Symbology } from "@alidade/core";
+import type { MapProject, MarkerStyle } from "@alidade/core";
 import { markerImageId, markersIn } from "@alidade/core";
 
-type Marker = Extract<Symbology, { kind: "marker" }>;
+type Marker = MarkerStyle;
 
 /**
  * Emoji markers, drawn on a canvas and handed to the renderer as images.
@@ -23,6 +23,63 @@ export function registerMarkers(map: MapLibreMap, project: MapProject): void {
 }
 
 /**
+ * Rebuild a marker from the name of its image.
+ *
+ * Registration used to happen in an effect, which runs after the edit it is
+ * reacting to has already been applied. Changing a marker's colour or size
+ * changes the name of the image it wants, so for one frame the layer named an
+ * image the renderer did not have: the markers vanished, and only came back on
+ * the next zoom, when the renderer looked again and by then the effect had run.
+ *
+ * The name carries everything the picture is made of, so the renderer can be
+ * answered the moment it asks. Hook this to `styleimagemissing` and the race
+ * cannot be lost, whatever order anything else happens in.
+ */
+export function markerImageFor(id: string): ImageData | null {
+  const marker = parseMarkerId(id);
+  return marker ? draw(marker) : null;
+}
+
+/** The inverse of `markerImageId`. Null for any id that is not a marker's. */
+export function parseMarkerId(id: string): Marker | null {
+  const parts = id.split(":");
+  if (parts.length !== 5 || parts[0] !== "marker") return null;
+  const [, shape, color, size, codepoints] = parts as [string, string, string, string, string];
+  if (!SHAPES.includes(shape as Marker["shape"])) return null;
+
+  const glyph = codepoints
+    ? codepoints
+        .split("-")
+        .map((point) => String.fromCodePoint(Number.parseInt(point, 16)))
+        .join("")
+    : "";
+
+  return {
+    glyph,
+    color: `#${color}`,
+    size: Number(size),
+    shape: shape as Marker["shape"],
+    // Neither of these changes a pixel, so neither is in the name.
+    anchor: "above",
+    placement: "centre",
+  };
+}
+
+const SHAPES: Marker["shape"][] = ["pin", "circle", "square", "none"];
+
+/**
+ * How much bigger than its font size a glyph's canvas has to be.
+ *
+ * An emoji is not `size` wide: the pictures in a colour emoji font run to about
+ * 1.17em across and rather more tall, and the dark outline a bare glyph is given
+ * adds more. Drawn at 0.95 of a canvas of exactly `size`, the edges of every
+ * emoji were sliced off. The glyph is now drawn at its stated size on a canvas
+ * with room around it, so "22 px" means a 22px glyph rather than a 22px box with
+ * a glyph crammed into it.
+ */
+const GLYPH_MARGIN = 1.4;
+
+/**
  * The pixels for one marker.
  *
  * Drawn at twice the size and registered with `pixelRatio: 2`, so it stays sharp
@@ -32,8 +89,10 @@ export function registerMarkers(map: MapLibreMap, project: MapProject): void {
 function draw(marker: Marker): ImageData | null {
   const scale = 2;
   const size = Math.max(12, Math.min(64, marker.size));
-  const width = size * scale;
-  const height = (marker.shape === "pin" ? size * 1.35 : size) * scale;
+  const bare = marker.shape === "none";
+  const width = (bare ? size * GLYPH_MARGIN : size) * scale;
+  const height =
+    (marker.shape === "pin" ? size * 1.35 : bare ? size * GLYPH_MARGIN : size) * scale;
 
   const canvas = document.createElement("canvas");
   canvas.width = Math.ceil(width);
@@ -71,12 +130,28 @@ function draw(marker: Marker): ImageData | null {
   }
 
   if (marker.glyph) {
-    const glyphSize = size * scale * (marker.shape === "none" ? 0.95 : 0.58);
+    // A bare glyph is drawn at its stated size, with GLYPH_MARGIN of canvas
+    // around it. One on a badge has to fit inside the badge.
+    const glyphSize = size * scale * (bare ? 1 : 0.58);
     ctx.font = `${glyphSize}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", system-ui, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText(marker.glyph, centre, marker.shape === "pin" ? radius : height / 2);
+    const y = marker.shape === "pin" ? radius : height / 2;
+
+    /*
+     * A colour emoji ignores both of these and paints itself. A plain character
+     * does not, and a white tick on a white basemap is a marker you cannot see —
+     * so a bare glyph takes the marker's own colour over a dark outline, and one
+     * on a badge stays white because the badge behind it is already the colour.
+     */
+    if (bare) {
+      ctx.lineWidth = 3 * scale;
+      ctx.strokeStyle = "rgba(5,5,5,0.75)";
+      ctx.lineJoin = "round";
+      ctx.strokeText(marker.glyph, centre, y);
+    }
+    ctx.fillStyle = bare ? marker.color : "#ffffff";
+    ctx.fillText(marker.glyph, centre, y);
   }
 
   return ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -99,9 +174,28 @@ function roundedRect(
   ctx.closePath();
 }
 
-/** A reasonable set to offer, rather than an emoji keyboard. */
+/**
+ * A working set, rather than an emoji keyboard.
+ *
+ * Grouped the way somebody looking for one would scan: the plain marks first,
+ * then places, then transport, then utilities and hazards, then land and water.
+ * Every one of these is a thing people put on maps; the ones that were here for
+ * decoration are not.
+ */
 export const MARKER_GLYPHS = [
-  "📍", "⭐", "🏠", "🏢", "🏭", "🏥", "🏫", "⛽", "🅿️",
-  "🌳", "⛰️", "🌊", "🔥", "⚡", "💧", "♻️",
-  "🚧", "✈️", "🚉", "🚌", "⚓", "📡", "⚠️", "✓",
+  // Plain marks, for when the point is the point.
+  "📍", "🔴", "🔵", "🟢", "🟡", "🟠", "🟣", "⚫",
+  "⭐", "❗", "❓", "✅", "❌", "➕", "🔺", "🔻",
+  // Places and buildings.
+  "🏠", "🏢", "🏬", "🏭", "🏗️", "🏥", "🏫", "🏛️",
+  "🏦", "🏨", "🏪", "⛪", "🕌", "🏟️", "🏘️", "🚩",
+  // Transport.
+  "✈️", "🛫", "🚁", "🚉", "🚇", "🚌", "🚗", "🚚",
+  "⚓", "🛳️", "⛵", "🚧", "⛽", "🅿️", "🛣️", "🌉",
+  // Utilities, industry, hazards.
+  "⚡", "🔌", "💧", "🚰", "🛢️", "⛏️", "♻️", "🗑️",
+  "📡", "🗼", "☢️", "☣️", "⚠️", "🔥", "💥", "🚨",
+  // Land, water, weather.
+  "🌳", "🌲", "🌾", "🏔️", "⛰️", "🌋", "🏝️", "🏖️",
+  "🌊", "💦", "🐟", "🦌", "🌡️", "❄️", "🌧️", "🌀",
 ];

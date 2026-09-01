@@ -100,6 +100,37 @@ export function Inspector({
             <option value="overlay">Overlay</option>
           </select>
         </Field>
+        {/*
+          The shape is detected on import and detection can be wrong: a table
+          whose column is declared plain GEOMETRY says nothing about what is in
+          it, and a line file guessed as an area comes out as a filled ring the
+          size of the data. Nobody should have to re-import a file to say what
+          it is.
+        */}
+        {layer.geometry !== "raster" && (
+          <Field label="Drawn as">
+            <select
+              value={layer.geometry}
+              onChange={(e) =>
+                editLayer((n) => {
+                  const geometry = e.target.value as LayerNode["geometry"];
+                  n.geometry = geometry;
+                  // A point with a polygon's hairline stroke draws a ring nobody
+                  // asked for, and an area with none has no edge at all.
+                  if (n.symbology.kind !== "extrusion" && n.symbology.kind !== "marker") {
+                    if (geometry === "point") delete n.symbology.stroke;
+                    else n.symbology.stroke ??= { color: "#0a0a0b", width: 0.6 };
+                  }
+                })
+              }
+            >
+              <option value="point">Points</option>
+              <option value="line">Lines</option>
+              <option value="polygon">Areas</option>
+            </select>
+          </Field>
+        )}
+
         <Field label="Styled as">
           <span className="muted small">{describeSymbology(project, layer)}</span>
         </Field>

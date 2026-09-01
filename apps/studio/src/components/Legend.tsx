@@ -20,7 +20,13 @@ export function Legend({ project }: { project: MapProject }) {
           <b title={layer.name}>{layer.name}</b>
           {keysFor(layer).map((key, i) => (
             <div className="key" key={i}>
-              <i style={{ background: key.color }} />
+              {key.glyph ? (
+                <i className="glyph" aria-hidden>
+                  {key.glyph}
+                </i>
+              ) : (
+                <i style={{ background: key.color }} />
+              )}
               <span title={key.label}>{key.label}</span>
             </div>
           ))}
@@ -31,7 +37,27 @@ export function Legend({ project }: { project: MapProject }) {
   );
 }
 
-function keysFor(layer: LayerNode): { color: string; label: string }[] {
+interface Key {
+  color: string;
+  label: string;
+  /** Set for a marker, which is a picture rather than a colour. */
+  glyph?: string;
+}
+
+function keysFor(layer: LayerNode): Key[] {
+  const marker = layer.marker;
+  if (!marker) return classificationKeys(layer);
+
+  /*
+   * On a point layer the marker replaces the dot, so the classification draws
+   * nothing and listing its colours would be a legend for a map that is not
+   * there. On a line or an area both are drawn, so both are listed.
+   */
+  const key: Key = { color: marker.color, label: layer.name, glyph: marker.glyph };
+  return layer.geometry === "point" ? [key] : [...classificationKeys(layer), key];
+}
+
+function classificationKeys(layer: LayerNode): Key[] {
   const s = layer.symbology;
 
   if (s.kind === "graduated") {

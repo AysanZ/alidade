@@ -1,6 +1,16 @@
 export * from "./types/project";
 export * from "./types/ops";
-export { compile, bundleFor, viewBounds, findLayer, markerImageId, markersIn } from "./compile";
+export {
+  compile,
+  bundleFor,
+  normalise,
+  viewBounds,
+  findLayer,
+  markerImageId,
+  markerLayout,
+  markersIn,
+  selectionFilter,
+} from "./compile";
 export { reconcile } from "./reconcile";
 export { toExpression, toSql } from "./filter";
 export type { SqlFilter } from "./filter";

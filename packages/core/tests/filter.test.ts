@@ -22,6 +22,27 @@ describe("filter", () => {
     ]);
   });
 
+  /*
+   * The document spells equality `=`, because that is what a person writing a
+   * filter types. Expressions spell it `==` and reject `=` outright, which threw
+   * out of `setFilter` and left the layer showing everything — the commonest
+   * filter anybody writes did nothing at all.
+   */
+  it("says == where the document says =, and SQL still says =", () => {
+    expect(toExpression({ op: "=", field: "name", value: "Bandar" })).toEqual([
+      "==",
+      ["get", "name"],
+      "Bandar",
+    ]);
+    expect(toSql({ op: "=", field: "name", value: "Bandar" }).where).toBe('"name" = $1');
+  });
+
+  it("leaves the comparisons that are spelled the same alone", () => {
+    for (const op of ["!=", "<", "<=", ">", ">="] as const) {
+      expect(toExpression({ op, field: "n", value: 1 })).toEqual([op, ["get", "n"], 1]);
+    }
+  });
+
   it("compiles to SQL with every value bound", () => {
     const { where, params } = toSql(tree);
     expect(where).toBe('("density" >= $1 AND "area_km2" <= $2 AND "name" LIKE $3)');

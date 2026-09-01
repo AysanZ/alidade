@@ -1,8 +1,11 @@
 import type { EngineLayer } from "./types/ops";
 import type {
+  Geometry,
   GroupNode,
   LayerNode,
   MapProject,
+  MarkerStyle,
+  Selection,
   Slot,
   Source,
   Symbology,
@@ -23,18 +26,59 @@ export interface Compiled {
 }
 
 /**
+ * Read a layer the way the rest of the compiler expects it.
+ *
+ * A marker used to be a `Symbology` kind, so choosing one replaced the layer's
+ * drawing instead of decorating it. Documents written then still exist; they are
+ * translated here, once, and everything downstream sees the current shape.
+ */
+export function normalise(layer: LayerNode): LayerNode {
+  if (layer.symbology.kind !== "marker") return layer;
+  const legacy = layer.symbology;
+  return {
+    ...layer,
+    symbology: { kind: "single", color: legacy.color },
+    marker: layer.marker ?? {
+      glyph: legacy.glyph,
+      color: legacy.color,
+      size: legacy.size,
+      shape: legacy.shape,
+      // The old renderer centred everything but a pin. Everything is now placed
+      // the way a pin was, because that is the one that reads as "this spot".
+      anchor: "above",
+      placement: "centre",
+    },
+  };
+}
+
+/**
  * One logical layer becomes several engine layers. They always move together and
  * keep this internal order; the user never sees the expansion.
+ *
+ * On a point layer the marker *is* the point: the dot is not drawn, because a
+ * pin standing over its own blue dot looks like two things where there is one.
+ * A line or an area cannot be replaced by an icon, so there the marker is drawn
+ * in addition to the geometry, at the middle of each feature.
  */
-export function bundleFor(layer: LayerNode): string[] {
+export function bundleFor(node: LayerNode): string[] {
+  const layer = normalise(node);
   const ids: string[] = [];
+  const marker = layer.marker && layer.geometry !== "raster" ? `${layer.id}:marker` : null;
+
   if (layer.geometry === "raster") ids.push(`${layer.id}:raster`);
-  else if (layer.symbology.kind === "marker") ids.push(`${layer.id}:marker`);
-  else if (layer.geometry === "polygon") {
-    ids.push(layer.symbology.kind === "extrusion" ? `${layer.id}:extrusion` : `${layer.id}:fill`);
-    if (layer.symbology.kind !== "extrusion" && layer.symbology.stroke) ids.push(`${layer.id}:line`);
-  } else if (layer.geometry === "line") ids.push(`${layer.id}:line`);
-  else ids.push(`${layer.id}:circle`);
+  else if (layer.geometry === "point") {
+    if (!marker) ids.push(`${layer.id}:circle`);
+  } else if (layer.geometry === "polygon") {
+    const symbology = layer.symbology;
+    ids.push(symbology.kind === "extrusion" ? `${layer.id}:extrusion` : `${layer.id}:fill`);
+    // `normalise` has already turned a legacy marker symbology into a single, so
+    // the only kinds left here either carry a stroke or are an extrusion.
+    if (symbology.kind !== "extrusion" && symbology.kind !== "marker" && symbology.stroke) {
+      ids.push(`${layer.id}:line`);
+    }
+  } else ids.push(`${layer.id}:line`);
+
+  if (marker) ids.push(marker);
   if (layer.labels) ids.push(`${layer.id}:label`);
   return ids;
 }
@@ -63,7 +107,7 @@ function flatten(nodes: TreeNode[], opacity = 1, visible = true, seen = new Set<
       if (seen.has(node.id)) continue;
       seen.add(node.id);
       out.push({
-        layer: node,
+        layer: normalise(node),
         opacity: opacity * node.opacity,
         visible: visible && node.visible,
       });
@@ -227,11 +271,7 @@ export function compile(project: MapProject): Compiled {
   const selection = project.selection;
   const target = selection ? findLayer(project.tree, selection.layer) : undefined;
   if (selection && target && selection.values.length > 0 && target.geometry !== "raster") {
-    const match = [
-      "in",
-      ["to-string", ["get", selection.field]],
-      ["literal", selection.values.map(String)],
-    ];
+    const match = selectionFilter(selection);
     const strong = selection.hover ? 0.55 : 1;
     const base = {
       source: target.source,
@@ -367,6 +407,29 @@ export function compile(project: MapProject): Compiled {
   return { sources, layers };
 }
 
+/**
+ * The expression that picks out what is selected.
+ *
+ * `field` and `values` carry a set — a row range dragged in the attribute table
+ * is many values of one column. `where` narrows that set down to one feature,
+ * which is what a pointer over a map means and what a table with no unique key
+ * cannot express on its own.
+ *
+ * Everything is compared as text on both sides. A vector tile will hand back
+ * `3` where the database held `3.0`, and a column that is an integer in one tile
+ * and null in the next has no numeric comparison that is true.
+ */
+export function selectionFilter(selection: Selection): unknown {
+  const clauses: unknown[] = [
+    ["in", ["to-string", ["get", selection.field]], ["literal", selection.values.map(String)]],
+  ];
+  for (const constraint of selection.where ?? []) {
+    if (constraint.field === selection.field) continue;
+    clauses.push(["==", ["to-string", ["get", constraint.field]], String(constraint.value)]);
+  }
+  return clauses.length === 1 ? clauses[0] : ["all", ...clauses];
+}
+
 /** The layer a selection or a style edit names, wherever it is in the tree. */
 export function findLayer(nodes: TreeNode[], id: string): LayerNode | undefined {
   for (const node of nodes) {
@@ -449,21 +512,15 @@ function engineLayersFor(entry: Flat, latitude: number): EngineLayer[] {
     } else if (role === "marker") {
       /*
        * The icon is registered by the application under an id derived from the
-       * symbology, so changing the glyph changes the name and the renderer picks
-       * up a different image rather than being asked to mutate one in place.
+       * marker, so changing the glyph changes the name and the renderer picks up
+       * a different image rather than being asked to mutate one in place.
        */
-      const marker = layer.symbology as Extract<Symbology, { kind: "marker" }>;
       out.push({
         ...base,
         id,
         type: "symbol",
         paint: { "icon-opacity": opacity },
-        layout: layout({
-          "icon-image": markerImageId(marker),
-          "icon-size": 1,
-          "icon-allow-overlap": true,
-          "icon-anchor": marker.shape === "pin" ? "bottom" : "center",
-        }),
+        layout: layout(markerLayout(layer.marker!, layer.geometry)),
       });
     } else if (role === "line" && layer.geometry === "polygon") {
       out.push({
@@ -498,32 +555,81 @@ function engineLayersFor(entry: Flat, latitude: number): EngineLayer[] {
 
 
 /**
+ * Where the marker image goes, for every geometry, in one place.
+ *
+ * The old rule was a shape test — a pin was anchored at its bottom and anything
+ * else at its centre — which is why an emoji swallowed the point it was meant to
+ * mark while a pin stood politely above it. Position is now the user's decision
+ * and applies the same way to a point, a line and a polygon.
+ */
+export function markerLayout(marker: MarkerStyle, geometry: Geometry): Record<string, unknown> {
+  const above = marker.anchor !== "on";
+  const layout: Record<string, unknown> = {
+    "icon-image": markerImageId(marker),
+    "icon-size": 1,
+    // A marker is the thing the reader is looking for, so it is never dropped to
+    // make room for a label, and never collides itself out of existence.
+    "icon-allow-overlap": true,
+    "icon-ignore-placement": true,
+    "icon-anchor": above ? "bottom" : "center",
+  };
+
+  /*
+   * A pin already ends in a point, so its bottom edge is the spot. A badge does
+   * not, so it is lifted clear of whatever is underneath it. `icon-offset` is in
+   * the image's own pixels and negative is up.
+   */
+  if (above && marker.shape !== "pin") layout["icon-offset"] = [0, -4];
+
+  /*
+   * A line or a polygon has no single position, so the renderer picks one:
+   * `point` puts one marker at the middle of a line and inside a polygon.
+   * Repeating along a line is a line's option only — a polygon compiled with
+   * `symbol-placement: line` draws markers around its ring, which is not what
+   * anybody means by putting a marker on a polygon.
+   */
+  if (geometry === "line" && marker.placement === "along") {
+    layout["symbol-placement"] = "line";
+    layout["symbol-spacing"] = marker.spacing ?? 200;
+  } else {
+    layout["symbol-placement"] = "point";
+  }
+
+  return layout;
+}
+
+/**
  * A stable name for a marker image.
  *
- * Derived from the symbology rather than from the layer, so two layers using the
+ * Derived from the marker rather than from the layer, so two layers using the
  * same pin share one image, and so changing the glyph asks the renderer for a
  * different name instead of asking it to mutate an image it is already drawing.
+ *
+ * Anchor and placement are deliberately not part of the name: they move the same
+ * pixels around rather than changing them, so they are a layout edit and not a
+ * new image.
  */
-export function markerImageId(marker: Extract<Symbology, { kind: "marker" }>): string {
+export function markerImageId(marker: MarkerStyle | Extract<Symbology, { kind: "marker" }>): string {
   const glyph = [...marker.glyph].map((c) => c.codePointAt(0)!.toString(16)).join("-");
   return `marker:${marker.shape}:${marker.color.replace("#", "")}:${Math.round(marker.size)}:${glyph}`;
 }
 
 /** Every marker image a project needs, so they can be registered before drawing. */
-export function markersIn(project: MapProject): Extract<Symbology, { kind: "marker" }>[] {
-  const out: Extract<Symbology, { kind: "marker" }>[] = [];
+export function markersIn(project: MapProject): MarkerStyle[] {
+  const out: MarkerStyle[] = [];
   const seen = new Set<string>();
   const visit = (nodes: TreeNode[]) => {
     for (const node of nodes) {
-      if (node.type === "group") visit(node.children);
-      else if (node.symbology.kind === "marker") {
-        const marker = node.symbology;
-        const id = markerImageId(marker);
-        if (!seen.has(id)) {
-          seen.add(id);
-          out.push(marker);
-        }
+      if (node.type === "group") {
+        visit(node.children);
+        continue;
       }
+      const marker = normalise(node).marker;
+      if (!marker) continue;
+      const id = markerImageId(marker);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push(marker);
     }
   };
   visit(project.tree);

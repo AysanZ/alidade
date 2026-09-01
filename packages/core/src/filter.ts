@@ -20,6 +20,15 @@ export function toExpression(node: FilterNode): unknown {
       return ["in", ["get", node.field], ["literal", node.value]];
     case "like":
       return ["in", stripWildcards(node.value), ["get", node.field]];
+    /*
+     * The document spells equality `=`, because that is what a person writing a
+     * filter types. A renderer expression spells it `==`, and rejects `=` as an
+     * unknown operator — which failed the *whole* filter, so `setFilter` threw
+     * and the layer went on showing everything. Every other comparison happens
+     * to be spelled the same both ways.
+     */
+    case "=":
+      return ["==", ["get", node.field], node.value];
     default:
       return [node.op, ["get", node.field], node.value];
   }

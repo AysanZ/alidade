@@ -4,11 +4,17 @@ import type {
   GraduatedSymbol,
   LayerNode,
   MapProject,
-  MarkerSymbol,
+  MarkerStyle,
   SingleSymbol,
   Symbology,
 } from "@alidade/core";
-import { CATEGORY_COLORS, RAMPS, equalIntervalBreaks, rampOf } from "@alidade/core";
+import {
+  CATEGORY_COLORS,
+  RAMPS,
+  defaultMarker,
+  equalIntervalBreaks,
+  rampOf,
+} from "@alidade/core";
 import { MARKER_GLYPHS } from "../markers";
 
 import { readStats, type FieldStats } from "../api";
@@ -94,11 +100,14 @@ export function Appearance({ layer, edit }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stats]);
 
+  /*
+   * Marker is not on this list any more. It was a classification, which meant
+   * choosing it threw away the layer's colours and swapped the geometry out for
+   * an icon; it is now a decoration with a section of its own, so a graduated
+   * layer can carry one and stay graduated.
+   */
   const available: { id: Kind; label: string; needsField: boolean }[] = [
     { id: "single", label: "Single", needsField: false },
-    ...(layer.geometry === "point"
-      ? [{ id: "marker" as Kind, label: "Marker", needsField: false }]
-      : []),
     { id: "graduated", label: "Graduated", needsField: true },
     { id: "categorized", label: "Categories", needsField: true },
     ...(layer.geometry === "polygon"
@@ -115,9 +124,6 @@ export function Appearance({ layer, edit }: Props) {
       const field = "field" in node.symbology ? node.symbology.field : fields[0] ?? "";
 
       if (next === "single") node.symbology = { kind: "single", color: colour, stroke };
-      else if (next === "marker") {
-        node.symbology = { kind: "marker", glyph: "📍", color: colour, size: 26, shape: "pin" };
-      }
       else if (next === "graduated") {
         // Left empty on purpose: the effect above fills it from the column's
         // real range as soon as the database answers.
@@ -163,10 +169,6 @@ export function Appearance({ layer, edit }: Props) {
             </button>
           ))}
         </div>
-
-        {kind === "marker" && (
-          <Marker symbology={layer.symbology as MarkerSymbol} edit={edit} />
-        )}
 
         {kind === "single" && (
           <Field label="Colour">
@@ -270,10 +272,12 @@ export function Appearance({ layer, edit }: Props) {
       </Section>
 
       {layer.geometry !== "raster" && kind !== "extrusion" && kind !== "marker" && (
-        <Section title={layer.geometry === "point" ? "Marker" : "Outline"}>
+        <Section title="Outline">
           <Stroke layer={layer} edit={edit} />
         </Section>
       )}
+
+      {layer.geometry !== "raster" && <Marker layer={layer} edit={edit} />}
 
       <Labels layer={layer} edit={edit} fields={fields} />
     </>
@@ -367,73 +371,185 @@ function Graduated({
   );
 }
 
-function Marker({ symbology, edit }: { symbology: MarkerSymbol; edit: Props["edit"] }) {
+/**
+ * The marker editor.
+ *
+ * A marker is drawn over the layer, not instead of it, so this sits beside the
+ * classification rather than inside it and is offered for every vector geometry.
+ * On a line or a polygon there is no single position to put it, so the renderer
+ * picks the middle — which is why "Position" reads differently there.
+ */
+function Marker({ layer, edit }: { layer: LayerNode; edit: Props["edit"] }) {
+  const marker = layer.marker;
+  const change = (apply: (m: MarkerStyle) => void) =>
+    edit((node) => {
+      if (node.marker) apply(node.marker);
+    });
+
   return (
-    <>
-      <div className="glyphs">
-        {MARKER_GLYPHS.map((glyph) => (
-          <button
-            key={glyph}
-            className={symbology.glyph === glyph ? "on" : ""}
-            title={glyph}
-            onClick={() => edit((node) => void ((node.symbology as MarkerSymbol).glyph = glyph))}
-          >
-            {glyph}
-          </button>
-        ))}
-      </div>
-      <div className="row">
-        <span className="k">Or type one</span>
-        <input
-          className="text"
-          value={symbology.glyph}
-          maxLength={4}
-          onChange={(e) =>
-            edit((node) => void ((node.symbology as MarkerSymbol).glyph = e.target.value))
-          }
-        />
-      </div>
-      <Field label="Shape">
-        <select
-          value={symbology.shape}
-          onChange={(e) =>
-            edit((node) => {
-              (node.symbology as MarkerSymbol).shape = e.target.value as MarkerSymbol["shape"];
-            })
-          }
-        >
-          <option value="pin">Pin</option>
-          <option value="circle">Circle</option>
-          <option value="square">Square</option>
-          <option value="none">Glyph on its own</option>
-        </select>
-      </Field>
-      <Field label="Background">
-        <input
-          type="color"
-          value={symbology.color}
-          onChange={(e) =>
-            edit((node) => void ((node.symbology as MarkerSymbol).color = e.target.value))
-          }
-        />
-      </Field>
-      <Field label="Size" value={`${symbology.size} px`}>
-        <input
-          type="range"
-          min={14}
-          max={56}
-          value={symbology.size}
-          onChange={(e) =>
-            edit((node) => void ((node.symbology as MarkerSymbol).size = Number(e.target.value)))
-          }
-        />
-      </Field>
-      <p className="hint">
-        The glyph is drawn to an image by the browser and handed to the renderer. Vector tiles carry
-        no emoji, and the map's glyph set has none, so a text label would come out blank.
-      </p>
-    </>
+    <Section title="Marker">
+      <Switch
+        label="Show a marker"
+        on={Boolean(marker)}
+        onChange={(on) =>
+          edit((node) => {
+            if (on) node.marker = defaultMarker(representative(node.symbology));
+            else delete node.marker;
+          })
+        }
+      />
+
+      {marker && (
+        <>
+          <div className="glyphs">
+            {MARKER_GLYPHS.map((glyph) => (
+              <button
+                key={glyph}
+                className={marker.glyph === glyph ? "on" : ""}
+                title={glyph}
+                onClick={() => change((m) => void (m.glyph = glyph))}
+              >
+                {glyph}
+              </button>
+            ))}
+          </div>
+          <div className="row">
+            <span className="k">Or type one</span>
+            <input
+              className="text"
+              value={marker.glyph}
+              maxLength={4}
+              onChange={(e) => {
+                const glyph = e.target.value;
+                change((m) => void (m.glyph = glyph));
+              }}
+            />
+          </div>
+
+          <Field label="Shape">
+            <select
+              value={marker.shape}
+              onChange={(e) => {
+                const shape = e.target.value as MarkerStyle["shape"];
+                change((m) => void (m.shape = shape));
+              }}
+            >
+              <option value="none">Just the glyph</option>
+              <option value="pin">On a pin</option>
+              <option value="circle">On a circle</option>
+              <option value="square">On a square</option>
+            </select>
+          </Field>
+
+          {/*
+            The bug this replaces: a pin stood above the point and an emoji sat
+            on top of it, so the same control produced two different maps
+            depending on which shape you happened to pick. It is one decision
+            now, and it is yours.
+          */}
+          <Field label="Position">
+            <select
+              value={marker.anchor}
+              onChange={(e) => {
+                const anchor = e.target.value as MarkerStyle["anchor"];
+                change((m) => void (m.anchor = anchor));
+              }}
+            >
+              <option value="on">
+                {layer.geometry === "point" ? "On the point" : "On the middle"}
+              </option>
+              <option value="above">
+                {layer.geometry === "point" ? "Above the point" : "Above the middle"}
+              </option>
+            </select>
+          </Field>
+
+          {layer.geometry === "line" && (
+            <Field label="Repeat">
+              <select
+                value={marker.placement ?? "centre"}
+                onChange={(e) => {
+                  const placement = e.target.value as MarkerStyle["placement"];
+                  change((m) => void (m.placement = placement));
+                }}
+              >
+                <option value="centre">Once, at the middle</option>
+                <option value="along">Along the line</option>
+              </select>
+            </Field>
+          )}
+
+          {layer.geometry === "line" && marker.placement === "along" && (
+            <Field label="Every" value={`${marker.spacing ?? 200} px`}>
+              <input
+                type="range"
+                min={60}
+                max={600}
+                step={10}
+                value={marker.spacing ?? 200}
+                onChange={(e) => {
+                  const spacing = Number(e.target.value);
+                  change((m) => void (m.spacing = spacing));
+                }}
+              />
+            </Field>
+          )}
+
+          {(marker.shape !== "none" || !paintsItself(marker.glyph)) && (
+            <Field label={marker.shape === "none" ? "Colour" : "Background"}>
+              <input
+                type="color"
+                value={marker.color}
+                onChange={(e) => {
+                  const color = e.target.value;
+                  change((m) => void (m.color = color));
+                }}
+              />
+            </Field>
+          )}
+
+          <Field label="Size" value={`${marker.size} px`}>
+            <input
+              type="range"
+              min={14}
+              max={56}
+              value={marker.size}
+              onChange={(e) => {
+                const size = Number(e.target.value);
+                change((m) => void (m.size = size));
+              }}
+            />
+          </Field>
+
+          <p className="hint">
+            The glyph is drawn to an image by the browser and handed to the renderer. Vector tiles
+            carry no emoji, and the map's glyph set has none, so a text label would come out blank.
+            {layer.geometry === "point"
+              ? " On a point layer the glyph is the point — the dot underneath is not drawn, so the classification above has nothing left to colour."
+              : " On a line or an area the renderer places one at the middle of each feature, over the layer's own colours."}
+          </p>
+        </>
+      )}
+    </Section>
   );
+}
+
+/**
+ * Whether the browser will paint this glyph in its own colours.
+ *
+ * A colour emoji ignores `fillStyle` entirely, so offering a colour picker for
+ * one is offering a control that does nothing. A plain character — an arrow, a
+ * tick, a letter — takes the colour it is given.
+ */
+function paintsItself(glyph: string): boolean {
+  return [...glyph].some((character) => {
+    const point = character.codePointAt(0)!;
+    return (
+      point >= 0x1f000 || // the emoji planes
+      point === 0xfe0f || // the "draw the previous character as an emoji" request
+      (point >= 0x2600 && point <= 0x27bf) // miscellaneous symbols and dingbats
+    );
+  });
 }
 
 function Categorized({
@@ -681,9 +797,12 @@ function representative(symbology: Symbology): string {
 export function describeSymbology(project: MapProject, layer: LayerNode): string {
   void project;
   const s = layer.symbology;
-  if (s.kind === "graduated") return `${s.breaks.length + 1} classes on ${s.field}`;
-  if (s.kind === "categorized") return `${s.categories.length} categories on ${s.field}`;
-  if (s.kind === "extrusion") return `extruded by ${s.heightField}`;
-  if (s.kind === "marker") return `${s.glyph} marker`;
-  return "one colour";
+  const base =
+    s.kind === "graduated" ? `${s.breaks.length + 1} classes on ${s.field}`
+    : s.kind === "categorized" ? `${s.categories.length} categories on ${s.field}`
+    : s.kind === "extrusion" ? `extruded by ${s.heightField}`
+    : s.kind === "marker" ? `${s.glyph} marker`
+    : "one colour";
+  // The marker is an addition to the classification, so it is described as one.
+  return layer.marker ? `${base} · ${layer.marker.glyph} marker` : base;
 }
