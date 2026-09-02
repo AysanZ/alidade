@@ -1,17 +1,24 @@
--- Alidade phase 0: one table, served as vector tiles.
+-- Everything the API needs on an empty database, and nothing else.
+--
+-- There is no seed dataset. A demo layer shipped in here is somebody else's map
+-- in your table of contents: it cannot be removed from the studio, it comes back
+-- on every fresh volume, and it makes an empty install look like it already has
+-- data. Load your own through Add data, or with data/seed.sh.
 CREATE EXTENSION IF NOT EXISTS postgis;
 
-CREATE TABLE IF NOT EXISTS wards_1400 (
-    ward_id    text PRIMARY KEY,
-    name       text NOT NULL,
-    pop_2024   integer,
-    area_km2   numeric(8, 2),
-    density    numeric(10, 2),
-    updated_at date NOT NULL DEFAULT current_date,
-    geom       geometry(MultiPolygon, 4326) NOT NULL
+-- The layer registry. Uploaded data lands in its own table; this says where.
+CREATE TABLE IF NOT EXISTS layers (
+    id              text PRIMARY KEY,
+    title           text NOT NULL,
+    table_name      text NOT NULL,
+    geometry_column text NOT NULL DEFAULT 'geom',
+    geometry_type   text,
+    source_crs      text,
+    feature_count   integer,
+    fields          jsonb NOT NULL DEFAULT '[]'::jsonb,
+    extent          jsonb,
+    created_at      timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS wards_1400_geom_idx ON wards_1400 USING gist (geom);
-CREATE INDEX IF NOT EXISTS wards_1400_density_idx ON wards_1400 (density);
-
-COMMENT ON TABLE wards_1400 IS 'Demo wards over Tehran. Source CRS was EPSG:32639, reprojected on import.';
+COMMENT ON COLUMN layers.table_name IS
+    'Written by the server from a sanitised slug, never taken from a request.';

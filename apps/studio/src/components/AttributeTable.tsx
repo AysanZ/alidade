@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { readFeatures, type Cell, type FeaturePage, type FeatureRow } from "../api";
+import type { Cell, FeatureRow } from "../api";
+import { useFeatures } from "../queries";
 import type { Extent } from "./AddData";
 
 interface Props {
@@ -28,8 +29,6 @@ const LIMIT = 100;
  * you can find the row instead of hunting for it.
  */
 export function AttributeTable({ layerId, title, focus, onSelect, onZoom, onClose }: Props) {
-  const [page, setPage] = useState<FeaturePage | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
   const [order, setOrder] = useState<string | undefined>(undefined);
   const [descending, setDescending] = useState(false);
@@ -61,16 +60,17 @@ export function AttributeTable({ layerId, title, focus, onSelect, onZoom, onClos
     return () => clearTimeout(timer);
   }, [search]);
 
-  useEffect(() => {
-    let live = true;
-    setError(null);
-    readFeatures(layerId, { limit: LIMIT, offset, order, descending, search: query })
-      .then((result) => live && setPage(result))
-      .catch((e: unknown) => live && setError(e instanceof Error ? e.message : String(e)));
-    return () => {
-      live = false;
-    };
-  }, [layerId, offset, order, descending, query]);
+  /*
+   * One page of rows.
+   *
+   * This was a `useEffect` with a `live` flag, which is the correct hand-rolled
+   * answer to the race and still leaves three things undone: the request that
+   * lost the race carried on running, the rows of the *previous* layer stayed on
+   * screen under the new layer's title until the first page landed, and clicking
+   * a column header emptied the table for as long as the sort took.
+   */
+  const request = { limit: LIMIT, offset, order, descending, search: query };
+  const { data: page = null, error, isFetching } = useFeatures(layerId, request);
 
   /* a new layer is a new set of columns, so forget which ones were hidden */
   useEffect(() => {
@@ -134,8 +134,19 @@ export function AttributeTable({ layerId, title, focus, onSelect, onZoom, onClos
       <header>
         <b>{title}</b>
         <span className="muted small">
-          {page ? `${page.total.toLocaleString("en-US")} rows · ${page.fields.length} fields` : "loading"}
+          {page
+            ? `${page.total.toLocaleString("en-US")} rows · ${page.fields.length} fields`
+            : "loading"}
         </span>
+        {/*
+          The page that is on the screen while the next one is on its way is the
+          previous one, deliberately. Saying so is cheaper than blanking it.
+        */}
+        {isFetching && page && (
+          <span className="muted small" aria-live="polite">
+            updating…
+          </span>
+        )}
 
         <input
           className="tablesearch"
@@ -192,7 +203,9 @@ export function AttributeTable({ layerId, title, focus, onSelect, onZoom, onClos
         </div>
       )}
 
-      {error && <p className="error">{error}</p>}
+      {error && (
+        <p className="error">{error instanceof Error ? error.message : String(error)}</p>
+      )}
 
       <div className="tablewrap" ref={body} onMouseLeave={() => highlight(null, true)}>
         {page && (

@@ -1,10 +1,10 @@
+import type { QueryClient } from "@tanstack/react-query";
 import type { Geometry, LayerNode, MapProject } from "@alidade/core";
 import { nextColor, representativeColor, singleSymbol } from "@alidade/core";
 
 import type { RegisteredLayer } from "./api";
+import { fetchLayerDetail } from "./queries";
 import { uniqueId, walk } from "./tree";
-
-import { readLayer } from "./api";
 
 export interface Extent {
   west: number;
@@ -124,6 +124,7 @@ export function place(
   edit: (change: (draft: MapProject) => MapProject) => void,
   onAdded: (id: string) => void,
   onFlyTo: (extent: Extent) => void,
+  client: QueryClient,
 ): void {
   let placed = layer.id;
   edit((draft) => {
@@ -145,7 +146,7 @@ export function place(
    * highlighting is the only thing that needs it and it can wait a beat.
    */
   if (!layer.key) {
-    void readLayer(layer.id)
+    void fetchLayerDetail(client, layer.id)
       .then((full) => {
         if (!full.key) return;
         edit((draft) => {

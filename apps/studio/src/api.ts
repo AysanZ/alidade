@@ -13,6 +13,17 @@ export interface RegisteredLayer {
   extent: { west: number; south: number; east: number; north: number } | null;
 }
 
+/**
+ * Options every read takes.
+ *
+ * `signal` is the only one, and it is not optional in spirit: a request whose
+ * answer nobody is waiting for should stop, not merely be ignored on arrival.
+ * The query layer passes one to every read it owns.
+ */
+export interface ReadOptions {
+  signal?: AbortSignal;
+}
+
 async function json<T>(response: Response): Promise<T> {
   if (!response.ok) {
     if (response.status === 405 || response.status === 404) {
@@ -58,15 +69,17 @@ export interface FeaturePage {
   key: string | null;
 }
 
+export interface FeatureQuery {
+  limit?: number;
+  offset?: number;
+  order?: string;
+  descending?: boolean;
+  search?: string;
+}
+
 export async function readFeatures(
   id: string,
-  options: {
-    limit?: number;
-    offset?: number;
-    order?: string;
-    descending?: boolean;
-    search?: string;
-  } = {},
+  options: FeatureQuery & ReadOptions = {},
 ): Promise<FeaturePage> {
   const query = new URLSearchParams();
   if (options.limit) query.set("limit", String(options.limit));
@@ -74,7 +87,9 @@ export async function readFeatures(
   if (options.order) query.set("order", options.order);
   if (options.descending) query.set("descending", "true");
   if (options.search) query.set("search", options.search);
-  const body = await json<unknown>(await fetch(`/api/layers/${id}/features?${query}`));
+  const body = await json<unknown>(
+    await fetch(`/api/layers/${id}/features?${query}`, { signal: options.signal }),
+  );
   return normaliseFeaturePage(body);
 }
 
@@ -116,21 +131,24 @@ export function normaliseFeaturePage(body: unknown): FeaturePage {
 }
 
 /** One layer, with the key column the list endpoint is too busy to compute. */
-export async function readLayer(id: string): Promise<RegisteredLayer> {
-  return json<RegisteredLayer>(await fetch(`/api/layers/${id}`));
+export async function readLayer(id: string, options: ReadOptions = {}): Promise<RegisteredLayer> {
+  return json<RegisteredLayer>(await fetch(`/api/layers/${id}`, { signal: options.signal }));
 }
 
-export async function listLayers(): Promise<RegisteredLayer[]> {
-  const { layers } = await json<{ layers: RegisteredLayer[] }>(await fetch("/api/layers"));
+export async function listLayers(options: ReadOptions = {}): Promise<RegisteredLayer[]> {
+  const { layers } = await json<{ layers: RegisteredLayer[] }>(
+    await fetch("/api/layers", { signal: options.signal }),
+  );
   return layers;
 }
 
 export async function readCapabilities(
   url: string,
+  options: ReadOptions = {},
 ): Promise<WmsCapabilities & { url: string }> {
   const query = new URLSearchParams({ url });
   return json<WmsCapabilities & { url: string }>(
-    await fetch(`/api/services/wms/capabilities?${query}`),
+    await fetch(`/api/services/wms/capabilities?${query}`, { signal: options.signal }),
   );
 }
 
@@ -148,7 +166,13 @@ export interface FieldStats {
  * What one column actually contains, so a classification can be built from the
  * data rather than from a guess.
  */
-export async function readStats(id: string, field: string): Promise<FieldStats> {
+export async function readStats(
+  id: string,
+  field: string,
+  options: ReadOptions = {},
+): Promise<FieldStats> {
   const query = new URLSearchParams({ field });
-  return json<FieldStats>(await fetch(`/api/layers/${id}/stats?${query}`));
+  return json<FieldStats>(
+    await fetch(`/api/layers/${id}/stats?${query}`, { signal: options.signal }),
+  );
 }

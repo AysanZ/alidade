@@ -21,6 +21,7 @@ import { AttributeTable } from "./components/AttributeTable";
 import { LayerMenu, moveWithinSlot } from "./components/LayerMenu";
 import { BasemapGallery } from "./components/BasemapGallery";
 import { DrawPanel } from "./components/DrawPanel";
+import { FeatureTip, type Tip } from "./components/FeatureTip";
 import { Identify, type Identified } from "./components/Identify";
 import { Inspector } from "./components/Inspector";
 import { Legend } from "./components/Legend";
@@ -34,6 +35,7 @@ import { ScenePanel } from "./components/ScenePanel";
 import { TitleBar } from "./components/TitleBar";
 import { emptyProject, emptyStyle } from "./project";
 import { allLayers, bundleIdsOf, duplicateNode, findLayer, removeNode, withNode } from "./tree";
+import { featureLabel } from "./label";
 import { markerImageFor, registerMarkers } from "./markers";
 import { useDrawing } from "./useDrawing";
 import { useProject } from "./useProject";
@@ -82,6 +84,20 @@ export default function App() {
   const [hover, setHover] = useState<{ layer: string; properties: Record<string, unknown> } | null>(
     null,
   );
+  /*
+   * Where the tooltip goes, kept apart from what it says.
+   *
+   * The pointer moves sixty times a second and the feature under it changes
+   * perhaps twice; putting both in one piece of state made every frame look like
+   * a new hover, and a new hover writes a highlight to the document. This one
+   * re-renders, `hover` reconciles.
+   */
+  const [tipAt, setTipAt] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
 
   const drawing = useDrawing(project, edit);
 
@@ -198,13 +214,42 @@ export default function App() {
       return owner ? { owner, feature } : null;
     };
 
+    /** What `hover` is currently describing, so an unchanged feature is left alone. */
+    const hovering = { key: null as string | null };
+
+    const clearHover = () => {
+      if (hovering.key !== null) {
+        hovering.key = null;
+        setHover(null);
+      }
+      setTipAt(null);
+    };
+
     map.on("mousemove", (e: MapMouseEvent) => {
       setPointer([e.lngLat.lng, e.lngLat.lat]);
-      if (drawingNow.current) return;
+      if (drawingNow.current) return clearHover();
       const under = hit(e);
       map.getCanvas().style.cursor = under ? "pointer" : "";
-      setHover(under ? { layer: under.owner.id, properties: under.feature.properties ?? {} } : null);
+      if (!under) return clearHover();
+
+      const properties = (under.feature.properties ?? {}) as Record<string, unknown>;
+      const key = `${under.owner.id}\u0000${JSON.stringify(properties)}`;
+      if (hovering.key !== key) {
+        hovering.key = key;
+        setHover({ layer: under.owner.id, properties });
+      }
+      const canvas = map.getCanvas();
+      setTipAt({
+        x: e.point.x,
+        y: e.point.y,
+        width: canvas.clientWidth,
+        height: canvas.clientHeight,
+      });
     });
+
+    // Leaving the canvas is not a mousemove, so without this the tooltip and the
+    // highlight stayed behind on whatever was under the pointer as it left.
+    map.on("mouseout", clearHover);
 
     map.on("click", (e: MapMouseEvent) => {
       if (drawingNow.current) return onClick.current([e.lngLat.lng, e.lngLat.lat]);
@@ -408,6 +453,26 @@ export default function App() {
 
   const denominator = Math.round(denominatorAt(camera.zoom, camera.latitude));
 
+  /*
+   * The hover tooltip.
+   *
+   * Suppressed while the identify popup is open, because that panel is already
+   * showing this feature's attributes and a tooltip over it is noise, and while
+   * a drawing is in progress, when the pointer means "put a vertex here" rather
+   * than "what is this".
+   */
+  const hoverNode = hover ? findLayer(project, hover.layer) : undefined;
+  const hoverName = hover ? featureLabel(hoverNode, hover.properties) : null;
+  const tip: Tip | null =
+    hover && tipAt && hoverName && !found && !drawing.session.mode
+      ? {
+          name: hoverName,
+          layer: hoverNode?.name ?? hover.layer,
+          at: { x: tipAt.x, y: tipAt.y },
+          viewport: { width: tipAt.width, height: tipAt.height },
+        }
+      : null;
+
   const exportImage = () => {
     const map = mapRef.current;
     if (!map) return;
@@ -508,7 +573,21 @@ export default function App() {
         <Rail active={pane} onSelect={setPane} />
 
         <aside className="panel">
-          <div className="phead">{TITLES[pane]}</div>
+          {/*
+            The heading is fixed and the body scrolls, rather than the whole
+            panel scrolling under a sticky heading. With a long Appearance panel
+            open the two are indistinguishable until the panel is short, when a
+            sticky heading floats above nothing.
+          */}
+          <div className="phead">
+            <span className="cap">{TITLES[pane]}</span>
+            {pane === "layers" && (
+              <button className="add" onClick={() => setAdding(true)} title="Add data" aria-label="Add data">
+                +
+              </button>
+            )}
+          </div>
+          <div className="pbody">
           {pane === "layers" && (
             <LayerTree
               project={project}
@@ -548,6 +627,7 @@ export default function App() {
           {pane === "project" && (
             <ProjectPanel project={project} log={log} onExportImage={exportImage} />
           )}
+          </div>
         </aside>
 
         <div className="mapwrap">
@@ -578,6 +658,9 @@ export default function App() {
             </div>
           )}
           {project.chrome.legend && <Legend project={project} />}
+          {tip && (
+            <FeatureTip name={tip.name} layer={tip.layer} at={tip.at} viewport={tip.viewport} />
+          )}
           {found && (
             <Identify
               found={found}

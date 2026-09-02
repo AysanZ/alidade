@@ -51,7 +51,7 @@ export function ScenePanel({
   return (
     <div className="pane">
       <Section title="Camera">
-        <div className="row buttons">
+        <div className="row buttons choice">
           {VIEWS.map((v) => (
             <button
               key={v.id}
@@ -144,7 +144,7 @@ export function ScenePanel({
       </Section>
 
       <Section title="Projection">
-        <div className="row buttons">
+        <div className="row buttons choice">
           {PROJECTIONS.map((p) => (
             <button
               key={p.id}
@@ -408,7 +408,7 @@ export function ScenePanel({
       </Section>
 
       <Section title="Lighting">
-        <div className="row buttons">
+        <div className="row buttons choice">
           {([
             ["day", "Day"],
             ["night", "Night"],

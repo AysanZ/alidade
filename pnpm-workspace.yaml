@@ -3,8 +3,10 @@ packages:
   - "apps/*"
 
 allowBuilds:
-  esbuild: set this to true or false
+  esbuild: true
 
 # pnpm 10 and later read this here rather than from package.json.
+# esbuild ships a platform binary and its install script is what puts it in
+# place, so it has to be allowed to run or vite cannot start.
 onlyBuiltDependencies:
   - esbuild

@@ -36,7 +36,11 @@ touching your disk. Or point Alidade at a WMS and pick a layer, style and format
 from what the server advertises in GetCapabilities.
 
 Nothing here needs an API key. The basemaps are CARTO and Esri tiles and the
-elevation is Mapzen terrarium, so the demo stays up without a billing account.
+elevation is Mapzen terrarium, so it stays up without a billing account.
+
+The database ships empty. There is no seeded demo layer: one cannot be deleted
+from the studio, it comes back on every fresh volume, and it makes an install
+that has nothing in it look like it already has data.
 
 ## Run it
 
@@ -55,28 +59,35 @@ pnpm dev
 Postgres is published on host port **5433**, because 5432 is usually already taken:
 
 ```bash
-psql postgresql://alidade:change_me@localhost:5433/alidade -c 'select count(*) from wards_1400;'
+psql postgresql://alidade:change_me@localhost:5433/alidade -c 'select id, title from layers;'
 ```
 
 - Studio: <http://localhost:5173>
 - API health: <http://localhost:8000/api/health>
-- A tile: <http://localhost:8000/api/tiles/wards/10/658/403.mvt>
+- A tile, once you have loaded something: <http://localhost:8000/api/tiles/{layer}/{z}/{x}/{y}.mvt>
 
-The database runs everything in `data/init/` on first start, which
-creates 42 demo wards over Tehran. To load your own data instead:
+The database runs everything in `data/init/` on first start, which creates the
+PostGIS extension and the layer registry and stops there. Get data in by dropping
+a file on the **Add data** dialog, pasting a link, or pointing at a WMS. To load
+straight into PostGIS instead:
 
 ```bash
 ./data/seed.sh wards.gpkg
 ```
 
-Or drop a file on the **Add data** dialog, which does the same thing over HTTP.
+Earlier versions seeded 42 demo wards over Tehran. `data/init/` only runs on a
+brand new volume, so a database created before that changed still has them:
+
+```bash
+psql postgresql://alidade:change_me@localhost:5433/alidade -f data/drop-demo.sql
+```
 
 ## What is here
 
 | Path | Contents |
 |---|---|
-| `data/init/` | Schema and seed dataset, run once on first start |
-| `data/seed.sh` | ogr2ogr loader for real data |
+| `data/init/` | Schema and layer registry, run once on first start |
+| `data/seed.sh` | ogr2ogr loader, for data you would rather not upload |
 | `services/api/` | FastAPI: tiles today, ingest and features next |
 | `apps/studio/` | React client |
 | `deploy/` | Compose stack and Nginx |
@@ -91,8 +102,9 @@ not a published package.
 
 ```bash
 pnpm install
-pnpm test        # 137 tests, Node only: no browser, no WebGL
-pnpm typecheck
+pnpm test        # 236 tests, Node only: no browser, no WebGL
+pnpm typecheck   # every package and the studio
+pnpm build
 ```
 
 Core tests assert on the operation array the reconciler emits for a given pair of

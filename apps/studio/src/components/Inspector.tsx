@@ -34,8 +34,12 @@ export function Inspector({
   if (!layer) {
     return (
       <aside className="inspector">
-        <div className="phead">Nothing selected</div>
-        <p className="hint">Pick a layer in the table of contents to style it.</p>
+        <div className="phead">
+          <span className="cap">Nothing selected</span>
+        </div>
+        <div className="pbody">
+          <p className="hint">Pick a layer in the table of contents to style it.</p>
+        </div>
       </aside>
     );
   }
@@ -50,10 +54,13 @@ export function Inspector({
   return (
     <aside className="inspector">
       <div className="phead">
-        {layer.name}
+        <span className="cap" title={layer.name}>
+          {layer.name}
+        </span>
         <span className="tag">{layer.geometry}</span>
       </div>
 
+      <div className="pbody">
       {hidden === "scale" && (
         <p className="warn">
           Not drawn at this scale. The layer is set to appear between 1:
@@ -158,6 +165,7 @@ export function Inspector({
           )}
         </Section>
       )}
+      </div>
     </aside>
   );
 }

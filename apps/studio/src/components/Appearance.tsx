@@ -17,7 +17,8 @@ import {
 } from "@alidade/core";
 import { MARKER_GLYPHS } from "../markers";
 
-import { readStats, type FieldStats } from "../api";
+import type { FieldStats } from "../api";
+import { useFieldStats } from "../queries";
 import { Field, Section, Switch } from "./Field";
 
 interface Props {
@@ -37,8 +38,6 @@ type Kind = Symbology["kind"];
  */
 export function Appearance({ layer, edit }: Props) {
   const [ramp, setRamp] = useState("Blue");
-  const [stats, setStats] = useState<FieldStats | null>(null);
-  const [statsError, setStatsError] = useState<string | null>(null);
   const fields = layer.metadata?.fields ?? [];
   const kind = layer.symbology.kind;
   const field = "field" in layer.symbology ? layer.symbology.field : null;
@@ -48,25 +47,18 @@ export function Appearance({ layer, edit }: Props) {
    * database. Classifying without them is guessing: breaks of 25, 50 and 75 over
    * a column that runs 0 to 10 put every feature in the first class, so the map
    * went one flat colour and the classification looked broken rather than wrong.
+   *
+   * It is a scan of the table, so it is cached for minutes rather than re-read
+   * every time this panel is opened.
    */
-  useEffect(() => {
-    if (!field || (kind !== "graduated" && kind !== "categorized")) {
-      setStats(null);
-      return;
-    }
-    let live = true;
-    setStatsError(null);
-    readStats(layer.source, field)
-      .then((result) => live && setStats(result))
-      .catch((error: unknown) => {
-        if (!live) return;
-        setStats(null);
-        setStatsError(error instanceof Error ? error.message : String(error));
-      });
-    return () => {
-      live = false;
-    };
-  }, [layer.source, field, kind]);
+  const classified = kind === "graduated" || kind === "categorized";
+  const query = useFieldStats(classified ? layer.source : null, classified ? field : null);
+  const stats: FieldStats | null = query.data ?? null;
+  const statsError = query.error
+    ? query.error instanceof Error
+      ? query.error.message
+      : String(query.error)
+    : null;
 
   /** Build the classification the column actually calls for. */
   const classify = useCallback(

@@ -1,4 +1,4 @@
-import { defaultAnnotations, defaultChrome, type LayerNode, type MapProject } from "@alidade/core";
+import { defaultAnnotations, defaultChrome, type MapProject } from "@alidade/core";
 
 import { BASEMAPS } from "./basemaps";
 
@@ -7,8 +7,8 @@ import { BASEMAPS } from "./basemaps";
  *
  * It used to open with a Tehran density map hard-coded into it, title and all,
  * which made a general purpose tool look like one specific map that happened to
- * let you add layers to it. The project now starts empty and unnamed; the demo
- * data is something you can load, not something you have to remove.
+ * let you add layers to it. The project starts empty and unnamed, and the
+ * database ships empty to match: every layer on the map is one you put there.
  */
 export const emptyProject: MapProject = {
   schema: 3,
@@ -32,44 +32,6 @@ export const emptyProject: MapProject = {
     },
   },
   tree: [],
-};
-
-/**
- * The layer the shipped database is seeded with.
- *
- * Offered rather than assumed, so an empty database is not a broken first run
- * and a full one is not stuck with somebody else's map.
- */
-export const DEMO_LAYER: LayerNode = {
-  type: "layer",
-  id: "wards",
-  name: "Tehran population density",
-  slot: "data",
-  source: "wards",
-  sourceLayer: "wards",
-  geometry: "polygon",
-  visible: true,
-  opacity: 1,
-  scale: { minDenominator: 2000, maxDenominator: 2000000 },
-  symbology: {
-    kind: "graduated",
-    field: "density",
-    breaks: [900, 2100, 3900, 6200],
-    colors: ["#0f2438", "#1b4674", "#2e6fe0", "#6fa8ff", "#bbdaff"],
-    noDataColor: "#3a3a40",
-    stroke: { color: "#0a0a0b", width: 0.6 },
-  },
-  metadata: {
-    sourceCrs: "EPSG:32639",
-    fields: ["ward_id", "name", "pop_2024", "area_km2", "density", "updated_at"],
-    extent: { west: 51.2, south: 35.6, east: 51.6, north: 35.83 },
-  },
-};
-
-export const DEMO_SOURCE = {
-  type: "vector" as const,
-  tiles: [`${location.origin}/api/tiles/wards/{z}/{x}/{y}.mvt`],
-  maxzoom: 16,
 };
 
 export const HILLSHADE = {

@@ -11,8 +11,8 @@ const NE = "https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0";
  * Open datasets, importable with one click.
  *
  * The catalogue lists what is already in your database, which on a fresh install
- * is one demo layer. This is the other half of that question: something to look
- * at while you work out what the tool does. Everything here is public domain or
+ * is nothing. This is the other half of that question: something to look at
+ * while you work out what the tool does. Everything here is public domain or
  * open licensed and needs no key, which is the same rule the basemaps follow — a
  * sample list that stops working when a trial ends is worse than no sample list.
  *

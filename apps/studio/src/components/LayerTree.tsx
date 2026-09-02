@@ -34,6 +34,7 @@ interface Props {
 export function LayerTree({ project, selected, onSelect, edit, onMenu, onAdd, onFlyTo }: Props) {
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const slotOf = (node: TreeNode): Slot => {
     if (node.type === "layer") return node.slot;
@@ -70,24 +71,39 @@ export function LayerTree({ project, selected, onSelect, edit, onMenu, onAdd, on
     setOver(null);
   };
 
+  /*
+   * Searching hides layers rather than flattening the tree, so a match inside a
+   * group keeps the group it belongs to. A group whose name matches keeps all of
+   * its children, because that is what asking for the group means.
+   */
+  const matches = (node: TreeNode): boolean => {
+    const term = search.trim().toLowerCase();
+    if (!term) return true;
+    if (node.name.toLowerCase().includes(term)) return true;
+    return node.type === "group" && node.children.some(matches);
+  };
+
   return (
     <div className="tree">
-      <button className="addlayer" onClick={onAdd}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
-          <path d="M12 5.5v13M5.5 12h13" />
-        </svg>
-        Add layer
-      </button>
+      <div className="treesearch">
+        <input
+          type="text"
+          value={search}
+          placeholder="Search layers"
+          aria-label="Search layers"
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
 
       {SLOTS.map((slot) => {
-        const nodes = project.tree.filter((n) => slotOf(n) === slot.id);
+        const nodes = project.tree.filter((n) => slotOf(n) === slot.id).filter(matches);
         if (nodes.length === 0) return null;
         return (
           <div key={slot.id}>
             <div className="slot" title={slot.hint}>
-              <span>{slot.label}</span>
+              <span className="cap">{slot.label}</span>
               <i />
-              <em>{nodes.length}</em>
+              <span className="tag">{nodes.length}</span>
             </div>
             {nodes.map((node) => (
               <Node
@@ -110,12 +126,13 @@ export function LayerTree({ project, selected, onSelect, edit, onMenu, onAdd, on
       })}
 
       <div className="slot">
-        <span>Basemap</span>
+        <span className="cap">Basemap</span>
         <i />
       </div>
       <div className="node system">
         <span className="swatch" style={{ background: project.basemap.background }} />
         <span className="name">{project.basemap.name}</span>
+        <span className="tag">locked</span>
       </div>
     </div>
   );
@@ -202,12 +219,16 @@ function Node(props: NodeProps) {
           <span className="swatch" style={{ background: swatch(node) }} />
         )}
 
-        <span className="body">
-          <span className="name" title={node.name}>
-            {node.name}
-          </span>
-          <span className="sub">{describe(node)}</span>
+        <span className="name" title={`${node.name} · ${describe(node)}`}>
+          {node.name}
         </span>
+
+        {/*
+          What the two-line row used to spell out under the name. One row is 26px
+          rather than 34, which is eight more layers on the screen; the detail
+          that will not fit is on the row's own tooltip and in the inspector.
+        */}
+        <span className="tag">{badge(node)}</span>
 
         <button
           className="more"
@@ -229,7 +250,25 @@ function Node(props: NodeProps) {
   );
 }
 
-/** The one line under the name that says what this layer actually is. */
+/**
+ * The short tag at the end of the row.
+ *
+ * Space for about six characters, so it carries the one fact that changes what
+ * you would do next: how many layers a group holds, that a layer is filtered or
+ * classified, or failing that what shape it is.
+ */
+function badge(node: TreeNode): string {
+  if (node.type === "group") return String(node.children.length);
+  if (node.filter) return "filter";
+  const s = node.symbology;
+  if (s.kind === "graduated") return `${s.breaks.length + 1} cls`;
+  if (s.kind === "categorized") return `${s.categories.length} cat`;
+  if (s.kind === "extrusion") return "ext";
+  if (node.opacity < 1) return `${Math.round(node.opacity * 100)}%`;
+  return node.geometry === "polygon" ? "area" : node.geometry;
+}
+
+/** The full description, used as the row's tooltip and nowhere else. */
 function describe(node: TreeNode): string {
   if (node.type === "group") return `${node.children.length} layers`;
   const parts: string[] = [node.geometry];

@@ -98,94 +98,269 @@ input, select, textarea { font: inherit; color: inherit; }
   padding-block: 6px;
 }
 .rail button {
-  width: 36px;
-  height: 34px;
+  position: relative;
+  width: 34px;
+  height: 32px;
   display: grid;
   place-items: center;
-  border-radius: 4px;
-  color: #7d7d85;
+  border-radius: 3px;
+  color: var(--txt-3);
 }
-/* Bigger than it looks like it needs to be. At 16px these read as smudges. */
-.rail svg { width: 18px; height: 18px; }
+.rail svg { width: 16px; height: 16px; }
 .rail button:hover { background: var(--raise); color: var(--txt); }
 .rail button.on { background: rgba(76, 141, 255, 0.13); color: var(--accent); }
+/*
+ * A tinted square says "hovered" as readily as it says "open". The bar in the
+ * margin is the part that only ever means the pane behind it is the one showing.
+ */
+.rail button.on::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: -6px;
+  top: 7px;
+  bottom: 7px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
 
 /* panels */
 .panel, .inspector {
   background: var(--panel);
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   min-width: 0;
 }
 .panel { border-inline-end: 1px solid var(--line); }
 .inspector { border-inline-start: 1px solid var(--line); }
+/* The heading is fixed and the body scrolls under it. */
+.pbody { flex: 1; min-height: 0; overflow: auto; }
 .phead {
-  position: sticky;
-  top: 0;
-  z-index: 1;
   display: flex;
   align-items: center;
   gap: 8px;
   height: 30px;
+  flex: none;
   padding-inline: 11px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
   color: var(--txt-2);
 }
+.phead .cap { color: var(--txt-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .phead .tag { margin-inline-start: auto; text-transform: none; letter-spacing: 0; }
-.sect { border-bottom: 1px solid var(--line); padding-bottom: 5px; }
-.sect h2 {
-  margin: 0;
-  padding: 8px 11px 3px;
+
+/* Small caps headings, the one typographic device the whole sidebar shares. */
+.cap {
+  font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", sans-serif;
   font-size: 9.5px;
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--txt-3);
 }
+
+/* A section folds, so a four-screen panel can be got past. */
+.sect { border-bottom: 1px solid var(--line-soft); }
+.shead {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 7px 11px;
+  text-align: start;
+}
+.shead:hover { background: var(--raise); }
+.shead .chev { width: 9px; height: 9px; flex: none; color: var(--txt-3); transition: transform 0.15s; }
+.shead .tag { margin-inline-start: auto; }
+.sect.closed .chev { transform: rotate(-90deg); }
+.sect.closed .sbody { display: none; }
+.sbody { padding-bottom: 7px; }
+
 .row {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 5px 11px;
+  gap: 8px;
+  min-height: 24px;
+  padding: 3px 11px;
   color: var(--txt-2);
 }
-.row .k { width: 78px; flex: none; }
+.row .k { width: 88px; flex: none; font-size: 11px; }
 /* A flex item will not shrink below its content unless it is allowed to, and a
    select holding a long option name pushed the whole row past the panel edge. */
 .row select, .row .text, .row input { min-width: 0; }
-.row.check { cursor: pointer; }
 .row input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
-.row b {
+.row b, .row .num {
   font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 10.5px;
-  color: var(--txt);
-  min-width: 44px;
+  color: var(--txt-2);
+  min-width: 46px;
   text-align: end;
+  font-weight: 400;
 }
 .row select {
   flex: 1;
-  height: 22px;
+  height: 24px;
   background: var(--void);
   color: var(--txt);
   border: 1px solid var(--line);
-  border-radius: 2px;
-  font-size: 11px;
+  border-radius: 3px;
+  font-size: 11.5px;
+  /*
+   * The browser's own arrow is drawn in the platform's colours, which on a dark
+   * panel is a light grey lozenge. Two gradients make a small chevron that
+   * belongs to this palette.
+   */
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #66666d 50%),
+    linear-gradient(135deg, #66666d 50%, transparent 50%);
+  background-position: calc(100% - 12px) 10px, calc(100% - 8px) 10px;
+  background-size: 4px 4px;
+  background-repeat: no-repeat;
+  padding-inline: 7px 22px;
+  cursor: pointer;
 }
-.row.buttons { gap: 5px; }
+.row select:hover { border-color: #3a3a40; }
+.row select:focus { border-color: var(--accent); outline: none; }
+
+/* A checkbox row. The whole label is the target, not the 12px box. */
+.chk {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 11px;
+  font-size: 11.5px;
+  color: var(--txt-2);
+  cursor: pointer;
+}
+.chk:hover { color: var(--txt); }
+.chk input {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  flex: none;
+  position: relative;
+  border: 1px solid #34343a;
+  border-radius: 2px;
+  background: var(--void);
+  cursor: pointer;
+}
+.chk input:checked { background: var(--accent); border-color: var(--accent); }
+.chk input:checked::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: 3.5px;
+  top: 1px;
+  width: 3px;
+  height: 6px;
+  border: solid #06101f;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+
+/* One of a few choices, all of them visible. */
+.seg {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 1px;
+  padding: 1px;
+  background: var(--void);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+.seg button {
+  flex: 1;
+  height: 20px;
+  border-radius: 2px;
+  font-size: 10.5px;
+  color: var(--txt-3);
+  white-space: nowrap;
+}
+.seg button:hover { color: var(--txt); }
+.seg button.on { background: var(--raise-2); color: var(--txt); box-shadow: inset 0 0 0 1px #2e2e33; }
+
+.row.buttons { gap: 6px; }
 .row button {
   flex: 1;
-  height: 22px;
+  height: 24px;
   border: 1px solid var(--line);
   background: var(--raise);
   color: var(--txt-2);
-  border-radius: 2px;
-  font-size: 10.5px;
+  border-radius: 3px;
+  font-size: 11px;
 }
+.row button:hover { background: var(--raise-2); color: var(--txt); border-color: #3a3a40; }
 .row button.on { border-color: var(--accent); color: var(--txt); }
+
+/*
+ * A row of buttons where exactly one is true at a time — a view mode, a
+ * projection — is a segmented control, not three buttons. Three separate boxes
+ * read as three things you can do; one box with a lit section reads as one
+ * setting with three positions, which is what these are.
+ */
+.row.buttons.choice {
+  gap: 1px;
+  padding-inline: 11px;
+}
+.row.buttons.choice > * {
+  margin: 0;
+  border-radius: 0;
+  border-inline-end-width: 0;
+}
+.row.buttons.choice > *:first-child { border-start-start-radius: 3px; border-end-start-radius: 3px; }
+.row.buttons.choice > *:last-child {
+  border-inline-end-width: 1px;
+  border-start-end-radius: 3px;
+  border-end-end-radius: 3px;
+}
+.row.buttons.choice button.on {
+  background: var(--raise-2);
+  border-color: var(--accent);
+  /* The lit section owns the seam with its neighbour, or the accent is clipped. */
+  border-inline-end-width: 1px;
+  margin-inline-end: -1px;
+  position: relative;
+  z-index: 1;
+}
+
+/*
+ * Ranges, drawn rather than inherited. `accent-color` gives the platform's own
+ * slider, which is a fat light-grey track on a dark panel.
+ */
+.row input[type="range"] {
+  appearance: none;
+  height: 16px;
+  background: none;
+  cursor: pointer;
+  accent-color: auto;
+}
+.row input[type="range"]::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 2px;
+  background: #2a2a2e;
+}
+.row input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  margin-top: -4.5px;
+  border-radius: 50%;
+  background: var(--txt);
+  border: 2px solid var(--panel);
+  box-shadow: 0 0 0 1px #34343a;
+}
+.row input[type="range"]:hover::-webkit-slider-thumb { background: var(--accent); }
+.row input[type="range"]::-moz-range-track { height: 2px; border-radius: 2px; background: #2a2a2e; }
+.row input[type="range"]::-moz-range-thumb {
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--panel);
+  border-radius: 50%;
+  background: var(--txt);
+}
 
 /* layer tree */
 .slot {
@@ -500,7 +675,6 @@ input, select, textarea { font: inherit; color: inherit; }
 
 /* attribute dock */
 .app:has(.dock) { grid-template-rows: 38px 1fr auto 25px; }
-.app.presenting:has(.dock) { grid-template-rows: 0 1fr auto 0; }
 .dock {
   display: flex;
   flex-direction: column;
@@ -697,8 +871,18 @@ input, select, textarea { font: inherit; color: inherit; }
 
 /* ------------------------------------------------------------ presentation */
 
-/* Everything but the map gets out of the way, and comes back on the same key. */
-.app.presenting { grid-template-rows: 0 1fr 0; }
+/*
+ * Everything but the map gets out of the way, and comes back on the same key.
+ *
+ * The row template is a single track rather than a row per hidden thing. It used
+ * to be `0 1fr 0`, which looks right and is not: `display: none` takes an
+ * element out of the grid altogether, so with the title bar gone the map became
+ * the *first* item and was auto-placed into the leading zero-height track. The
+ * map was 1280 wide and 0 tall, which on a black background is indistinguishable
+ * from presentation mode doing nothing at all. One track cannot be picked wrong.
+ */
+.app.presenting,
+.app.presenting:has(.dock) { grid-template-rows: minmax(0, 1fr); }
 .app.presenting .titlebar,
 .app.presenting .status,
 .app.presenting .rail,
@@ -898,10 +1082,16 @@ input.doc:focus { border-color: var(--accent); color: var(--txt); outline: none;
 /*
  * Hiding the panels was not enough: `.middle` is a grid with fixed columns, so
  * `display: none` on the children left four tracks exactly where they were and
- * the map never grew. The tracks have to collapse too.
+ * the map never grew. The tracks have to collapse too, and the map is placed
+ * rather than left to auto-placement for the same reason the rows are.
  */
-.app.presenting .middle { grid-template-columns: minmax(0, 1fr); }
-.app.presenting .mapwrap { grid-column: 1; }
+.app.presenting .middle {
+  grid-row: 1;
+  grid-template-columns: minmax(0, 1fr);
+  /* Nothing above or below it any more, so the rules are two pixels of nothing. */
+  border-block: 0;
+}
+.app.presenting .mapwrap { grid-column: 1; min-height: 0; }
 .app.presenting .dock { display: none; }
 
 /* The catalogue lives in a 272px sidebar, so nothing in it may run off the end. */
@@ -1028,126 +1218,122 @@ input.doc:focus { border-color: var(--accent); color: var(--txt); outline: none;
 /* ------------------------------------------------- table of contents, rebuilt */
 
 /*
- * The first version was eleven pixel rows with a swatch the size of a full stop
- * and an add button that was a bare `+` in a corner. A table of contents is the
- * control surface of a GIS; it can afford the space.
+ * The row was two lines and 34px tall, with the geometry and the class count
+ * spelled out under the name. It read well and it fitted eight layers on a
+ * screen. The mockup's row is one line and 26px, which fits eleven, and the
+ * detail it drops is on the row's tooltip and in the inspector — both a
+ * shorter reach than scrolling.
  */
-.addlayer {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  width: calc(100% - 22px);
-  margin: 10px 11px;
-  padding: 7px 0;
+
+.treesearch { padding: 8px 11px 4px; }
+.treesearch input {
+  width: 100%;
+  height: 24px;
+  padding-inline: 7px;
+  background: var(--void);
   border: 1px solid var(--line);
-  border-radius: 4px;
-  color: var(--txt-2);
-  font-size: 11.5px;
-  transition: border-color 0.12s, color 0.12s, background 0.12s;
-}
-.addlayer svg { width: 14px; height: 14px; }
-.addlayer:hover {
-  border-color: var(--accent);
+  border-radius: 3px;
   color: var(--txt);
-  background: rgba(76, 141, 255, 0.08);
+  font-size: 11.5px;
 }
+.treesearch input:hover { border-color: #3a3a40; }
+.treesearch input:focus { border-color: var(--accent); outline: none; }
 
 .slot {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 11px 4px;
-  font-size: 9.5px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--txt-3);
+  padding: 8px 11px 4px;
+  /* The heading stays put while its own layers scroll past underneath it. */
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--panel);
 }
-.slot em {
-  font-style: normal;
-  letter-spacing: 0;
-  font-size: 10px;
-  color: var(--txt-3);
-}
+.slot .cap { white-space: nowrap; }
+.slot i { flex: 1; height: 1px; background: var(--line); display: block; }
 
 .node {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 9px 6px 0;
-  min-height: 34px;
+  gap: 6px;
+  height: 26px;
+  padding-inline: 8px;
+  color: var(--txt-2);
   cursor: pointer;
+  user-select: none;
   border-inline-start: 2px solid transparent;
 }
-.node .grip {
-  color: #34343a;
-  font-size: 11px;
-  line-height: 1;
-  cursor: grab;
-  flex: none;
-  letter-spacing: -1px;
+.node:hover { background: var(--raise); }
+.node.on {
+  background: rgba(76, 141, 255, 0.13);
+  color: var(--txt);
+  border-inline-start-color: var(--accent);
 }
-.node:hover .grip { color: var(--txt-3); }
 .node.lifting { opacity: 0.4; }
 .node.target { box-shadow: inset 0 2px 0 var(--accent); }
 
-.node .eye {
-  width: 17px;
-  height: 17px;
+.node .grip {
+  width: 9px;
   flex: none;
-  color: var(--txt-3);
+  color: #3a3a40;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: -1px;
+  cursor: grab;
+}
+.node:hover .grip { color: var(--txt-3); }
+
+.node .eye {
+  width: 15px;
+  height: 15px;
+  flex: none;
   display: grid;
   place-items: center;
+  color: var(--txt-3);
 }
-.node .eye svg { width: 15px; height: 15px; }
+.node .eye svg { width: 12px; height: 12px; }
 .node.on .eye { color: var(--accent); }
 .node.off .eye { color: #3a3a40; }
 
 .node .swatch {
-  width: 16px;
-  height: 16px;
-  border-radius: 3px;
+  width: 14px;
+  height: 14px;
   flex: none;
+  border-radius: 2px;
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
-.node .swatch.folder {
-  border: 1px solid var(--txt-3);
-  background: none;
-  border-radius: 2px;
-}
-
-.node .body { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 1px; }
-.node .name {
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.node .sub {
-  font-size: 9.5px;
-  color: var(--txt-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.node.off .name { color: var(--txt-3); text-decoration: none; }
+.node .swatch.folder { border: 1px solid var(--txt-3); background: none; }
 .node.off .swatch { filter: grayscale(1); opacity: 0.4; }
-.node.on {
-  background: rgba(76, 141, 255, 0.1);
-  border-inline-start-color: var(--accent);
+
+.node .name {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.node.system { cursor: default; min-height: 30px; }
-.node.system .grip { visibility: hidden; }
+.node.off .name { color: var(--txt-3); text-decoration: line-through; text-decoration-color: #3a3a40; }
+
+/* The tag is reference, not decoration, so it fades rather than competing. */
+.node .tag { flex: none; opacity: 0.75; }
+.node:hover .tag, .node.on .tag { opacity: 1; }
 
 .node .more {
-  width: 20px;
-  height: 20px;
-  border-radius: 3px;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border-radius: 2px;
   color: var(--txt-3);
   opacity: 0;
-  flex: none;
+  line-height: 1;
 }
 .node:hover .more, .node.on .more { opacity: 1; }
+.node .more:hover { background: var(--raise-2); color: var(--txt); }
+
+.node.system { cursor: default; }
+.node.system .grip { visibility: hidden; }
 
 /* ---------------------------------------------------------------- markers */
 
@@ -1196,3 +1382,46 @@ input.doc:focus { border-color: var(--accent); color: var(--txt); outline: none;
 /* The open data tab is a long list, so its sections need breathing room. */
 .mbody .sect { border-bottom: 0; padding-bottom: 0; margin-bottom: 6px; }
 .mbody .picker { max-height: none; }
+
+/* ------------------------------------------------------------ feature tip */
+
+/*
+ * The name of the feature under the pointer.
+ *
+ * `pointer-events: none` is the whole trick: a box that follows the cursor and
+ * can be hit is a box the cursor is immediately hovering instead of the map, so
+ * the feature underneath un-hovers, the tooltip disappears, the feature hovers
+ * again, and the thing flickers at frame rate.
+ */
+.featuretip {
+  position: absolute;
+  z-index: 7;
+  pointer-events: none;
+  max-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: rgba(10, 10, 11, 0.94);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+.featuretip b {
+  font-weight: 500;
+  font-size: 11.5px;
+  color: var(--txt);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.featuretip span {
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--txt-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

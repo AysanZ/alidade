@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { MapProject, WmsLayerChoice } from "@alidade/core";
 import { wmsSource } from "@alidade/core";
 
-import { addFromUrl, readCapabilities, uploadFile, type RegisteredLayer } from "../api";
+import type { RegisteredLayer } from "../api";
+import { useCapabilities, useImportLayer } from "../queries";
 import { place, type Extent } from "../layers";
 import { uniqueId } from "../tree";
 import { SAMPLES, SAMPLE_GROUPS } from "../samples";
@@ -75,13 +77,16 @@ function FileTab({ edit, onClose, onAdded, onFlyTo }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<RegisteredLayer | null>(null);
 
+  const client = useQueryClient();
+  const { upload } = useImportLayer();
+
   const send = async (file: File) => {
     setBusy(true);
     setError(null);
     try {
-      const layer = await uploadFile(file);
+      const layer = await upload.mutateAsync(file);
       setDone(layer);
-      place(layer, edit, onAdded, onFlyTo);
+      place(layer, edit, onAdded, onFlyTo, client);
       setTimeout(onClose, 900);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -160,12 +165,15 @@ function SamplesTab({ edit, onAdded, onFlyTo }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string[]>([]);
 
+  const client = useQueryClient();
+  const { fromUrl } = useImportLayer();
+
   const bring = async (name: string, url: string) => {
     setBusy(url);
     setError(null);
     try {
-      const layer = await addFromUrl(url, `${name}.geojson`);
-      place(layer, edit, onAdded, onFlyTo);
+      const layer = await fromUrl.mutateAsync({ url, name: `${name}.geojson` });
+      place(layer, edit, onAdded, onFlyTo, client);
       setDone((previous) => [...previous, url]);
     } catch (e) {
       setError(`${name}: ${e instanceof Error ? e.message : String(e)}`);
@@ -214,13 +222,16 @@ function UrlTab({ edit, onClose, onAdded, onFlyTo }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<RegisteredLayer | null>(null);
 
+  const client = useQueryClient();
+  const { fromUrl } = useImportLayer();
+
   const send = async () => {
     setBusy(true);
     setError(null);
     try {
-      const layer = await addFromUrl(url);
+      const layer = await fromUrl.mutateAsync({ url });
       setDone(layer);
-      place(layer, edit, onAdded, onFlyTo);
+      place(layer, edit, onAdded, onFlyTo, client);
       setTimeout(onClose, 900);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -254,24 +265,36 @@ function UrlTab({ edit, onClose, onAdded, onFlyTo }: Props) {
 
 function WmsTab({ edit, onClose, onAdded }: Props) {
   const [url, setUrl] = useState("https://ows.terrestris.de/osm/service");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [server, setServer] = useState<{ url: string; version: string; formats: string[]; layers: WmsLayerChoice[] } | null>(null);
+  /*
+   * The url that has been submitted, which is not the url in the box. Typing is
+   * not asking: a GetCapabilities document is large and the server is somebody
+   * else's, so it is fetched when Connect is pressed and then cached, which
+   * makes going back to a server you already looked at instant.
+   */
+  const [asked, setAsked] = useState<string | null>(null);
   const [chosen, setChosen] = useState<WmsLayerChoice | null>(null);
+  const [picked, setPicked] = useState(false);
 
-  const connect = async () => {
-    setBusy(true);
-    setError(null);
-    setServer(null);
-    try {
-      const described = await readCapabilities(url);
-      setServer(described);
-      setChosen(described.layers[0] ?? null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
+  const capabilities = useCapabilities(asked);
+  const server = capabilities.data ?? null;
+  const busy = capabilities.isFetching;
+  const error = capabilities.error
+    ? capabilities.error instanceof Error
+      ? capabilities.error.message
+      : String(capabilities.error)
+    : null;
+
+  /* The first layer the server offers, until the user says otherwise. */
+  if (server && !picked && chosen?.name !== server.layers[0]?.name) {
+    setChosen(server.layers[0] ?? null);
+    setPicked(true);
+  }
+
+  const connect = () => {
+    setPicked(false);
+    setChosen(null);
+    setAsked(url);
+    if (asked === url) void capabilities.refetch();
   };
 
   const add = () => {

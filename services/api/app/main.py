@@ -44,8 +44,13 @@ async def unusable_name(request: Request, error: ValueError) -> JSONResponse:
 
 @app.get("/api/health")
 async def health() -> dict:
+    """
+    Whether the API can reach PostGIS, and how much is registered.
+
+    It used to count a seeded demo table by name, which made health fail with a
+    500 on any database that did not happen to have that one table in it.
+    """
     async with pool().acquire() as conn:
         version = await conn.fetchval("SELECT postgis_version()")
-        wards = await conn.fetchval("SELECT count(*) FROM wards_1400")
         registered = await conn.fetchval("SELECT count(*) FROM layers")
-    return {"status": "ok", "postgis": version, "wards": wards, "layers": registered}
+    return {"status": "ok", "postgis": version, "layers": registered}
