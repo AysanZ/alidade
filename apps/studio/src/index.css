@@ -162,6 +162,24 @@ input, select, textarea { font: inherit; color: inherit; }
 
 /* A section folds, so a four-screen panel can be got past. */
 .sect { border-bottom: 1px solid var(--line-soft); }
+/*
+ * A plain heading inside a section, for the few that do not fold.
+ *
+ * When sections were rebuilt around `.shead` this rule went with the old ones,
+ * and every `h2` still in the markup fell back to the browser's default — 1.5em
+ * and bold, which is how "Canvas" ended up twice the size of the panel title
+ * above it.
+ */
+.sect h2 {
+  margin: 0;
+  padding: 8px 11px 4px;
+  font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", sans-serif;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--txt-3);
+}
 .shead {
   display: flex;
   align-items: center;
@@ -473,17 +491,26 @@ input, select, textarea { font: inherit; color: inherit; }
 .status > span + span:not(.grow) { border-inline-start: 1px solid var(--line-soft); }
 
 /* add data */
+/*
+ * It says what it does. A bare `+` in the corner of a panel is a guess the user
+ * has to make, and there is room here for the two words that settle it.
+ */
 .phead .add {
   margin-inline-start: auto;
-  width: 20px;
-  height: 20px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 21px;
+  padding-inline: 8px;
   border: 1px solid var(--line);
-  border-radius: 2px;
+  border-radius: 3px;
+  background: var(--raise);
   color: var(--txt-2);
-  font-size: 13px;
-  line-height: 1;
+  font-size: 11px;
+  white-space: nowrap;
 }
-.phead .add:hover { background: var(--raise); color: var(--txt); }
+.phead .add svg { width: 11px; height: 11px; }
+.phead .add:hover { background: var(--raise-2); color: var(--txt); border-color: var(--accent); }
 .scrim {
   position: fixed;
   inset: 0;

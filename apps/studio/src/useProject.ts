@@ -56,6 +56,38 @@ export function useProject(initial: MapProject) {
     setLog((previous) => [...ops, ...previous].slice(0, 40));
   }, []);
 
+  /**
+   * An edit that is not a step you can go back to.
+   *
+   * Some things are written to the document and are not *changes to the map*:
+   * the highlight under the pointer, and every frame of a vertex being dragged.
+   * They go through the reconciler like anything else because that is how they
+   * reach the renderer, but recording them would fill the history with mouse
+   * movement — hover across a choropleth and Ctrl+Z becomes a way of replaying
+   * where your cursor has been, sixty entries at a time, with the actual edit
+   * you wanted to undo pushed off the end of the stack.
+   */
+  const transient = useCallback((change: (draft: MapProject) => MapProject) => {
+    if (!manager.current) return;
+    const ops = manager.current.update(change);
+    if (ops.length === 0) return;
+    setProject(manager.current.project);
+  }, []);
+
+  /**
+   * Mark the document as it stands, so what follows can be undone in one go.
+   *
+   * A drag is one thing the user did, however many frames it took. This is
+   * called once when the drag starts; the frames themselves are transient.
+   */
+  const checkpoint = useCallback(() => {
+    const m = manager.current;
+    if (!m) return;
+    past.current = [...past.current, m.project].slice(-DEPTH);
+    future.current = [];
+    remember();
+  }, []);
+
   /** Where the user dragged the map to. Records, never emits. */
   const sync = useCallback((view: View) => {
     if (!manager.current) return;
@@ -149,5 +181,18 @@ export function useProject(initial: MapProject) {
     redo,
   };
 
-  return { project, log, edit, sync, attach, warning, setWarning, history, open, adopt };
+  return {
+    project,
+    log,
+    edit,
+    transient,
+    checkpoint,
+    sync,
+    attach,
+    warning,
+    setWarning,
+    history,
+    open,
+    adopt,
+  };
 }

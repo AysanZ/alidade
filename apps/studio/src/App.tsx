@@ -73,8 +73,20 @@ const TITLES: Record<PaneId, string> = {
 
 export default function App() {
   const holder = useRef<HTMLDivElement>(null);
-  const { project, log, edit, sync, attach, warning, setWarning, history, open, adopt } =
-    useProject(emptyProject);
+  const {
+    project,
+    log,
+    edit,
+    transient,
+    checkpoint,
+    sync,
+    attach,
+    warning,
+    setWarning,
+    history,
+    open,
+    adopt,
+  } = useProject(emptyProject);
   const mapRef = useRef<MapLibreMap | null>(null);
   const [pane, setPane] = useState<PaneId>("layers");
   const [adding, setAdding] = useState(false);
@@ -113,7 +125,7 @@ export default function App() {
     height: number;
   } | null>(null);
 
-  const drawing = useDrawing(project, edit);
+  const drawing = useDrawing(project, edit, transient, checkpoint);
 
   /*
    * The map survives a refresh.
@@ -415,9 +427,11 @@ export default function App() {
     const wanted =
       hover && node ? selectionFor(hover.layer, node, hover.properties) : undefined;
 
-    edit((d) => {
+    // Transient: a highlight is where the pointer is, not something that was
+    // done to the map, and it must not be a step in the history.
+    transient((d) => {
       // Only touch the document when the highlight is actually different, or a
-      // mouse moving across a polygon would emit an edit per frame.
+      // mouse moving across a polygon would emit an operation per frame.
       const now = d.selection;
       if (!wanted) {
         if (now?.hover) delete d.selection;
@@ -428,7 +442,7 @@ export default function App() {
     });
     // `project` is deliberately not a dependency: this reacts to the pointer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hover, found, edit]);
+  }, [hover, found, transient]);
 
   /*
    * Marker images have to exist before the layer that names them is drawn, so
@@ -554,16 +568,22 @@ export default function App() {
     [project.environment.projection],
   );
 
-  /** Selecting from the table: a hover is quiet and a click is not. */
+  /**
+   * Selecting from the table.
+   *
+   * Transient either way. Pointing at a row is not an edit to the map, and a
+   * history full of "you looked at row 41" is a history with your actual work
+   * pushed off the end of it.
+   */
   const select = useCallback(
     (layer: string, field: string, values: (string | number)[], hover: boolean) => {
-      edit((d) => {
+      transient((d) => {
         if (values.length === 0) delete d.selection;
         else d.selection = { layer, field, values, hover };
         return d;
       });
     },
-    [edit],
+    [transient],
   );
 
   const denominator = Math.round(denominatorAt(camera.zoom, camera.latitude));
@@ -706,8 +726,11 @@ export default function App() {
           <div className="phead">
             <span className="cap">{TITLES[pane]}</span>
             {pane === "layers" && (
-              <button className="add" onClick={() => setAdding(true)} title="Add data" aria-label="Add data">
-                +
+              <button className="add" onClick={() => setAdding(true)} title="Add a layer to the map">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M12 5.5v13M5.5 12h13" />
+                </svg>
+                Add layer
               </button>
             )}
           </div>
@@ -930,7 +953,7 @@ export default function App() {
           onZoom={flyTo}
           onClose={() => {
             setTable(null);
-            edit((d) => {
+            transient((d) => {
               delete d.selection;
               return d;
             });

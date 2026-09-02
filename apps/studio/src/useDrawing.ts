@@ -82,6 +82,10 @@ const COLORS: Record<AnnotationKind, string> = {
 export function useDrawing(
   project: MapProject,
   edit: (change: (draft: MapProject) => MapProject) => void,
+  /** An edit that is not a history step. Every frame of a drag goes through it. */
+  transient: (change: (draft: MapProject) => MapProject) => void,
+  /** Mark the document before a drag, so the whole drag undoes in one go. */
+  checkpoint: () => void,
 ) {
   const [session, setSession] = useState<DrawSession>(IDLE);
   const [cursor, setCursor] = useState<[number, number] | null>(null);
@@ -196,7 +200,11 @@ export function useDrawing(
       if (carried) {
         setSnapAt(null);
         setCursor(position);
-        edit((d) => withAnnotation(d, carried.of, (a) => translate(a, carried.from, position)));
+        /*
+         * Transient. A drag is one thing the user did however many frames it
+         * took, and the history was marked when the shape was picked up.
+         */
+        transient((d) => withAnnotation(d, carried.of, (a) => translate(a, carried.from, position)));
         shapeDrag.current = { ...carried, from: position };
         return;
       }
@@ -218,9 +226,9 @@ export function useDrawing(
       setSnapAt(found);
       setCursor(at);
 
-      if (held) edit((d) => withAnnotation(d, held.of, (a) => moveVertex(a, held.index, at)));
+      if (held) transient((d) => withAnnotation(d, held.of, (a) => moveVertex(a, held.index, at)));
     },
-    [edit, editing, snapping],
+    [editing, snapping, transient],
   );
 
   /** One click on the map: either open a drawing or add a vertex to the open one. */
@@ -317,10 +325,14 @@ export function useDrawing(
 
   /* ------------------------------------------------------------- editing */
 
-  const beginVertex = useCallback((of: string, index: number) => {
-    drag.current = { of, index };
-    setDragging(true);
-  }, []);
+  const beginVertex = useCallback(
+    (of: string, index: number) => {
+      checkpoint();
+      drag.current = { of, index };
+      setDragging(true);
+    },
+    [checkpoint],
+  );
 
   /**
    * Grab the midpoint of a segment.
@@ -331,18 +343,25 @@ export function useDrawing(
    */
   const beginMidpoint = useCallback(
     (of: string, segment: number, position: [number, number]) => {
-      edit((d) => withAnnotation(d, of, (a) => insertVertex(a, segment + 1, position)));
+      checkpoint();
+      // The insert itself is transient too: it and the drag that follows are one
+      // gesture, so one Ctrl+Z takes the whole vertex back out again.
+      transient((d) => withAnnotation(d, of, (a) => insertVertex(a, segment + 1, position)));
       drag.current = { of, index: segment + 1 };
       setDragging(true);
     },
-    [edit],
+    [checkpoint, transient],
   );
 
   /** Pick a whole shape up. The grab point rides with it, so it does not jump. */
-  const beginShape = useCallback((of: string, from: [number, number]) => {
-    shapeDrag.current = { of, from };
-    setDragging(true);
-  }, []);
+  const beginShape = useCallback(
+    (of: string, from: [number, number]) => {
+      checkpoint();
+      shapeDrag.current = { of, from };
+      setDragging(true);
+    },
+    [checkpoint],
+  );
 
   const endVertex = useCallback(() => {
     drag.current = null;

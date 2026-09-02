@@ -1,7 +1,7 @@
 import type { Basemap, MapProject } from "@alidade/core";
 
 import { BASEMAPS } from "../basemaps";
-import { Field, Switch } from "./Field";
+import { Field, Section, Switch } from "./Field";
 
 const GROUPS = ["Canvas", "Aerial", "Street", "Terrain"];
 
@@ -26,8 +26,7 @@ export function BasemapGallery({
   return (
     <div className="pane">
       {GROUPS.map((group) => (
-        <section className="sect" key={group}>
-          <h2>{group}</h2>
+        <Section title={group} key={group}>
           <div className="gallery">
             {BASEMAPS.filter((b) => b.group === group).map((b) => (
               <button
@@ -43,11 +42,10 @@ export function BasemapGallery({
               </button>
             ))}
           </div>
-        </section>
+        </Section>
       ))}
 
-      <section className="sect">
-        <h2>Settings</h2>
+      <Section title="Settings">
         <Switch
           label="Basemap labels"
           on={project.basemap.labels}
@@ -73,7 +71,7 @@ export function BasemapGallery({
           />
         </Field>
         <p className="hint">{project.basemap.raster?.attribution ?? "No tiles are being loaded."}</p>
-      </section>
+      </Section>
     </div>
   );
 }
