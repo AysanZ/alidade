@@ -385,7 +385,13 @@ input, select, textarea { font: inherit; color: inherit; }
   cursor: pointer;
 }
 .node:hover { background: var(--raise); }
-.node.on { background: rgba(76, 141, 255, 0.13); color: var(--txt); box-shadow: inset 2px 0 0 var(--accent); }
+/*
+ * Superseded by the rebuilt row further down. Kept only for the states that
+ * rule does not set — and with no `box-shadow`, because an inset shadow is
+ * measured in physical pixels and does not mirror under `dir="rtl"`: the
+ * selection bar stayed on the left while the whole panel moved right.
+ */
+.node.on { background: rgba(76, 141, 255, 0.13); color: var(--txt); }
 .node.off .name { color: var(--txt-3); text-decoration: line-through; }
 .node.system { cursor: default; padding-inline-start: 8px; }
 .node .eye { width: 14px; color: var(--txt-3); font-size: 10px; }
@@ -1282,8 +1288,10 @@ input.doc:focus { border-color: var(--accent); color: var(--txt); outline: none;
 }
 .node:hover { background: var(--raise); }
 .node.on {
+  /* `to inline-end`, not `90deg`: the fade has to run away from the accent bar,
+     and the accent bar changes sides with the writing direction. */
   background: linear-gradient(
-    90deg,
+    to inline-end,
     rgba(76, 141, 255, 0.18),
     rgba(76, 141, 255, 0.06) 60%,
     transparent
@@ -1377,6 +1385,16 @@ input.doc:focus { border-color: var(--accent); color: var(--txt); outline: none;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /*
+   * Each name gets the direction of its own first letter.
+   *
+   * A layer called "Population density" inside a right-to-left interface is
+   * still English, and truncating it from the *front* — "…lation density" —
+   * throws away the half that identifies it. `plaintext` reads the first strong
+   * character of each string and lays that string out accordingly, so an English
+   * name clips at its end and a Persian one clips at its own.
+   */
+  unicode-bidi: plaintext;
 }
 .node.off .name { color: var(--txt-3); text-decoration: line-through; text-decoration-color: #3a3a40; }
 
@@ -1600,7 +1618,8 @@ input.doc:focus { border-color: var(--accent); color: var(--txt); outline: none;
 /* A drawing picked for editing is marked in the list as well as on the map. */
 .drawlist li.on {
   background: rgba(255, 209, 102, 0.1);
-  box-shadow: inset 2px 0 0 #ffd166;
+  /* Logical, not an inset shadow: this has to move to the other side in RTL. */
+  border-inline-start: 2px solid #ffd166;
 }
 .drawlist li { cursor: pointer; padding-inline: 4px; }
 .drawlist input[type="color"] {
@@ -1631,3 +1650,80 @@ input.doc:focus { border-color: var(--accent); color: var(--txt); outline: none;
 }
 .handles .shapegrab.line, .handles .shapegrab.point { fill: none; }
 .handles .on .shapegrab:hover { stroke: rgba(255, 209, 102, 0.18); }
+
+/* ---------------------------------------------------------------- filter */
+
+.rules { list-style: none; margin: 0; padding: 2px 11px 6px; display: grid; gap: 5px; }
+.rules li {
+  display: grid;
+  /*
+   * Column and test on the first line, value and the remove button on the
+   * second. Four controls across a 290px panel gives each of them about sixty
+   * pixels, which is not enough to read a column name in.
+   */
+  grid-template-columns: 1fr auto;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--void);
+}
+.rules li select:first-child { grid-column: 1 / -1; }
+.rules li select,
+.rules li .text {
+  width: 100%;
+  height: 24px;
+  min-width: 0;
+  background: var(--raise);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--txt);
+  padding-inline: 7px;
+  font-size: 11.5px;
+}
+.rules li .text { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; }
+.rules li select:hover, .rules li .text:hover { border-color: #3a3a40; }
+.rules li select:focus, .rules li .text:focus { border-color: var(--accent); outline: none; }
+.rules li button.danger {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--txt-3);
+  font-size: 11px;
+}
+.rules li button.danger:hover { border-color: rgba(240, 97, 107, 0.4); color: #f0616b; }
+
+/* The same filter, as the server sees it. */
+.sql {
+  margin: 0 11px 8px;
+  padding: 7px 9px;
+  background: var(--void);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--txt-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---------------------------------------------------------------- title bar */
+
+.titlebar .steps { display: flex; gap: 1px; }
+.titlebar button.icon {
+  width: 24px;
+  height: 23px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--txt-2);
+}
+.titlebar button.icon svg { width: 14px; height: 14px; }
+.titlebar button.icon:hover:not(:disabled) { background: var(--raise); color: var(--txt); }
+/* Disabled, not hidden: "there is nothing to undo" is information. */
+.titlebar button.icon:disabled { opacity: 0.32; cursor: default; }
+.titlebar .small { font-family: "IBM Plex Mono", ui-monospace, monospace; }

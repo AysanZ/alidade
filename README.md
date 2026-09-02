@@ -50,6 +50,27 @@ None of that live feedback is in the document. The rubber band is a function of
 where the mouse is, and the mouse is not part of the map: it is drawn as an
 overlay above the canvas, so it costs no operations and cannot be undone into.
 
+### The document
+
+Every edit goes through one reconciler, so undo is a stack of whole documents
+rather than a stack of inverse operations: the reconciler already knows how to
+get from any document to any other, and writing an inverse for every operation
+means getting one of them wrong and quietly corrupting the map. Ctrl+Z and
+Ctrl+Shift+Z, sixty steps deep, and an edit that changed nothing is not a step.
+
+The map is written to the browser a moment after every change — it is forty
+kilobytes of JSON with no geometry in it — so a refresh is not a loss. **Export**
+is the copy that outlives the browser; **Open** reads one back, as a history step
+like any other.
+
+### Filters
+
+A filter is a structure, not a string, so one filter compiles two ways: to a
+renderer expression that hides features on the map, and to parameterised SQL for
+the server. The inspector builds them as a list of rules, and will show you the
+SQL, placeholders included. A value that reads as a number is stored as one,
+because `"5" > "10"` is true as text and false as arithmetic.
+
 ### Projections
 
 `Mercator` is the flat web map. `Globe` is MapLibre's own name for a projection
@@ -132,7 +153,7 @@ not a published package.
 
 ```bash
 pnpm install
-pnpm test        # 278 tests, Node only: no browser, no WebGL
+pnpm test        # 300 tests, Node only: no browser, no WebGL
 pnpm typecheck   # every package and the studio
 pnpm build
 ```

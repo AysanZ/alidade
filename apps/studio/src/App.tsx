@@ -42,6 +42,7 @@ import { markerImageFor, registerMarkers } from "./markers";
 import { useDrawing } from "./useDrawing";
 import { useProject } from "./useProject";
 import { stampedPng } from "./export";
+import { forget, makeAutosave, parseProject, restore, save } from "./storage";
 
 /**
  * How far off a feature the pointer may be and still count as over it.
@@ -72,7 +73,8 @@ const TITLES: Record<PaneId, string> = {
 
 export default function App() {
   const holder = useRef<HTMLDivElement>(null);
-  const { project, log, edit, sync, attach, warning, setWarning } = useProject(emptyProject);
+  const { project, log, edit, sync, attach, warning, setWarning, history, open, adopt } =
+    useProject(emptyProject);
   const mapRef = useRef<MapLibreMap | null>(null);
   const [pane, setPane] = useState<PaneId>("layers");
   const [adding, setAdding] = useState(false);
@@ -81,6 +83,7 @@ export default function App() {
   const [problem, setProblem] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [presenting, setPresenting] = useState(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
   const [locks, setLocks] = useState({ zoom: false, pan: false });
   const [camera, setCamera] = useState<Camera>({
     zoom: emptyProject.view.zoom,
@@ -111,6 +114,52 @@ export default function App() {
   } | null>(null);
 
   const drawing = useDrawing(project, edit);
+
+  /*
+   * The map survives a refresh.
+   *
+   * Autosave rather than a Save button that must be remembered: the document is
+   * forty kilobytes of JSON with no geometry in it, so writing it costs nothing
+   * and losing it costs an afternoon. Save is still there for people who want to
+   * be sure, and Export is the copy that outlives the browser.
+   */
+  const autosave = useRef(makeAutosave((message) => setProblem(message)));
+  const restored = useRef(false);
+
+  useEffect(() => {
+    // Nothing to save before the manager exists, and nothing worth saving until
+    // the restored document has been put back.
+    if (!restored.current) return;
+    autosave.current.schedule(project);
+    setSavedAt(Date.now());
+  }, [project]);
+
+  const keep = useCallback(() => {
+    if (save(project, setProblem)) setSavedAt(Date.now());
+  }, [project]);
+
+  const reopen = useCallback(
+    (text: string, filename: string) => {
+      try {
+        open(parseProject(text));
+      } catch (error) {
+        setProblem(
+          `${filename} could not be opened: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    },
+    [open],
+  );
+
+  const exportProject = useCallback(() => {
+    const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${project.id}.alidade.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }, [project]);
 
   /*
    * The map is built once and lives in a ref, but the handlers it registers need
@@ -168,11 +217,27 @@ export default function App() {
 
     map.on("load", () => {
       if (cancelled) return;
-      const manager = new MapManager(map as unknown as Renderer, emptyProject, {
+      /*
+       * Whatever was on the screen last time, if it is still readable. It is put
+       * back through the manager rather than into React state, so the reconciler
+       * builds the map from it exactly as it would from any other edit.
+       */
+      const saved = restore(emptyProject.schema);
+      const manager = new MapManager(map as unknown as Renderer, saved ?? emptyProject, {
         onWarning: (message) => setProblem(message),
       });
       watchStyleSwaps(map as never, manager);
       attach(manager);
+      if (saved) {
+        adopt(saved);
+        map.jumpTo({
+          center: saved.view.center,
+          zoom: saved.view.zoom,
+          pitch: saved.view.pitch,
+          bearing: saved.view.bearing,
+        });
+      }
+      restored.current = true;
       readCamera(map);
     });
     map.on("move", () => readCamera(map));
@@ -331,7 +396,7 @@ export default function App() {
       mapRef.current = null;
       map.remove();
     };
-  }, [attach, readCamera, sync]);
+  }, [adopt, attach, readCamera, sync]);
 
   /*
    * The hover becomes a selection on the project, which is what the compiler
@@ -617,7 +682,16 @@ export default function App() {
 
   return (
     <div className={`app${presenting ? " presenting" : ""}`}>
-      <TitleBar project={project} ops={log.length} edit={edit} />
+      <TitleBar
+        project={project}
+        ops={log.length}
+        edit={edit}
+        history={history}
+        savedAt={savedAt}
+        onSave={keep}
+        onOpen={reopen}
+        onExport={exportProject}
+      />
 
       <div className="middle">
         <Rail active={pane} onSelect={setPane} />
@@ -683,7 +757,17 @@ export default function App() {
             />
           )}
           {pane === "project" && (
-            <ProjectPanel project={project} log={log} onExportImage={exportImage} />
+            <ProjectPanel
+              project={project}
+              log={log}
+              onExportImage={exportImage}
+              onDiscard={() => {
+                autosave.current.cancel();
+                forget();
+                open(emptyProject);
+                setSavedAt(null);
+              }}
+            />
           )}
           </div>
         </aside>

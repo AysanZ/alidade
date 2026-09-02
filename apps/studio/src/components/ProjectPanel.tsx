@@ -6,10 +6,13 @@ export function ProjectPanel({
   project,
   log,
   onExportImage,
+  onDiscard,
 }: {
   project: MapProject;
   log: Op[];
   onExportImage: () => void;
+  /** Throw away the saved copy and start again. */
+  onDiscard: () => void;
 }) {
   const size = new Blob([JSON.stringify(project)]).size;
 
@@ -43,6 +46,21 @@ export function ProjectPanel({
           <button onClick={download}>Export project JSON</button>
           <button onClick={onExportImage}>Export map PNG</button>
         </div>
+        <div className="row buttons">
+          <button
+            className="danger"
+            onClick={() => {
+              if (window.confirm("Discard this map and the saved copy of it?")) onDiscard();
+            }}
+          >
+            Start a new map
+          </button>
+        </div>
+        <p className="hint">
+          The map is written to this browser a moment after every change, so a refresh is not a
+          loss. It is not a backup: clearing site data takes it with everything else, which is what
+          Export is for.
+        </p>
       </Section>
 
       <Section title="Last operations">

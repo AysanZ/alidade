@@ -3,6 +3,7 @@ import { hiddenBecause } from "@alidade/core";
 
 import { findLayer, removeNode, withNode } from "../tree";
 import { Appearance, describeSymbology } from "./Appearance";
+import { FilterEditor } from "./FilterEditor";
 import { Field, Section, Switch } from "./Field";
 
 export interface Extent {
@@ -152,6 +153,8 @@ export function Inspector({
       </Section>
 
       <Appearance layer={layer} edit={editLayer} />
+
+      <FilterEditor layer={layer} edit={editLayer} />
 
       {layer.metadata && (
         <Section title="Source">
