@@ -789,17 +789,23 @@ input, select, textarea { font: inherit; color: inherit; }
 .drawlist li:last-child { border-bottom: 0; }
 .drawlist .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
 .drawlist .name {
-  flex: 1;
-  min-width: 0;
+  flex: 1 1 auto;
+  /* The measurement can be long enough to squeeze the name out of existence. */
+  min-width: 62px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .drawlist .value {
   font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 10px;
   color: var(--txt-2);
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .drawlist button {
   color: var(--txt-3);
@@ -1256,20 +1262,36 @@ input.doc:focus { border-color: var(--accent); color: var(--txt); outline: none;
 .node {
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: 26px;
+  /*
+   * Five, not six. The panel is 272px and the row carries a grip, a chevron, an
+   * eye, a symbol, a name and up to two tags; a pixel of gap in six places is
+   * six pixels of layer name.
+   */
+  gap: 5px;
+  height: 28px;
   padding-inline: 8px;
   color: var(--txt-2);
   cursor: pointer;
   user-select: none;
   border-inline-start: 2px solid transparent;
+  /*
+   * A row that lights up instantly reads as a click even when the pointer only
+   * passed over it. A tenth of a second is enough to tell the two apart.
+   */
+  transition: background 0.1s ease;
 }
 .node:hover { background: var(--raise); }
 .node.on {
-  background: rgba(76, 141, 255, 0.13);
+  background: linear-gradient(
+    90deg,
+    rgba(76, 141, 255, 0.18),
+    rgba(76, 141, 255, 0.06) 60%,
+    transparent
+  );
   color: var(--txt);
   border-inline-start-color: var(--accent);
 }
+.node.on .name { color: var(--txt); font-weight: 500; }
 .node.lifting { opacity: 0.4; }
 .node.target { box-shadow: inset 0 2px 0 var(--accent); }
 
@@ -1296,15 +1318,57 @@ input.doc:focus { border-color: var(--accent); color: var(--txt); outline: none;
 .node.on .eye { color: var(--accent); }
 .node.off .eye { color: #3a3a40; }
 
-.node .swatch {
-  width: 14px;
-  height: 14px;
+/* The symbology miniature. It is drawn, not filled with one colour. */
+.node .sym { flex: none; display: block; }
+.node .sym.folder { color: #6e9bd8; }
+.node.off .sym { filter: grayscale(1); opacity: 0.4; }
+
+/* The fold chevron, and the empty slot that keeps layers aligned under it. */
+.node .fold {
+  width: 12px;
+  height: 12px;
   flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--txt-3);
   border-radius: 2px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
 }
-.node .swatch.folder { border: 1px solid var(--txt-3); background: none; }
-.node.off .swatch { filter: grayscale(1); opacity: 0.4; }
+.node .fold svg { width: 9px; height: 9px; transition: transform 0.15s; }
+.node.closed .fold svg { transform: rotate(-90deg); }
+.node .fold:hover { color: var(--txt); }
+.node.group .name { font-weight: 500; color: var(--txt); }
+
+/*
+ * The children of a group, with a rule down the side.
+ *
+ * Indentation alone stops being readable at the second level, because the eye
+ * has nothing to run down. The line is what makes the nesting legible.
+ */
+.kids {
+  margin-inline-start: 15px;
+  padding-inline-start: 3px;
+  border-inline-start: 1px solid var(--line-soft);
+}
+
+/*
+ * A layer that is on but out of its scale range.
+ *
+ * The commonest "why is my data missing" in a GIS, and the answer is usually in
+ * a panel nobody opened. The row is dimmed and says which.
+ */
+.node.unscaled .name { color: var(--txt-3); }
+.node.unscaled .sym { opacity: 0.35; }
+/*
+ * Named `flag` and not `warn`: `.warn` is already the inspector's warning
+ * paragraph, with its own margins, padding and size, and `.tag.warn` inherited
+ * every one of them — the tag came out as a 28px box that pushed the layer name
+ * into an ellipsis.
+ */
+.tag.flag {
+  color: #e8b14c;
+  border-color: rgba(232, 177, 76, 0.32);
+  background: rgba(232, 177, 76, 0.1);
+}
 
 .node .name {
   flex: 1;
@@ -1332,8 +1396,8 @@ input.doc:focus { border-color: var(--accent); color: var(--txt); outline: none;
 .node:hover .more, .node.on .more { opacity: 1; }
 .node .more:hover { background: var(--raise-2); color: var(--txt); }
 
-.node.system { cursor: default; }
-.node.system .grip { visibility: hidden; }
+/* The basemap row is not draggable, but it still lines up with the rest. */
+.node.system { cursor: default; padding-inline-start: 34px; }
 
 /* ---------------------------------------------------------------- markers */
 
@@ -1425,3 +1489,145 @@ input.doc:focus { border-color: var(--accent); color: var(--txt); outline: none;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ------------------------------------------------------------ draw overlay */
+
+/*
+ * Live drawing feedback, above the canvas.
+ *
+ * The layer itself takes no pointer events — it covers the whole map, and a map
+ * you cannot click is not a map. Only the handles opt back in, which is what
+ * makes dragging a vertex a plain DOM drag rather than a hit test per frame.
+ */
+.drawoverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  overflow: visible;
+}
+
+/* The segment being dragged out of the last placed vertex. */
+.draftband {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+  /*
+   * A dark stroke under a light one, so the band is legible over a satellite
+   * basemap as well as over a dark canvas. Cheaper and sharper than a filter.
+   */
+  paint-order: stroke;
+}
+/* A ring is closed whether you draw the last edge or not, so it is shown. */
+.draftclosing {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.2;
+  stroke-dasharray: 2 5;
+  opacity: 0.6;
+}
+.draftfill {
+  fill: rgba(90, 209, 154, 0.16);
+  stroke: none;
+}
+
+/* Where the click will land, which is not always where the mouse is. */
+.snap circle {
+  fill: none;
+  stroke: #ffd166;
+  stroke-width: 1.6;
+}
+.snap path { stroke: #ffd166; stroke-width: 1.6; }
+.snap .dot { fill: #ffd166; stroke: none; }
+/* An edge snap is a weaker claim than a vertex snap, and says so. */
+.snap.edge circle { stroke-dasharray: 3 3; }
+
+.handles .vertex {
+  fill: var(--panel);
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  pointer-events: auto;
+  cursor: grab;
+}
+.handles .vertex:hover { fill: var(--accent); }
+.handles .on .vertex { stroke: #ffd166; }
+.handles .on .vertex:hover { fill: #ffd166; }
+
+/* A midpoint is not a vertex yet, so it is hollow and quieter. */
+.handles .midpoint {
+  fill: rgba(10, 10, 11, 0.7);
+  stroke: #ffd166;
+  stroke-width: 1.3;
+  stroke-dasharray: 2 2;
+  pointer-events: auto;
+  cursor: copy;
+}
+.handles .midpoint:hover { fill: #ffd166; stroke-dasharray: none; }
+
+/* The numbers, next to the pointer, while the shape is being made. */
+.drawreadout {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 1px 10px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: rgba(10, 10, 11, 0.94);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+.drawreadout > div { display: contents; }
+.drawreadout span {
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--txt-3);
+  align-self: center;
+}
+.drawreadout b {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--txt);
+  text-align: end;
+}
+
+/* A drawing picked for editing is marked in the list as well as on the map. */
+.drawlist li.on {
+  background: rgba(255, 209, 102, 0.1);
+  box-shadow: inset 2px 0 0 #ffd166;
+}
+.drawlist li { cursor: pointer; padding-inline: 4px; }
+.drawlist input[type="color"] {
+  width: 16px;
+  height: 14px;
+  padding: 0;
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: none;
+  cursor: pointer;
+}
+
+/*
+ * Something to pick a whole shape up by.
+ *
+ * Invisible, but a real target: a fat stroke along a line and the interior of a
+ * ring. Asking somebody to grab a shape by its 1.5px outline is asking them to
+ * miss.
+ */
+.handles .shapegrab {
+  fill: transparent;
+  stroke: transparent;
+  stroke-width: 14;
+  stroke-linejoin: round;
+  pointer-events: auto;
+  cursor: move;
+}
+.handles .shapegrab.line, .handles .shapegrab.point { fill: none; }
+.handles .on .shapegrab:hover { stroke: rgba(255, 209, 102, 0.18); }

@@ -249,3 +249,262 @@ export function labelPosition(a: Annotation): [number, number] {
 }
 
 const round = (n: number) => Math.round(n * 1e7) / 1e7;
+
+/* ---------------------------------------------------------------- vertices */
+
+/**
+ * Editing the geometry of a drawing.
+ *
+ * These are pure and total: they take a drawing and give a drawing back, and
+ * they refuse rather than corrupt. A caller that asks for something impossible —
+ * removing the third vertex of a triangle, moving a vertex that is not there —
+ * gets the drawing it passed in, unchanged and still valid.
+ *
+ * They are here rather than in the studio because "a ring cannot go below three
+ * points" is a fact about the geometry, not about the panel that happens to be
+ * showing it, and because a fact about geometry can be tested without a browser.
+ */
+
+/** Whether a drawing can lose a vertex and still be the shape it claims to be. */
+export function canRemoveVertex(annotation: Annotation): boolean {
+  return annotation.coordinates.length > MINIMUM[annotation.kind];
+}
+
+/** Move one vertex. Out-of-range indices are ignored rather than appended. */
+export function moveVertex(
+  annotation: Annotation,
+  index: number,
+  to: [number, number],
+): Annotation {
+  if (index < 0 || index >= annotation.coordinates.length) return annotation;
+  const coordinates = [...annotation.coordinates];
+  coordinates[index] = to;
+  return { ...annotation, coordinates };
+}
+
+/**
+ * Put a vertex in at `index`, pushing the rest along.
+ *
+ * The index is clamped, so inserting "after the last segment" of a ring — which
+ * is what clicking the closing segment's midpoint means — lands at the end
+ * instead of being rejected.
+ */
+export function insertVertex(
+  annotation: Annotation,
+  index: number,
+  position: [number, number],
+): Annotation {
+  const at = Math.max(0, Math.min(index, annotation.coordinates.length));
+  const coordinates = [...annotation.coordinates];
+  coordinates.splice(at, 0, position);
+  return { ...annotation, coordinates };
+}
+
+/** Take a vertex out, unless that would leave less than a shape. */
+export function removeVertex(annotation: Annotation, index: number): Annotation {
+  if (!canRemoveVertex(annotation)) return annotation;
+  if (index < 0 || index >= annotation.coordinates.length) return annotation;
+  const coordinates = annotation.coordinates.filter((_, i) => i !== index);
+  return { ...annotation, coordinates };
+}
+
+/** Drop the last vertex placed, which is what Backspace means mid-drawing. */
+export function removeLastVertex(annotation: Annotation): Annotation {
+  if (annotation.coordinates.length === 0) return annotation;
+  return { ...annotation, coordinates: annotation.coordinates.slice(0, -1) };
+}
+
+/* ------------------------------------------------------------------ drafts */
+
+/**
+ * What the drawing in progress looks like with the pointer counted as its next
+ * vertex.
+ *
+ * Without this the user draws blind: between two clicks there is nothing on the
+ * screen joining the last vertex to the cursor, so the shape only appears one
+ * segment at a time and an area only exists once it is finished. The rubber band
+ * is not stored on the document — it is a property of where the mouse is, and
+ * the mouse is not part of the map.
+ */
+export function withCursor(annotation: Annotation, cursor: [number, number]): Annotation {
+  if (annotation.kind === "point") return annotation;
+  return { ...annotation, coordinates: [...annotation.coordinates, cursor] };
+}
+
+/**
+ * The live readout while drawing: the segment being dragged out, and the shape
+ * so far.
+ *
+ * A GIS says both, because they answer different questions. The segment is
+ * "where am I putting this next point"; the total is "how long is this so far".
+ */
+export interface DraftReadout {
+  /** Metres from the last placed vertex to the cursor. */
+  segment: number;
+  /** Degrees clockwise from north, over that same segment. */
+  heading: number;
+  /** Metres along the whole path, cursor included. */
+  total: number;
+  /** Square metres, for a ring of three or more including the cursor. */
+  area?: number;
+  /** Number of vertices actually placed, cursor excluded. */
+  placed: number;
+}
+
+export function draftReadout(
+  annotation: Annotation,
+  cursor: [number, number],
+): DraftReadout {
+  const placed = annotation.coordinates;
+  const last = placed[placed.length - 1];
+  const path = [...placed, cursor];
+
+  const readout: DraftReadout = {
+    segment: last ? distance(last, cursor) : 0,
+    heading: last ? bearing(last, cursor) : 0,
+    total: pathLength(path),
+    placed: placed.length,
+  };
+
+  if (annotation.kind === "polygon" && path.length >= 3) {
+    readout.area = ringArea(path);
+    // For a ring the length that matters is the perimeter, closing edge included.
+    readout.total = ringPerimeter(path);
+  }
+  return readout;
+}
+
+/* ------------------------------------------------------------ constructions */
+
+/**
+ * Shapes that are built from two positions rather than clicked vertex by vertex.
+ *
+ * They produce ordinary polygons. A circle that stayed a circle would need its
+ * centre and radius in the schema, a branch in every consumer, and a rule for
+ * what happens when somebody drags one of its vertices. A ring of positions is
+ * what every format downstream wants anyway — GeoJSON has no circle, KML has no
+ * circle, PostGIS stores one as a polygon — so the honest thing is to build the
+ * ring at the moment of drawing and then treat it like any other ring.
+ */
+
+/**
+ * The four corners of a rectangle spanning two opposite corners.
+ *
+ * Aligned to the graticule, not to the screen: dragging a box out and getting
+ * something that is only square at one bearing is a worse surprise than getting
+ * a box whose sides are meridians and parallels.
+ *
+ * Returned open — four positions, not five — because that is how a ring is held
+ * everywhere else in the document.
+ */
+export function rectangleRing(
+  a: [number, number],
+  b: [number, number],
+): [number, number][] {
+  const west = Math.min(a[0], b[0]);
+  const east = Math.max(a[0], b[0]);
+  const south = Math.min(a[1], b[1]);
+  const north = Math.max(a[1], b[1]);
+  return [
+    [west, south],
+    [east, south],
+    [east, north],
+    [west, north],
+  ];
+}
+
+/**
+ * A circle about a centre, out to a position on its edge.
+ *
+ * Geodesic: every position on the ring is the same distance over the ground from
+ * the centre, which on a mercator screen means it is drawn as an ellipse away
+ * from the equator. That is correct and it is what a GIS draws. A circle that
+ * looks round on the screen is a circle that is the wrong size on the ground,
+ * and the error is one over the cosine of the latitude — a fifth at Tehran.
+ */
+export function circleRing(
+  centre: [number, number],
+  edge: [number, number],
+  steps = 64,
+): [number, number][] {
+  const radius = distance(centre, edge);
+  if (radius <= 0) return [];
+  // `disc` closes its ring; a ring is held open everywhere in the document.
+  return disc(centre, radius, steps).slice(0, -1);
+}
+
+/**
+ * Move a whole drawing so that `from` ends up at `to`.
+ *
+ * This is a rotation of the sphere, not a shift in degrees and not a walk along
+ * a bearing, and the difference is not academic.
+ *
+ * Shifting degrees stretches a shape as it travels north: a degree of longitude
+ * is 111 km at the equator and 47 km at sixty, so a parcel dragged up the map
+ * arrives covering less than half the ground it left with. Walking every vertex
+ * the same distance along the same bearing has the same problem in reverse —
+ * meridians converge, so a box moved due north keeps its longitudes and loses
+ * its width.
+ *
+ * Rotating about the axis perpendicular to the great circle from `from` to `to`
+ * is the actual rigid motion of the sphere. Every distance inside the drawing is
+ * preserved exactly, which is the only behaviour that lets somebody measure a
+ * parcel, move it somewhere else, and still trust the number.
+ *
+ * The shape's bearing relative to north does change on the way, because on a
+ * sphere it must: a rectangle carried a quarter of the way round the world is
+ * not still aligned to the graticule. That is geometry, not a bug.
+ */
+export function translate(
+  annotation: Annotation,
+  from: [number, number],
+  to: [number, number],
+): Annotation {
+  const start = toVector(from);
+  const end = toVector(to);
+
+  const axis = cross(start, end);
+  const length = Math.hypot(axis[0], axis[1], axis[2]);
+  // The same point, or exactly antipodal. Neither names a rotation to make.
+  if (length < 1e-12) return annotation;
+
+  const unit: Vector = [axis[0] / length, axis[1] / length, axis[2] / length];
+  const angle = Math.atan2(length, dot(start, end));
+
+  return {
+    ...annotation,
+    coordinates: annotation.coordinates.map((position) =>
+      toPosition(rotate(toVector(position), unit, angle)),
+    ),
+  };
+}
+
+type Vector = [number, number, number];
+
+function toVector([lon, lat]: [number, number]): Vector {
+  const rad = Math.PI / 180;
+  const cosLat = Math.cos(lat * rad);
+  return [cosLat * Math.cos(lon * rad), cosLat * Math.sin(lon * rad), Math.sin(lat * rad)];
+}
+
+function toPosition([x, y, z]: Vector): [number, number] {
+  const deg = 180 / Math.PI;
+  return [round(Math.atan2(y, x) * deg), round(Math.asin(Math.max(-1, Math.min(1, z))) * deg)];
+}
+
+const cross = (a: Vector, b: Vector): Vector => [
+  a[1] * b[2] - a[2] * b[1],
+  a[2] * b[0] - a[0] * b[2],
+  a[0] * b[1] - a[1] * b[0],
+];
+
+const dot = (a: Vector, b: Vector): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+
+/** Rodrigues' rotation of a vector about a unit axis. */
+function rotate(v: Vector, axis: Vector, angle: number): Vector {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  const k = cross(axis, v);
+  const d = dot(axis, v) * (1 - c);
+  return [v[0] * c + k[0] * s + axis[0] * d, v[1] * c + k[1] * s + axis[1] * d, v[2] * c + k[2] * s + axis[2] * d];
+}

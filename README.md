@@ -20,6 +20,36 @@ survive a basemap swap, appear in the operation log, and export to GeoJSON, KML,
 GPX, CSV or WKT. Files in any of those formats can be read back in; the format is
 worked out from the content rather than the extension.
 
+Shapes are traced point by point, or spanned: a rectangle between two opposite
+corners, a circle from its centre out to its edge. Both produce ordinary polygons
+— GeoJSON has no circle and neither does KML or PostGIS — built geodesically, so
+a circle is the same size on the ground all the way round and is drawn as an
+ellipse away from the equator, which is correct. While one is being spanned it
+reports its radius or its sides and its area, and nothing reaches the document
+until the second click.
+
+A finished shape can be picked up and carried. Moving one rotates it about the
+sphere rather than shifting its degrees, so every distance inside it survives the
+trip: a parcel measured, moved and measured again gives the same number. Shifting
+degrees would have one dragged from the tropics to the Arctic arrive covering
+half the ground it left with.
+
+The drawing tools snap. A vertex always wins over a segment inside the tolerance,
+the tolerance is stated in pixels and converted against the current scale so it
+means the same thing at every zoom, and the position that is stored is the
+snapped one rather than the pointer's — a snap that moves the highlight and not
+the vertex is a lie about where the point went. While a shape is being made there
+is a rubber band to the cursor, the closing edge of a ring is previewed, and the
+segment length, bearing, running total and area are reported beside the pointer.
+Backspace takes back the last point, a double click finishes, Escape cancels.
+Finished shapes can be edited: drag a square to move a vertex, drag the circle at
+the middle of a segment to add one, Alt-click to remove. A ring will not go below
+three points and a line will not go below two.
+
+None of that live feedback is in the document. The rubber band is a function of
+where the mouse is, and the mouse is not part of the map: it is drawn as an
+overlay above the canvas, so it costs no operations and cannot be undone into.
+
 ### Projections
 
 `Mercator` is the flat web map. `Globe` is MapLibre's own name for a projection
@@ -102,7 +132,7 @@ not a published package.
 
 ```bash
 pnpm install
-pnpm test        # 236 tests, Node only: no browser, no WebGL
+pnpm test        # 278 tests, Node only: no browser, no WebGL
 pnpm typecheck   # every package and the studio
 pnpm build
 ```

@@ -64,6 +64,21 @@ export {
   MINIMUM,
 } from "./annotate";
 export type { FeatureCollection } from "./annotate";
+export {
+  rectangleRing,
+  circleRing,
+  translate,
+  canRemoveVertex,
+  moveVertex,
+  insertVertex,
+  removeVertex,
+  removeLastVertex,
+  withCursor,
+  draftReadout,
+} from "./annotate";
+export type { DraftReadout } from "./annotate";
+export { snap, segmentsOf, nearestOnSegment, toleranceInMetres } from "./snap";
+export type { SnapKind, SnapTarget, SnapOptions } from "./snap";
 
 export { write, read, detectFormat, parseWkt, summarise } from "./exchange";
 export type { ExchangeFormat, Written } from "./exchange";

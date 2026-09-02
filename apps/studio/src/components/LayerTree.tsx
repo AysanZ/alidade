@@ -1,10 +1,11 @@
 import { useState } from "react";
-import type { LayerNode, MapProject, Slot, TreeNode } from "@alidade/core";
-import { representativeColor } from "@alidade/core";
+import type { MapProject, Slot, TreeNode } from "@alidade/core";
+import { hiddenBecause } from "@alidade/core";
 
 import type { Extent } from "../layers";
 import { withNode } from "../tree";
 import { Catalogue } from "./Catalogue";
+import { LayerSymbol } from "./LayerSymbol";
 
 const SLOTS: { id: Slot; label: string; hint: string }[] = [
   { id: "overlay", label: "Overlay", hint: "Always on top" },
@@ -21,6 +22,8 @@ interface Props {
   onMenu: (id: string, at: { x: number; y: number }) => void;
   onAdd: () => void;
   onFlyTo: (extent: Extent) => void;
+  /** The scale the map is at, so a layer that is not drawn at it can say so. */
+  denominator: number;
 }
 
 /**
@@ -31,10 +34,27 @@ interface Props {
  * way to reorder except a context menu two clicks deep. A table of contents is
  * the control surface of a GIS, not a list of names.
  */
-export function LayerTree({ project, selected, onSelect, edit, onMenu, onAdd, onFlyTo }: Props) {
+export function LayerTree({
+  project,
+  selected,
+  onSelect,
+  edit,
+  onMenu,
+  onAdd,
+  onFlyTo,
+  denominator,
+}: Props) {
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  /* Groups fold. A group of nine is nine rows you cannot get past otherwise. */
+  const [closed, setClosed] = useState<Set<string>>(new Set());
+  const toggleGroup = (id: string) =>
+    setClosed((was) => {
+      const next = new Set(was);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
 
   const slotOf = (node: TreeNode): Slot => {
     if (node.type === "layer") return node.slot;
@@ -119,6 +139,9 @@ export function LayerTree({ project, selected, onSelect, edit, onMenu, onAdd, on
                 setDragging={setDragging}
                 setOver={setOver}
                 onDrop={drop}
+                denominator={denominator}
+                closed={closed}
+                onToggleGroup={toggleGroup}
               />
             ))}
           </div>
@@ -150,11 +173,36 @@ interface NodeProps {
   setDragging: (id: string | null) => void;
   setOver: (id: string | null) => void;
   onDrop: (target: string) => void;
+  denominator: number;
+  closed: Set<string>;
+  onToggleGroup: (id: string) => void;
 }
 
 function Node(props: NodeProps) {
-  const { node, depth, selected, onSelect, edit, onMenu, dragging, over, setDragging, setOver, onDrop } =
-    props;
+  const {
+    node,
+    depth,
+    selected,
+    onSelect,
+    edit,
+    onMenu,
+    dragging,
+    over,
+    setDragging,
+    setOver,
+    onDrop,
+    denominator,
+    closed,
+    onToggleGroup,
+  } = props;
+
+  const folded = node.type === "group" && closed.has(node.id);
+  /*
+   * A layer that is on but not drawn at this scale is the commonest "why is my
+   * data missing" in a GIS, and the answer is always in a panel nobody opened.
+   * The row says so itself.
+   */
+  const outOfScale = node.type === "layer" && hiddenBecause(node, denominator) === "scale";
 
   const toggle = () =>
     edit((draft) =>
@@ -165,8 +213,11 @@ function Node(props: NodeProps) {
 
   const classes = [
     "node",
+    node.type === "group" ? "group" : "",
     node.id === selected ? "on" : "",
     node.visible ? "" : "off",
+    outOfScale ? "unscaled" : "",
+    folded ? "closed" : "",
     dragging === node.id ? "lifting" : "",
     over === node.id && dragging !== node.id ? "target" : "",
   ]
@@ -202,6 +253,24 @@ function Node(props: NodeProps) {
         <span className="grip" aria-hidden="true">
           ⠿
         </span>
+
+        {node.type === "group" ? (
+          <button
+            className="fold"
+            aria-expanded={!folded}
+            aria-label={folded ? `Open ${node.name}` : `Close ${node.name}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleGroup(node.id);
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+              <path d="m7 10 5 5 5-5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        ) : (
+          <span className="fold" aria-hidden="true" />
+        )}
         <button
           className="eye"
           aria-label={node.visible ? `Hide ${node.name}` : `Show ${node.name}`}
@@ -213,22 +282,25 @@ function Node(props: NodeProps) {
           {node.visible ? <EyeOpen /> : <EyeShut />}
         </button>
 
-        {node.type === "group" ? (
-          <span className="swatch folder" />
-        ) : (
-          <span className="swatch" style={{ background: swatch(node) }} />
-        )}
+        {/* The layer's real symbology, not a colour chip. */}
+        <LayerSymbol node={node} />
 
         <span className="name" title={`${node.name} · ${describe(node)}`}>
           {node.name}
         </span>
 
         {/*
-          What the two-line row used to spell out under the name. One row is 26px
-          rather than 34, which is eight more layers on the screen; the detail
-          that will not fit is on the row's own tooltip and in the inspector.
+          One tag, not two. The row is 272px wide and a second one costs about
+          six characters of layer name, which is the more useful of the two.
+          "Not drawn here" outranks "five classes" when both are true.
         */}
-        <span className="tag">{badge(node)}</span>
+        {outOfScale ? (
+          <span className="tag flag" title="Not drawn at this scale">
+            scale
+          </span>
+        ) : (
+          <span className="tag">{badge(node)}</span>
+        )}
 
         <button
           className="more"
@@ -244,8 +316,13 @@ function Node(props: NodeProps) {
         </button>
       </div>
 
-      {node.type === "group" &&
-        node.children.map((child) => <Node {...props} key={child.id} node={child} depth={depth + 1} />)}
+      {node.type === "group" && !folded && (
+        <div className="kids">
+          {node.children.map((child) => (
+            <Node {...props} key={child.id} node={child} depth={depth + 1} />
+          ))}
+        </div>
+      )}
     </>
   );
 }
@@ -279,15 +356,6 @@ function describe(node: TreeNode): string {
   if (node.filter) parts.push("filtered");
   if (node.opacity < 1) parts.push(`${Math.round(node.opacity * 100)}%`);
   return parts.join(" · ");
-}
-
-function swatch(node: LayerNode): string {
-  const s = node.symbology;
-  if (s.kind === "graduated") return `linear-gradient(90deg, ${s.colors.join(", ")})`;
-  if (s.kind === "categorized" && s.categories.length > 1) {
-    return `linear-gradient(90deg, ${s.categories.map((c) => c.color).join(", ")})`;
-  }
-  return representativeColor(s);
 }
 
 /**

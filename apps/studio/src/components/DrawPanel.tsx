@@ -11,30 +11,40 @@ import {
 } from "@alidade/core";
 
 import { Field, Section, Switch } from "./Field";
-import type { DrawSession } from "../useDrawing";
+import type { DrawSession, DrawTool, SnapSettings } from "../useDrawing";
 
 interface Props {
   project: MapProject;
   edit: (change: (draft: MapProject) => MapProject) => void;
   session: DrawSession;
   active: Annotation | undefined;
-  onStart: (kind: Annotation["kind"], measure?: "distance" | "area" | null) => void;
+  onStart: (tool: DrawTool, measure?: "distance" | "area" | null) => void;
   onStop: () => void;
   onFinish: () => void;
   onCancel: () => void;
   onGoTo: (lon: number, lat: number) => void;
   onProblem: (message: string) => void;
+  snapping: SnapSettings;
+  onSnapping: (next: SnapSettings) => void;
+  editing: boolean;
+  onEditing: (on: boolean) => void;
+  selected: string | null;
+  onSelect: (id: string | null) => void;
+  onUndo: () => void;
 }
 
 const TOOLS = [
-  { kind: "point" as const, measure: null, label: "Point", hint: "Click once" },
-  { kind: "line" as const, measure: null, label: "Line", hint: "Click, then Enter" },
-  { kind: "polygon" as const, measure: null, label: "Area", hint: "Click, then Enter" },
+  { tool: "point" as const, label: "Point", hint: "Click once" },
+  { tool: "line" as const, label: "Line", hint: "Click each point · double click to finish" },
+  { tool: "polygon" as const, label: "Area", hint: "Click each corner · double click to finish" },
+  { tool: "rectangle" as const, label: "Rectangle", hint: "Click one corner, then the opposite" },
+  { tool: "circle" as const, label: "Circle", hint: "Click the centre, then the edge" },
 ];
 
 const MEASURES = [
-  { kind: "line" as const, measure: "distance" as const, label: "Distance", hint: "Along the ground" },
-  { kind: "polygon" as const, measure: "area" as const, label: "Area", hint: "On the sphere" },
+  { tool: "line" as const, measure: "distance" as const, label: "Distance", hint: "Along the ground" },
+  { tool: "polygon" as const, measure: "area" as const, label: "Area", hint: "On the sphere" },
+  { tool: "circle" as const, measure: "area" as const, label: "Radius", hint: "Centre, then edge" },
 ];
 
 const FORMATS: { id: ExchangeFormat; label: string }[] = [
@@ -53,7 +63,25 @@ const FORMATS: { id: ExchangeFormat; label: string }[] = [
  * more useful than one that disappears when the panel closes.
  */
 export function DrawPanel(props: Props) {
-  const { project, edit, session, active, onStart, onStop, onFinish, onCancel, onGoTo, onProblem } = props;
+  const {
+    project,
+    edit,
+    session,
+    active,
+    onStart,
+    onStop,
+    onFinish,
+    onCancel,
+    onGoTo,
+    onProblem,
+    snapping,
+    onSnapping,
+    editing,
+    onEditing,
+    selected,
+    onSelect,
+    onUndo,
+  } = props;
   const annotations = project.annotations;
   const features = annotations?.features ?? [];
   const units = project.chrome.scaleBar.units;
@@ -127,10 +155,10 @@ export function DrawPanel(props: Props) {
           {TOOLS.map((tool) => (
             <button
               key={tool.label}
-              className={session.mode === tool.kind && !session.measure ? "on" : ""}
+              className={session.tool === tool.tool && !session.measure ? "on" : ""}
               title={tool.hint}
               onClick={() =>
-                session.mode === tool.kind && !session.measure ? onStop() : onStart(tool.kind, null)
+                session.tool === tool.tool && !session.measure ? onStop() : onStart(tool.tool, null)
               }
             >
               {tool.label}
@@ -144,10 +172,14 @@ export function DrawPanel(props: Props) {
           {MEASURES.map((tool) => (
             <button
               key={tool.label}
-              className={session.measure === tool.measure ? "on" : ""}
+              className={
+                session.measure === tool.measure && session.tool === tool.tool ? "on" : ""
+              }
               title={tool.hint}
               onClick={() =>
-                session.measure === tool.measure ? onStop() : onStart(tool.kind, tool.measure)
+                session.measure === tool.measure && session.tool === tool.tool
+                  ? onStop()
+                  : onStart(tool.tool, tool.measure)
               }
             >
               {tool.label}
@@ -158,6 +190,62 @@ export function DrawPanel(props: Props) {
           Distances and areas are computed on the sphere, not on the screen. A length read off web
           mercator is too long by one over the cosine of the latitude, which at Tehran is a fifth.
         </p>
+      </Section>
+
+      <Section title="Snapping">
+        <Switch
+          label="Snap to existing shapes"
+          on={snapping.enabled}
+          onChange={(on) => onSnapping({ ...snapping, enabled: on })}
+        />
+        <Switch
+          label="Snap along segments, not only to corners"
+          on={snapping.edges}
+          onChange={(on) => onSnapping({ ...snapping, edges: on })}
+        />
+        <Field label="Tolerance" value={`${snapping.pixels} px`}>
+          <input
+            type="range"
+            min={0}
+            max={30}
+            value={snapping.pixels}
+            onChange={(e) => onSnapping({ ...snapping, pixels: Number(e.target.value) })}
+          />
+        </Field>
+        <p className="hint">
+          The tolerance is in pixels because it is a fact about aim, not about the world: it is
+          converted against the scale before the geometry sees it, so it means the same thing at
+          every zoom. A corner always wins over a segment, even a nearer one.
+        </p>
+      </Section>
+
+      <Section title="Edit shapes">
+        <Switch label="Show vertex handles" on={editing} onChange={onEditing} />
+        {editing && (
+          <>
+            <Field label="Shape">
+              <select value={selected ?? ""} onChange={(e) => onSelect(e.target.value || null)}>
+                <option value="">Pick one to edit</option>
+                {features.map((feature) => (
+                  <option key={feature.id} value={feature.id}>
+                    {feature.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <p className="hint">
+              Drag the shape itself to carry it somewhere else. Squares are vertices: drag to move,
+              Alt-click to remove. Circles are the middles of segments: drag one and it becomes a
+              vertex. A ring will not go below three points and a line will not go below two, so a
+              shape cannot be edited into something that is not one.
+            </p>
+            <p className="hint">
+              Moving a shape rotates it about the sphere rather than shifting its degrees, so every
+              distance inside it survives the trip. Shifting degrees would have a parcel dragged
+              from the tropics to the Arctic arrive covering half the ground it left with.
+            </p>
+          </>
+        )}
       </Section>
 
       {session.mode && (
@@ -171,7 +259,10 @@ export function DrawPanel(props: Props) {
             <button onClick={onFinish} disabled={!active}>
               Finish
             </button>
-            <button className="danger" onClick={onCancel}>
+            <button onClick={onUndo} disabled={!active} title="Backspace">
+              Undo point
+            </button>
+            <button className="danger" onClick={onCancel} title="Escape">
               Cancel
             </button>
           </div>
@@ -193,8 +284,24 @@ export function DrawPanel(props: Props) {
             />
             <ul className="drawlist">
               {features.map((feature) => (
-                <li key={feature.id}>
-                  <span className="swatch" style={{ background: feature.color }} />
+                <li
+                  key={feature.id}
+                  className={feature.id === selected ? "on" : ""}
+                  onClick={() => onSelect(feature.id === selected ? null : feature.id)}
+                >
+                  <input
+                    type="color"
+                    value={feature.color}
+                    aria-label={`Colour of ${feature.name}`}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) =>
+                      edit((d) => {
+                        const target = d.annotations?.features.find((f) => f.id === feature.id);
+                        if (target) target.color = e.target.value;
+                        return d;
+                      })
+                    }
+                  />
                   <span className="name" title={feature.name}>
                     {feature.name}
                   </span>

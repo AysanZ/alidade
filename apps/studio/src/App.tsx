@@ -10,6 +10,7 @@ import {
   gridKey,
   padded,
   needsFraming,
+  toleranceInMetres,
   utmCell,
   viewForExtent,
   withMinimumSize,
@@ -20,6 +21,7 @@ import { AddData } from "./components/AddData";
 import { AttributeTable } from "./components/AttributeTable";
 import { LayerMenu, moveWithinSlot } from "./components/LayerMenu";
 import { BasemapGallery } from "./components/BasemapGallery";
+import { DrawOverlay } from "./components/DrawOverlay";
 import { DrawPanel } from "./components/DrawPanel";
 import { FeatureTip, type Tip } from "./components/FeatureTip";
 import { Identify, type Identified } from "./components/Identify";
@@ -50,6 +52,15 @@ import { stampedPng } from "./export";
  * being identifiable and being decoration.
  */
 const HIT_TOLERANCE = 4;
+
+/**
+ * How near a vertex the pointer has to be for a snap to take, in pixels.
+ *
+ * Pixels rather than metres because it is a fact about aim, not about the world:
+ * the same hand is equally accurate at every zoom. It is converted against the
+ * current scale before the geometry ever sees it.
+ */
+const SNAP_PIXELS = 12;
 
 const TITLES: Record<PaneId, string> = {
   layers: "Layers",
@@ -108,8 +119,18 @@ export default function App() {
    */
   const onClick = useRef(drawing.click);
   onClick.current = drawing.click;
+  const onDrawMove = useRef(drawing.move);
+  onDrawMove.current = drawing.move;
+  const onDrawFinish = useRef(drawing.finish);
+  onDrawFinish.current = drawing.finish;
   const drawingNow = useRef(false);
   drawingNow.current = drawing.session.mode !== null;
+  /** Editing or drawing: either way the pointer is a tool, not a pan handle. */
+  const editingNow = useRef(false);
+  editingNow.current = drawing.editing;
+  /** The scale the snap tolerance is measured against, read at pointer time. */
+  const scale = useRef({ zoom: 1, latitude: 0 });
+  scale.current = { zoom: camera.zoom, latitude: camera.latitude };
   const latest = useRef(project);
   latest.current = project;
 
@@ -227,6 +248,12 @@ export default function App() {
 
     map.on("mousemove", (e: MapMouseEvent) => {
       setPointer([e.lngLat.lng, e.lngLat.lat]);
+      if (drawingNow.current || editingNow.current) {
+        onDrawMove.current(
+          [e.lngLat.lng, e.lngLat.lat],
+          toleranceInMetres(SNAP_PIXELS, scale.current.zoom, scale.current.latitude),
+        );
+      }
       if (drawingNow.current) return clearHover();
       const under = hit(e);
       map.getCanvas().style.cursor = under ? "pointer" : "";
@@ -250,6 +277,18 @@ export default function App() {
     // Leaving the canvas is not a mousemove, so without this the tooltip and the
     // highlight stayed behind on whatever was under the pointer as it left.
     map.on("mouseout", clearHover);
+
+    /*
+     * A double click finishes the shape, because that is what every GIS does and
+     * because Enter is not reachable with a mouse in one hand and a plan in the
+     * other. MapLibre's own double-click zoom would fire underneath it, so the
+     * event is stopped rather than merely handled.
+     */
+    map.on("dblclick", (e: MapMouseEvent) => {
+      if (!drawingNow.current) return;
+      e.preventDefault();
+      onDrawFinish.current();
+    });
 
     map.on("click", (e: MapMouseEvent) => {
       if (drawingNow.current) return onClick.current([e.lngLat.lng, e.lngLat.lat]);
@@ -344,6 +383,17 @@ export default function App() {
     const canvas = mapRef.current?.getCanvas();
     if (canvas) canvas.style.cursor = drawing.session.mode ? "crosshair" : "";
   }, [drawing.session.mode]);
+
+  /*
+   * Dragging a vertex must not also drag the map. The handle swallows the event,
+   * but MapLibre listens on the canvas underneath and would pan anyway.
+   */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (drawing.dragging) map.dragPan.disable();
+    else if (!locks.pan) map.dragPan.enable();
+  }, [drawing.dragging, locks.pan]);
 
   /*
    * Escape steps back out of whatever is open, in the order a person expects:
@@ -597,6 +647,7 @@ export default function App() {
               onMenu={(id, at) => setMenu({ id, at })}
               onAdd={() => setAdding(true)}
               onFlyTo={(extent) => flyTo(extent, true)}
+              denominator={denominator}
             />
           )}
           {pane === "basemaps" && <BasemapGallery project={project} edit={edit} />}
@@ -622,6 +673,13 @@ export default function App() {
               onCancel={drawing.cancel}
               onGoTo={goTo}
               onProblem={setProblem}
+              snapping={drawing.snapping}
+              onSnapping={drawing.setSnapping}
+              editing={drawing.editing}
+              onEditing={drawing.setEditing}
+              selected={drawing.selected}
+              onSelect={drawing.setSelected}
+              onUndo={drawing.undo}
             />
           )}
           {pane === "project" && (
@@ -643,20 +701,67 @@ export default function App() {
               onGoTo={goTo}
             />
           )}
-          {drawing.session.mode && (
+          {(drawing.session.mode || drawing.editing) && (
             <div className="drawhint">
               <b>
-                {drawing.session.measure
-                  ? `Measuring ${drawing.session.measure}`
-                  : `Drawing a ${drawing.session.mode}`}
+                {drawing.editing
+                  ? "Editing shapes"
+                  : drawing.session.measure
+                    ? `Measuring ${drawing.session.measure}`
+                    : `Drawing a ${drawing.session.tool}`}
               </b>
               <span>
-                {drawing.session.mode === "point"
-                  ? "Click to place. Escape to stop."
-                  : "Click to add points · Enter to finish · Escape to cancel"}
+                {drawing.editing
+                  ? "Drag the shape to move it · drag a square for a vertex · Alt-click to remove"
+                  : drawing.session.tool === "rectangle"
+                    ? "Click one corner, then the opposite one · Escape cancels"
+                    : drawing.session.tool === "circle"
+                      ? "Click the centre, then a point on the edge · Escape cancels"
+                      : drawing.session.mode === "point"
+                        ? "Click to place · Escape to stop"
+                        : "Click to add · Backspace undoes · double click or Enter finishes"}
               </span>
             </div>
           )}
+
+          {/*
+            Live feedback sits above the canvas rather than in the style. The
+            rubber band follows the mouse, and the mouse is not part of the map.
+          */}
+          <DrawOverlay
+            annotations={project.annotations}
+            active={drawing.active}
+            cursor={drawing.cursor}
+            snapAt={drawing.snapAt}
+            readout={drawing.readout}
+            editing={drawing.editing}
+            selected={drawing.selected}
+            units={project.chrome.scaleBar.units}
+            anchor={drawing.anchor}
+            spanning={
+              drawing.session.tool === "rectangle" || drawing.session.tool === "circle"
+                ? drawing.session.tool
+                : null
+            }
+            project={(position) => {
+              const map = mapRef.current;
+              if (!map) return null;
+              const point = map.project(position);
+              return { x: point.x, y: point.y };
+            }}
+            unproject={(event) => {
+              const map = mapRef.current;
+              if (!map) return null;
+              const box = map.getCanvas().getBoundingClientRect();
+              const at = map.unproject([event.clientX - box.left, event.clientY - box.top]);
+              return [at.lng, at.lat];
+            }}
+            onVertexDown={drawing.vertex.begin}
+            onMidpointDown={drawing.vertex.beginMidpoint}
+            onVertexRemove={drawing.vertex.drop}
+            onShapeDown={drawing.vertex.beginShape}
+            onSelect={drawing.setSelected}
+          />
           {project.chrome.legend && <Legend project={project} />}
           {tip && (
             <FeatureTip name={tip.name} layer={tip.layer} at={tip.at} viewport={tip.viewport} />
