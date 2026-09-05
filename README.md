@@ -94,6 +94,63 @@ precision before the GPU sees it, which is what keeps a building-sized object
 from twitching at street zoom — the standard example does the multiplication
 where single precision cannot hold it.
 
+The scene is lit by the sun rather than from a fixed angle. `packages/core/sun.ts`
+computes where the sun stood over a place at an instant — NOAA's abridgement of
+Meeus, good to well under a minute of arc — and turns it into the light the map
+already understood, so the astronomy reaches the extruded buildings, the glTF
+models and the hillshade through one number rather than three that could
+disagree. Models cast real shadows onto a shadow-catching plane at ground level.
+Move the time slider and a tower's shadow swings down the street, which is the
+difference between an extrusion and a shadow study.
+
+The tests for it assert facts about the solar system rather than numbers taken
+from the implementation: noon altitude at the equinox is the complement of the
+latitude, the day is symmetric about solar noon to within the declination's own
+drift, the sun does not set inside the arctic circle in June, and the equation
+of time runs to about +16 minutes in November and -14 in February. A table of
+expected outputs would have passed just as happily with east and west swapped.
+
+Most of the catalogue is built by the application rather than downloaded — a
+turbine, a massing block, a lattice mast, a survey marker, a street tree, a
+cone — each from primitives at its real size in metres, so a scale of 1 is
+already right and there is no texture carrying anyone else's logo. The heights
+the panel prints are measured from the meshes in a test rather than declared
+beside them, because two sources of truth for how tall a thing is means one of
+them is eventually wrong.
+
+A placement is held to a minimum size on the screen. A four metre lorry at zoom
+10 is a third of a pixel: true to scale, invisible, and indistinguishable from a
+model that failed to load, which is the first thing anyone concludes. Above the
+zoom where it covers its floor the size drawn is the real one and nothing
+happens; below it the model is held, the way a map holds a town's dot rather
+than drawing the town. Set the floor to zero for a scene that must stay true to
+scale at every zoom.
+
+One model can be placed at every point of a layer. That is the difference
+between a scene and a dataset: forty turbines dropped by hand is forty chances
+to put one in the wrong field, and the same forty taken from the layer that
+already knows where they are is right by construction. Bearing, scale and
+height can each be read from a column, and a column that is blank or is not a
+number leaves the template's own value alone rather than becoming a zero — a
+turbine facing north because its bearing column was empty is a wrong map that
+looks like a right one. It is an expansion and not a binding: what it makes are
+ordinary placements, which can then be nudged, deleted and undone one at a time.
+
+**Fly a demo** in the models pane puts an airliner on a fifteen kilometre
+circuit and starts it, so there is something moving before anything has been
+placed. What it makes is an ordinary placement on an ordinary drawing, so it can
+be taken apart, retimed or sent somewhere else.
+
+A model can also move. A track is a drawn path, a lap time and whether it
+repeats, and it lives in the document; where the model is at this instant does
+not. Sixty positions a second would be sixty history steps a second, so this is
+the rubber band's rule again — the clock is not part of the map. The position is
+sampled by distance along the path rather than by vertex, so the speed on the
+ground is constant: interpolating between vertices makes a model crawl down a
+long straight and bolt through a cluster of close ones. Between two points it
+walks the great circle, for the same reason a dragged polygon is rotated about
+the sphere rather than shifted in degrees.
+
 Click a model to select it; the inspector has the numbers, and **Place on map**
 moves it with a click. Size can be set in metres once the file has arrived and
 its real extent is known, because "make it twelve metres tall" is what someone
@@ -228,7 +285,7 @@ not a published package.
 
 ```bash
 pnpm install
-pnpm test        # 359 tests, Node only: no browser, no WebGL
+pnpm test        # 401 tests, Node only: no browser, no WebGL
 pnpm typecheck   # every package and the studio
 pnpm build
 ```

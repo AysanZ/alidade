@@ -23,7 +23,12 @@ export const emptyProject: MapProject = {
   name: "Untitled map",
   view: { center: [20, 25], zoom: 1.9, pitch: 0, bearing: 0 },
   basemap: BASEMAPS[0]!,
-  environment: {},
+  /*
+   * The sky is on from the start. Without it a globe hangs in a flat black
+   * rectangle, which reads as a rendering fault rather than as space, and the
+   * atmosphere is the one cue that makes the sphere look like a planet.
+   */
+  environment: { sky: true },
   chrome: { ...defaultChrome(), overview: true },
   annotations: defaultAnnotations(),
   models: defaultModels(),

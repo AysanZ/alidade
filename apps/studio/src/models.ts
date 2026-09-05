@@ -3,11 +3,20 @@ import type { LoadedInfo } from "@alidade/three";
 /**
  * Models the studio knows about before the user has brought any.
  *
- * The same rule as the basemaps: nothing here needs a key or an account, and
- * every file is openly licensed with its attribution carried on the placement.
- * They are the Khronos sample assets, served from the repository they live in,
- * chosen for being small, well made and different from each other: a vehicle,
- * an animal, a piece of street furniture and a cube for checking scale.
+ * Most of these are built by the application rather than downloaded. The
+ * catalogue used to be somebody's renderer test assets — a fox, and a lorry
+ * with the vendor's logo down the side — which prove that a glTF loader works
+ * and are the wrong objects for a map: placing forty of them puts forty copies
+ * of another company's branding on your data, and none of them is a thing
+ * anybody surveys.
+ *
+ * The built-ins are made from primitives at their real size in metres, so a
+ * turbine is eighty metres to the hub because that is what a turbine is, and a
+ * scale of 1 is already right. Nothing is fetched, so nothing here can go stale
+ * or be rate-limited, and there is no texture carrying anyone's mark.
+ *
+ * Two downloads are kept, because a built-in cube cannot prove that the loader,
+ * the Draco decoder and the physically based materials work on a real file.
  */
 const KHRONOS = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models";
 
@@ -28,37 +37,68 @@ export interface Sample {
 
 export const SAMPLES: Sample[] = [
   {
-    id: "truck",
-    name: "Milk truck",
-    url: `${KHRONOS}/CesiumMilkTruck/glTF-Binary/CesiumMilkTruck.glb`,
-    size: "370 KB",
-    attribution: "Cesium · CC BY 4.0",
-    hint: "A lorry, a few metres long. Faces along its own +z.",
+    id: "turbine",
+    name: "Wind turbine",
+    url: "builtin:turbine",
+    size: "built in",
+    attribution: "Alidade · Apache-2.0",
+    hint: "120 m to the blade tip. The one to place over a point layer.",
   },
   {
-    id: "fox",
-    name: "Fox",
-    url: `${KHRONOS}/Fox/glTF-Binary/Fox.glb`,
-    size: "160 KB",
-    attribution: "PixelMannen, tomkranis, AsoboStudio · CC0, CC BY 4.0",
-    hint: "Modelled in centimetres, so it starts at a hundredth.",
-    scale: 0.01,
+    id: "block",
+    name: "Massing block",
+    url: "builtin:block",
+    size: "built in",
+    attribution: "Alidade · Apache-2.0",
+    hint: "10 × 10 × 20 m. A proposal that has a height and no design yet.",
+  },
+  {
+    id: "mast",
+    name: "Lattice mast",
+    url: "builtin:mast",
+    size: "built in",
+    attribution: "Alidade · Apache-2.0",
+    hint: "40 m with a dish. For a telecoms or sensor site.",
+  },
+  {
+    id: "marker",
+    name: "Survey marker",
+    url: "builtin:marker",
+    size: "built in",
+    attribution: "Alidade · Apache-2.0",
+    hint: "3.5 m. Visible from a distance and obviously not a building.",
+  },
+  {
+    id: "tree",
+    name: "Street tree",
+    url: "builtin:tree",
+    size: "built in",
+    attribution: "Alidade · Apache-2.0",
+    hint: "8 m. Mostly here for the shadow it throws.",
+  },
+  {
+    id: "cone",
+    name: "Traffic cone",
+    url: "builtin:cone",
+    size: "built in",
+    attribution: "Alidade · Apache-2.0",
+    hint: "0.7 m. The one that shows whether your scale is honest.",
+  },
+  {
+    id: "person",
+    name: "Person",
+    url: `${KHRONOS}/CesiumMan/glTF-Binary/CesiumMan.glb`,
+    size: "500 KB",
+    attribution: "Cesium · CC BY 4.0",
+    hint: "About 1.8 m. The reference every other height is read against.",
   },
   {
     id: "lantern",
-    name: "Lantern",
+    name: "Street lantern",
     url: `${KHRONOS}/Lantern/glTF-Binary/Lantern.glb`,
     size: "9.6 MB",
     attribution: "Microsoft · CC0",
-    hint: "Street furniture with physically based materials.",
-  },
-  {
-    id: "cube",
-    name: "Calibration cube",
-    url: `${KHRONOS}/BoxTextured/glTF-Binary/BoxTextured.glb`,
-    size: "6 KB",
-    attribution: "Cesium · CC BY 4.0",
-    hint: "One metre a side. For checking that a scale is right.",
+    hint: "A real file with physically based materials, to check the sun against.",
   },
 ];
 

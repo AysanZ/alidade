@@ -21,6 +21,7 @@ import {
 } from "@alidade/core";
 import { MapManager, watchStyleSwaps, type Renderer } from "@alidade/maplibre";
 import { ThreeModelHost } from "@alidade/three";
+import { movedAlong, spreadModels, trackAt, type Placeable, type SpreadOptions } from "@alidade/core";
 
 import { AddData } from "./components/AddData";
 import { AttributeTable } from "./components/AttributeTable";
@@ -113,6 +114,8 @@ export default function App() {
   const [problem, setProblem] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [presenting, setPresenting] = useState(false);
+  /** Wall-clock milliseconds the tracks started from, or null when stopped. */
+  const [playingSince, setPlayingSince] = useState<number | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [locks, setLocks] = useState({ zoom: false, pan: false });
   const [camera, setCamera] = useState<Camera>({
@@ -268,7 +271,13 @@ export default function App() {
       maxPitch: 85,
       // Required if the canvas is ever to be read back, which Export map does.
       // MapLibre 5 moved these under canvasContextAttributes.
-      canvasContextAttributes: { preserveDrawingBuffer: true, antialias: true },
+      /*
+       * `preserveDrawingBuffer` is required if the canvas is ever to be read
+       * back, which Export map does. `alpha` lets the starfield behind the
+       * canvas show through wherever the renderer drew nothing, which under a
+       * globe with the sky off is everything around the planet.
+       */
+      canvasContextAttributes: { preserveDrawingBuffer: true, antialias: true, alpha: true },
     });
 
     map.on("load", () => {
@@ -504,6 +513,101 @@ export default function App() {
     host.current?.select(selectedModel);
   }, [selectedModel]);
 
+  /**
+   * One model at every feature of a layer.
+   *
+   * The features come from what the renderer has actually drawn, which is what
+   * is on the screen: a vector tile is the only copy of the geometry the client
+   * has, and it only holds the tiles it was asked for. So the count is reported
+   * back rather than assumed, and the panel says where it came from — a spread
+   * that quietly stopped at the edge of the viewport would look like a layer
+   * with fewer features in it than it has.
+   */
+  const spreadOverLayer = useCallback(
+    (layerId: string, template: Model3D, options: SpreadOptions) => {
+      const map = mapRef.current;
+      if (!map) return;
+      const layer = findLayer(project, layerId);
+      if (!layer) return;
+      const drawn = bundleIdsOf(layer).filter((id) => map.getLayer(id));
+      if (drawn.length === 0) {
+        setProblem("That layer is not being drawn, so there is nothing to place on.");
+        return;
+      }
+
+      const seen = new Set<string>();
+      const features: Placeable[] = [];
+      for (const feature of map.queryRenderedFeatures({ layers: drawn })) {
+        const geometry = feature.geometry;
+        if (geometry.type !== "Point") continue;
+        const position = geometry.coordinates as [number, number];
+        /*
+         * A point on a tile boundary is in both tiles, and both are drawn, so
+         * without this every fence post along the seam gets two models standing
+         * in each other.
+         */
+        const key = `${position[0].toFixed(7)},${position[1].toFixed(7)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        features.push({ position, properties: feature.properties ?? {} });
+      }
+
+      if (features.length === 0) {
+        setProblem("No points from that layer are on the screen. Zoom to it and try again.");
+        return;
+      }
+
+      const prefix = `sp_${Math.random().toString(36).slice(2, 7)}`;
+      const { models, available } = spreadModels(template, features, prefix, options);
+      edit((d) => {
+        d.models ??= { visible: true, items: [] };
+        d.models.items = [...d.models.items, ...models];
+        return d;
+      });
+      if (available > models.length) {
+        setProblem(`Placed ${models.length} of ${available} points on the screen, at your limit.`);
+      }
+    },
+    [project, edit],
+  );
+
+  /**
+   * Movement.
+   *
+   * The models are moved straight in the host rather than through the document.
+   * A track at sixty frames a second is sixty edits a second, which is sixty
+   * history steps and sixty autosaves, and an undo stack that reaches back one
+   * second. The path is in the document; where the lorry is at this instant is
+   * a function of the clock, and the clock is not part of the map.
+   *
+   * Stopping puts every model back where the document says it is, so nothing
+   * that was only ever a frame survives into a save.
+   */
+  useEffect(() => {
+    const scene = host.current;
+    if (playingSince === null || !scene) return;
+    let frame = 0;
+
+    const step = () => {
+      const models = latest.current.models;
+      const elapsed = (performance.now() - playingSince) / 1000;
+      for (const track of models?.tracks ?? []) {
+        const model = (models?.items ?? []).find((m) => m.id === track.model);
+        const sample = model ? trackAt(track, elapsed) : null;
+        if (model && sample) scene.update(movedAlong(model, sample, track));
+      }
+      mapRef.current?.triggerRepaint();
+      frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      for (const model of latest.current.models?.items ?? []) scene.update(model);
+      mapRef.current?.triggerRepaint();
+    };
+  }, [playingSince]);
+
   /* A selected model that is no longer in the document is no longer selected. */
   useEffect(() => {
     if (selectedModel && !findModel(project, selectedModel)) setSelectedModel(null);
@@ -518,7 +622,8 @@ export default function App() {
 
   /* The pointer becomes a crosshair while a placement is waiting for a click. */
   useEffect(() => {
-    const canvas = mapRef.current?.getCanvas();
+  
+  const canvas = mapRef.current?.getCanvas();
     if (canvas && !drawing.session.mode) canvas.style.cursor = placing ? "crosshair" : "";
   }, [placing, drawing.session.mode]);
 
@@ -947,6 +1052,13 @@ export default function App() {
               }}
               onProblem={setProblem}
               globe={globe}
+              pointLayers={allLayers(project).filter((l) => l.geometry === "point")}
+              onSpread={(layerId, options) => {
+                const template = (project.models?.items ?? []).find((m) => m.id === selectedModel);
+                if (template) spreadOverLayer(layerId, template, options);
+              }}
+              playing={playingSince !== null}
+              onPlay={(on) => setPlayingSince(on ? performance.now() : null)}
             />
           )}
           {pane === "draw" && (

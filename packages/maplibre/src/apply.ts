@@ -138,12 +138,27 @@ function setData(renderer: Renderer, id: string, data: unknown, warn?: Warn): vo
  * rather than a planet.
  */
 const SKY = {
-  "sky-color": "#0d1622",
-  "horizon-color": "#2a3646",
-  "fog-color": "#0a0a0b",
-  "sky-horizon-blend": 0.6,
-  "horizon-fog-blend": 0.6,
-  "fog-ground-blend": 0.15,
+  /*
+   * Space, then the edge of the atmosphere, then the air you are standing in.
+   *
+   * `sky-color` is what fills the frame around a globe, so it is the colour of
+   * space rather than of a sky: near black, but blue rather than neutral,
+   * because a true #000 reads as a hole in the page and every photograph of the
+   * earth from orbit has some blue in the dark. The horizon is the thin bright
+   * band the atmosphere makes when you look along it, which is what tells the
+   * eye the sphere has air on it.
+   */
+  "sky-color": "#070b18",
+  "horizon-color": "#3f6d9e",
+  "fog-color": "#9fb8d4",
+  "sky-horizon-blend": 0.75,
+  "horizon-fog-blend": 0.55,
+  "fog-ground-blend": 0.1,
+  /*
+   * The halo, faded out by the zoom you stop being able to see a globe from.
+   * Without it the sky is on, the projection is a sphere, and the sphere sits
+   * in a flat void looking like a bug rather than a planet.
+   */
   "atmosphere-blend": ["interpolate", ["linear"], ["zoom"], 0, 1, 5, 1, 7, 0],
 };
 

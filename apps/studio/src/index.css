@@ -450,7 +450,29 @@ input, select, textarea { font: inherit; color: inherit; }
 
 /* map */
 .mapwrap { position: relative; min-width: 0; background: var(--void); }
-.map { position: absolute; inset: 0; }
+/*
+ * Behind the map rather than on it.
+ *
+ * The renderer's canvas is transparent wherever nothing was drawn, which under
+ * a globe projection with the sky turned off is everything around the planet.
+ * A flat black rectangle there looks like a fault; this is what shows through
+ * instead. It costs no WebGL and no request: the stars are four repeating
+ * radial gradients, offset against each other so the repeat does not read as a
+ * grid, over a very dark blue that is not quite black.
+ */
+.map {
+  position: absolute;
+  inset: 0;
+  background-color: #05070f;
+  background-image:
+    radial-gradient(1.1px 1.1px at 17% 23%, rgba(255, 255, 255, 0.85), transparent 100%),
+    radial-gradient(1px 1px at 63% 71%, rgba(214, 230, 255, 0.7), transparent 100%),
+    radial-gradient(1.4px 1.4px at 82% 14%, rgba(255, 248, 232, 0.75), transparent 100%),
+    radial-gradient(0.9px 0.9px at 39% 88%, rgba(255, 255, 255, 0.55), transparent 100%),
+    radial-gradient(1px 1px at 8% 62%, rgba(190, 214, 255, 0.6), transparent 100%),
+    radial-gradient(circle at 50% 45%, #0d1430 0%, #05070f 70%);
+  background-size: 220px 190px, 310px 260px, 170px 240px, 260px 200px, 390px 300px, 100% 100%;
+}
 .attribution {
   position: absolute;
   bottom: 3px;

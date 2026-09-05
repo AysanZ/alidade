@@ -52,3 +52,28 @@ export function placementMatrix(frame: Frame, target = new Matrix4()): Matrix4 {
     new Vector3(frame.scale, frame.scale, frame.scale),
   );
 }
+
+/**
+ * How much bigger than life something must be drawn to stay findable.
+ *
+ * One, almost always. At any scale where the object already covers its floor
+ * this is exactly one and what is drawn is the truth. It only departs from the
+ * truth when the alternative is drawing something nobody can see — a four metre
+ * lorry at zoom 10 is a third of a pixel, which reads as a model that failed to
+ * load — and it departs by the least that fixes that, so the object grows no
+ * further as you zoom out past the threshold: it holds.
+ *
+ * A floor of zero turns it off, for a scene where being true to scale at every
+ * zoom matters more than being able to find anything.
+ */
+export function visibilityBoost(
+  heightMetres: number,
+  pixelsPerMetre: number,
+  floorPixels: number,
+): number {
+  if (floorPixels <= 0) return 1;
+  if (!Number.isFinite(pixelsPerMetre) || pixelsPerMetre <= 0) return 1;
+  if (!Number.isFinite(heightMetres) || heightMetres <= 0) return 1;
+  const pixels = heightMetres * pixelsPerMetre;
+  return pixels >= floorPixels ? 1 : floorPixels / pixels;
+}

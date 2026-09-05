@@ -10,9 +10,12 @@ import {
   Matrix4,
   Mesh,
   Object3D,
+  PCFSoftShadowMap,
+  PlaneGeometry,
   PMREMGenerator,
   Raycaster,
   Scene,
+  ShadowMaterial,
   Texture,
   Vector3,
   WebGLRenderer,
@@ -26,7 +29,16 @@ import type { Light, Model3D } from "@alidade/core";
 import { anchorLift, frameOf } from "@alidade/core";
 import type { ModelHost } from "@alidade/maplibre";
 
-import { cameraMatrix, placementMatrix } from "./frame";
+import { buildBuiltin, isBuiltin } from "./builtin";
+import { cameraMatrix, placementMatrix, visibilityBoost } from "./frame";
+
+/** A built-in, as a promise, so it joins the same pipeline a download does. */
+function builtinScene(url: string): Promise<Object3D> {
+  const built = buildBuiltin(url);
+  return built
+    ? Promise.resolve(built)
+    : Promise.reject(new Error(`There is no built-in model called "${url}".`));
+}
 
 /** What is known about a file once it has arrived. In the file's own units. */
 export interface LoadedInfo {
@@ -123,6 +135,22 @@ export class ThreeModelHost implements ModelHost {
   #entries = new Map<string, Entry>();
   #sky = new HemisphereLight(0xdfe8f5, 0x2a2a2e, 0.9);
   #sun = new DirectionalLight(0xffffff, 2.4);
+  /**
+   * Something for a shadow to land on.
+   *
+   * A shadow is only ever seen on a surface, and the ground under this scene
+   * belongs to the map rather than to three.js: there is no geometry there to
+   * darken. This plane is that geometry. `ShadowMaterial` draws nothing except
+   * where it is shadowed, so the map shows through everywhere else and the
+   * only thing added to the picture is the shadow itself.
+   *
+   * It is a flat plane at the anchor's height, so over terrain a shadow falls
+   * where the ground would be if the hill were not there. Following the
+   * terrain would mean sampling elevation across the whole plane every frame,
+   * which is a great deal of work to improve something nobody looks at from an
+   * angle where it shows.
+   */
+  #ground = new Mesh(new PlaneGeometry(4000, 4000), new ShadowMaterial({ opacity: 0.32 }));
   #events: HostEvents;
   #onGlobe: boolean | null = null;
   #selected: string | null = null;
@@ -152,7 +180,35 @@ export class ThreeModelHost implements ModelHost {
      */
     this.#loader = new GLTFLoader();
     this.#loader.setDRACOLoader(new DRACOLoader());
-    this.#scene.add(this.#sky, this.#sun);
+    /*
+     * The shadow camera is orthographic and has to be told how much world to
+     * cover: too small and shadows are clipped into squares, too large and the
+     * map's worth of depth texture is spread so thin that a lamp post's shadow
+     * lands a metre from the lamp post. Two hundred metres each way suits the
+     * scale these models are placed at — a street, not a county.
+     */
+    this.#sun.castShadow = true;
+    this.#sun.shadow.mapSize.set(2048, 2048);
+    const frustum = this.#sun.shadow.camera;
+    frustum.left = -200;
+    frustum.right = 200;
+    frustum.top = 200;
+    frustum.bottom = -200;
+    frustum.near = 1;
+    frustum.far = 4000;
+    // Without a bias a surface shadows itself, in stripes, which is the classic
+    // look of shadow mapping done once and never looked at again.
+    this.#sun.shadow.bias = -0.0008;
+    this.#sun.shadow.normalBias = 0.02;
+
+    this.#ground.rotation.x = -Math.PI / 2;
+    this.#ground.receiveShadow = true;
+    // The ground is a shadow catcher, not an object: it must not block a pick,
+    // and it must not be lifted into the outline of a selected model.
+    this.#ground.raycast = () => {};
+    this.#ground.userData["ground"] = true;
+
+    this.#scene.add(this.#sky, this.#sun, this.#sun.target, this.#ground);
     this.light(null);
   }
 
@@ -183,6 +239,13 @@ export class ThreeModelHost implements ModelHost {
     this.#renderer = new WebGLRenderer({ canvas: map.getCanvas(), context: gl, antialias: true });
     // The map has already drawn this frame; clearing would wipe it.
     this.#renderer.autoClear = false;
+    /*
+     * Soft shadows. The map owns this canvas and its depth buffer, and the
+     * shadow pass renders to a target of its own before the scene is drawn, so
+     * enabling this does not disturb what MapLibre has already put down.
+     */
+    this.#renderer.shadowMap.enabled = true;
+    this.#renderer.shadowMap.type = PCFSoftShadowMap;
   }
 
   /**
@@ -229,6 +292,16 @@ export class ThreeModelHost implements ModelHost {
     const centre = map.getCenter();
     const origin = { lon: centre.lng, lat: centre.lat };
     const now = performance.now();
+
+    /*
+     * The scene-to-clip matrix is built before the placements rather than after
+     * them, because the size floor needs to know how many pixels a metre is
+     * worth this frame, and that is the matrix's answer.
+     */
+    cameraMatrix(args.defaultProjectionData.mainMatrix, origin, this.#matrix);
+    this.#inverse.copy(this.#matrix).invert();
+    const pixelsPerMetre = this.#pixelsPerMetre(map);
+
     for (const entry of this.#entries.values()) {
       const { model } = entry;
       entry.group.visible = model.visible && entry.mesh !== null;
@@ -237,13 +310,12 @@ export class ThreeModelHost implements ModelHost {
         entry.ground = map.queryTerrainElevation(model.position) ?? 0;
         entry.groundAt = now;
       }
-      placementMatrix(frameOf(model, origin, model.clamp ? entry.ground : 0), entry.group.matrix);
+      const frame = frameOf(model, origin, model.clamp ? entry.ground : 0);
+      frame.scale *= this.#visibilityBoost(entry, pixelsPerMetre);
+      placementMatrix(frame, entry.group.matrix);
       drawn++;
     }
     if (drawn === 0) return;
-
-    cameraMatrix(args.defaultProjectionData.mainMatrix, origin, this.#matrix);
-    this.#inverse.copy(this.#matrix).invert();
 
     /*
      * The map's matrix is a projection and a view multiplied out, and the
@@ -357,8 +429,18 @@ export class ThreeModelHost implements ModelHost {
   #load(url: string): Promise<Loaded> {
     let pending = this.#files.get(url);
     if (!pending) {
-      pending = this.#loader.loadAsync(url).then((gltf) => {
-        const template = gltf.scene;
+      /*
+       * A built-in is measured by the same code that measures a downloaded
+       * file, rather than declaring its own size. Two sources of truth for how
+       * tall a thing is means one of them is eventually wrong, and it is always
+       * the one nobody re-derived after moving a mesh half a metre.
+       */
+      const arriving = isBuiltin(url)
+        ? builtinScene(url)
+        : this.#loader.loadAsync(url).then((gltf) => gltf.scene);
+
+      pending = arriving.then((scene) => {
+        const template = scene;
         template.updateMatrixWorld(true);
         const box = new Box3().setFromObject(template);
         const size = new Vector3();
@@ -366,6 +448,10 @@ export class ThreeModelHost implements ModelHost {
         let triangles = 0;
         template.traverse((object) => {
           if (!(object instanceof Mesh)) return;
+          // Every mesh in a placed file both throws a shadow and takes one, so
+          // a lorry's cab shades its own trailer rather than only the ground.
+          object.castShadow = true;
+          object.receiveShadow = true;
           const geometry = object.geometry;
           const count = geometry.index ? geometry.index.count : geometry.attributes["position"]?.count ?? 0;
           triangles += Math.floor(count / 3);
@@ -400,6 +486,47 @@ export class ThreeModelHost implements ModelHost {
     entry.mesh = null;
     entry.info = null;
     entry.own = false;
+  }
+
+  /**
+   * How much bigger than life a placement has to be drawn to stay findable.
+   *
+   * One, almost always: at any zoom where the model covers more than its floor
+   * this returns exactly one and the size on the screen is the true one. It
+   * only departs from the truth when the alternative is drawing nothing a
+   * person can see, and it departs by the least that fixes that.
+   *
+   * The height is used rather than the longest side, because height is what a
+   * tilted view reads and what the eye measures a building by.
+   */
+  /**
+   * How many pixels a metre at the scene's origin is worth this frame.
+   *
+   * Measured through the matrix rather than derived from the zoom, so it comes
+   * out right under pitch and under terrain without either being special-cased:
+   * a metre of height at the map centre is projected, and the answer is however
+   * far up the screen it went. `w` is kept and divided by, because a perspective
+   * matrix without its divide is not a screen position.
+   */
+  #pixelsPerMetre(map: HostMap): number {
+    const canvas = map.getCanvas();
+    const height = canvas.clientHeight || canvas.height;
+    if (!height) return 0;
+    // `applyMatrix4` performs the perspective divide, so these are already
+    // normalised device coordinates, which run -1 to 1 over the whole canvas.
+    const ground = new Vector3(0, 0, 0).applyMatrix4(this.#matrix);
+    const up = new Vector3(0, 1, 0).applyMatrix4(this.#matrix);
+    const ndc = Math.abs(up.y - ground.y);
+    return Number.isFinite(ndc) ? (ndc / 2) * height : 0;
+  }
+
+  #visibilityBoost(entry: Entry, pixelsPerMetre: number): number {
+    if (!entry.info) return 1;
+    return visibilityBoost(
+      entry.info.size[1] * entry.model.scale,
+      pixelsPerMetre,
+      entry.model.minPixels ?? 0,
+    );
   }
 
   #anchor(entry: Entry): void {
@@ -448,6 +575,18 @@ export class ThreeModelHost implements ModelHost {
     const p = (polar * Math.PI) / 180;
     // Towards the light, in a frame with x east, y up and z south.
     this.#sun.position.set(Math.sin(a) * Math.sin(p), Math.cos(p), -Math.cos(a) * Math.sin(p)).multiplyScalar(1000);
+    /*
+     * A directional light points from its position at its target, and the
+     * default target sits at the origin — which is also where the scene is
+     * re-anchored every frame, so this is already right. It is stated because
+     * a shadow camera is built around this axis, and a light whose target was
+     * never added to the scene casts shadows from a stale matrix.
+     */
+    this.#sun.target.position.set(0, 0, 0);
+    this.#sun.target.updateMatrixWorld();
+    // A sun below the horizon casts no shadow; leaving it on would throw one
+    // upwards through the models from underneath.
+    this.#sun.castShadow = this.#sun.position.y > 0;
     const intensity = Math.max(0, Math.min(1, chosen.intensity));
     const color = new Color(chosen.color);
     this.#sun.color.copy(color);

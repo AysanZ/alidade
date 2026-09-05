@@ -117,6 +117,9 @@ let counter = 0;
  * added in the same millisecond are still different and the order they were
  * added in can be read off the id in a bug report.
  */
+/** Small enough to be honest at working zooms, big enough to find. */
+export const DEFAULT_MIN_PIXELS = 26;
+
 export function newModel(
   partial: Partial<Model3D> & Pick<Model3D, "url" | "position">,
 ): Model3D {
@@ -133,6 +136,12 @@ export function newModel(
     clamp: partial.clamp ?? true,
     visible: partial.visible ?? true,
     opacity: partial.opacity ?? 1,
+    /*
+     * On by default. A placement that is true to scale and half a pixel wide is
+     * indistinguishable from one that failed to load, and the first thing
+     * anybody does after adding a model is look for it.
+     */
+    minPixels: partial.minPixels ?? DEFAULT_MIN_PIXELS,
     ...(partial.attribution !== undefined ? { attribution: partial.attribution } : {}),
   };
 }

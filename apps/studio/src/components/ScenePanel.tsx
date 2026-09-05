@@ -1,7 +1,13 @@
 import type { Bookmark, MapProject, Projection } from "@alidade/core";
 
 import { useState } from "react";
-import { GLOBE_IS_ROUND_BELOW, parseCoordinate } from "@alidade/core";
+import {
+  GLOBE_IS_ROUND_BELOW,
+  lightFromSun,
+  parseCoordinate,
+  sunPosition,
+  sunTimes,
+} from "@alidade/core";
 
 import { BUILDINGS, HILLSHADE } from "../project";
 import { OSM_SOURCE, OSM_SOURCE_ID } from "../sources";
@@ -52,6 +58,34 @@ function turnBuildingsOn(draft: MapProject): MapProject {
   return draft;
 }
 
+/**
+ * Light the map for an instant.
+ *
+ * The sun reaches the extruded buildings and the glTF scene through the light
+ * that was already there, rather than through a second path that could
+ * disagree with it, and it turns the hillshade's sun round with it so a hill
+ * and a tower are not lit from different directions in the same picture.
+ */
+function setSun(draft: MapProject, millis: number): MapProject {
+  const [lon, lat] = draft.view.center;
+  const position = sunPosition(millis, lon, lat);
+  draft.environment.sun = { iso: new Date(millis).toISOString() };
+  draft.environment.light = lightFromSun(position);
+  if (draft.environment.hillshade) {
+    draft.environment.hillshade.illumination = Math.round(position.azimuth);
+  }
+  return draft;
+}
+
+/** Midnight local time on the day an instant falls in. */
+function startOfDay(millis: number): number {
+  const d = new Date(millis);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+const clock = (millis: number) =>
+  new Date(millis).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+
 function isDark(background: string): boolean {
   const hex = background.replace("#", "");
   if (hex.length !== 6) return true;
@@ -78,6 +112,9 @@ export function ScenePanel({
   const parsed = parseCoordinate(target);
   const { view, environment, chrome } = project;
   const buildings = environment.buildings;
+  const sunAt = environment.sun ? Date.parse(environment.sun.iso) : null;
+  const sun = sunAt === null ? null : sunPosition(sunAt, view.center[0], view.center[1]);
+  const times = sunAt === null ? null : sunTimes(sunAt, view.center[0], view.center[1]);
   const mode = VIEWS.find((v) => v.pitch === view.pitch)?.id ?? "custom";
   const tooFarOutForRelief = denominator > TERRAIN_DENOMINATOR;
 
@@ -532,43 +569,120 @@ export function ScenePanel({
         </Field>
       </Section>
 
-      <Section title="Lighting">
+      <Section title="Sun">
+        <p className="hint">
+          The map is lit from where the sun actually was, for this place and this
+          moment. Times are your own clock; the position is computed for the centre
+          of the view.
+        </p>
         <div className="row buttons choice">
-          {([
-            ["day", "Day"],
-            ["night", "Night"],
-          ] as const).map(([id, label]) => (
-            <button
-              key={id}
-              className={(environment.light?.intensity ?? 1) >= 0.7 === (id === "day") ? "on" : ""}
-              onClick={() =>
-                edit((d) => {
-                  d.environment.light =
-                    id === "day"
-                      ? { anchor: "viewport", color: "#ffffff", intensity: 1 }
-                      : { anchor: "viewport", color: "#64748b", intensity: 0.35 };
-                  return d;
-                })
-              }
-            >
-              {label}
-            </button>
-          ))}
           <button
+            className={sunAt !== null ? "on" : ""}
+            onClick={() =>
+              edit((d) =>
+                setSun(d, d.environment.sun ? Date.parse(d.environment.sun.iso) : Date.now()),
+              )
+            }
+          >
+            Follow the sun
+          </button>
+          <button
+            className={sunAt === null ? "on" : ""}
             onClick={() =>
               edit((d) => {
+                delete d.environment.sun;
                 delete d.environment.light;
                 return d;
               })
             }
           >
-            Default
+            Studio light
           </button>
         </div>
-        <p className="hint">
-          Lighting is what shades extruded buildings and hillshade, so it does nothing on a flat
-          map with neither.
-        </p>
+
+        {sunAt !== null && sun && times && (
+          <>
+            <Field label="Date">
+              <input
+                type="date"
+                className="text"
+                value={new Date(sunAt).toLocaleDateString("en-CA")}
+                onChange={(e) => {
+                  const [y, m, day] = e.target.value.split("-").map(Number);
+                  if (!y || !m || !day) return;
+                  const keep = sunAt - startOfDay(sunAt);
+                  edit((d) => setSun(d, new Date(y, m - 1, day).getTime() + keep));
+                }}
+              />
+            </Field>
+            <Field label="Time" value={clock(sunAt)}>
+              <input
+                type="range"
+                min={0}
+                max={1439}
+                value={Math.round((sunAt - startOfDay(sunAt)) / 60_000)}
+                onChange={(e) =>
+                  edit((d) => {
+                    const at = d.environment.sun ? Date.parse(d.environment.sun.iso) : Date.now();
+                    return setSun(d, startOfDay(at) + Number(e.target.value) * 60_000);
+                  })
+                }
+              />
+            </Field>
+
+            <Field label="Altitude" value={`${sun.altitude.toFixed(1)}°`}>
+              <span className="grow" />
+            </Field>
+            <Field label="Bearing" value={`${sun.azimuth.toFixed(0)}°`}>
+              <span className="grow" />
+            </Field>
+
+            {sun.altitude <= 0 && (
+              <p className="warn">
+                The sun is below the horizon, so nothing casts a shadow. Everything is
+                lit by the sky.
+              </p>
+            )}
+
+            <p className="hint">
+              {times.alwaysUp
+                ? "The sun does not set here today."
+                : times.alwaysDown
+                  ? "The sun does not rise here today."
+                  : `Sunrise ${clock(times.sunrise!)} · noon ${clock(times.solarNoon)} · sunset ${clock(times.sunset!)}`}
+            </p>
+            <p className="hint">
+              Solar noon is not twelve o'clock: the earth's tilt and the shape of its
+              orbit put the sun {Math.abs(sun.equationOfTime).toFixed(0)} minutes{" "}
+              {sun.equationOfTime >= 0 ? "ahead of" : "behind"} the clock today.
+            </p>
+          </>
+        )}
+
+        {sunAt === null && (
+          <div className="row buttons choice">
+            {([
+              ["day", "Day"],
+              ["night", "Night"],
+            ] as const).map(([id, label]) => (
+              <button
+                key={id}
+                className={(environment.light?.intensity ?? 1) >= 0.7 === (id === "day") ? "on" : ""}
+                onClick={() =>
+                  edit((d) => {
+                    d.environment.light =
+                      id === "day"
+                        ? { anchor: "viewport", color: "#ffffff", intensity: 1 }
+                        : { anchor: "viewport", color: "#64748b", intensity: 0.35 };
+                    return d;
+                  })
+                }
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
       </Section>
 
       <Section title="Bookmarks">

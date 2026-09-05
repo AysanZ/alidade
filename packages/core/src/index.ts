@@ -26,6 +26,22 @@ export {
   DARK_PALETTE,
   LIGHT_PALETTE,
 } from "./basemap";
+export { sunPosition, sunTimes, lightFromSun, julianDay, CIVIL_TWILIGHT } from "./sun";
+export type { SunPosition, SunTimes } from "./sun";
+export {
+  stations,
+  trackLength,
+  sampleAt,
+  sampleTrack,
+  trackAt,
+  movedAlong,
+  speedOf,
+  newTrack,
+  findTrack,
+} from "./track";
+export type { TrackSample } from "./track";
+export { spreadModels } from "./spread";
+export type { Placeable, Spread, SpreadOptions } from "./spread";
 export { reconcile } from "./reconcile";
 export { toExpression, toSql } from "./filter";
 export type { SqlFilter } from "./filter";
@@ -124,6 +140,7 @@ export {
 
 export {
   MODELS_LAYER_ID,
+  DEFAULT_MIN_PIXELS,
   EARTH_RADIUS,
   unitsPerMetre,
   toMercator,

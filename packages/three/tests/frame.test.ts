@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { Matrix4, Vector3 } from "three";
+import { Box3, Matrix4, Vector3 } from "three";
 
 import { frameOf, newModel, toMercator } from "@alidade/core";
 
-import { cameraMatrix, placementMatrix } from "../src/frame";
+import { cameraMatrix, placementMatrix, visibilityBoost } from "../src/frame";
+import { BUILTIN_HEIGHTS, buildBuiltin, isBuiltin } from "../src/builtin";
 
 const origin = { lon: 51.389, lat: 35.6892 };
 
@@ -60,5 +61,70 @@ describe("a placement matrix", () => {
     expect(at.x).toBeCloseTo(expected.x, 12);
     expect(at.y).toBeCloseTo(expected.y, 12);
     expect(at.z).toBeCloseTo(expected.z, 12);
+  });
+});
+
+describe("the size floor", () => {
+  it("does nothing at a scale where the thing is already visible", () => {
+    // A twenty metre block at two pixels a metre is forty pixels tall.
+    expect(visibilityBoost(20, 2, 26)).toBe(1);
+    expect(visibilityBoost(20, 100, 26)).toBe(1);
+  });
+
+  it("holds a thing at its floor once it would fall below it", () => {
+    // Four metres at one pixel per ten metres is 0.4 of a pixel: invisible,
+    // and indistinguishable from a model that failed to load.
+    const boost = visibilityBoost(4, 0.1, 26);
+    expect(4 * 0.1 * boost).toBeCloseTo(26, 6);
+  });
+
+  it("holds rather than grows, so zooming out does not inflate it", () => {
+    const far = visibilityBoost(4, 0.01, 26);
+    const further = visibilityBoost(4, 0.001, 26);
+    // Ten times smaller on the ground means ten times the boost: the drawn
+    // size is the same either way, which is the point.
+    expect(4 * 0.01 * far).toBeCloseTo(4 * 0.001 * further, 6);
+  });
+
+  it("is off when the floor is zero, for a scene that must stay true to scale", () => {
+    expect(visibilityBoost(4, 0.001, 0)).toBe(1);
+  });
+
+  it("refuses to divide by a size or a scale of nothing", () => {
+    expect(visibilityBoost(0, 2, 26)).toBe(1);
+    expect(visibilityBoost(4, 0, 26)).toBe(1);
+    expect(visibilityBoost(4, Number.NaN, 26)).toBe(1);
+  });
+});
+
+describe("the built-in models", () => {
+  it("builds a fresh object each time, so two placements are not one mesh", () => {
+    const a = buildBuiltin("builtin:turbine");
+    const b = buildBuiltin("builtin:turbine");
+    expect(a).not.toBeNull();
+    expect(a).not.toBe(b);
+  });
+
+  it("is the size it says it is, measured rather than declared", () => {
+    for (const [name, stated] of Object.entries(BUILTIN_HEIGHTS)) {
+      const built = buildBuiltin(`builtin:${name}`)!;
+      const box = new Box3().setFromObject(built);
+      // Within a tenth of a metre of the catalogue's claim: the catalogue is
+      // what the panel prints before anything is downloaded, and a number there
+      // that disagrees with the mesh is a lie the user cannot check.
+      expect(box.max.y, name).toBeCloseTo(stated, 1);
+    }
+  });
+
+  it("stands on the ground rather than through it", () => {
+    for (const name of Object.keys(BUILTIN_HEIGHTS)) {
+      const box = new Box3().setFromObject(buildBuiltin(`builtin:${name}`)!);
+      expect(box.min.y, name).toBeGreaterThanOrEqual(-0.01);
+    }
+  });
+
+  it("has nothing to say about a name it does not know", () => {
+    expect(buildBuiltin("builtin:helicopter")).toBeNull();
+    expect(isBuiltin("https://example.com/x.glb")).toBe(false);
   });
 });

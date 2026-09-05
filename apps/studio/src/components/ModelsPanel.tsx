@@ -1,9 +1,22 @@
 import { useRef, useState } from "react";
 import type { MapProject, Model3D } from "@alidade/core";
-import { GLOBE_IS_ROUND_BELOW, describeModel, looksLikeModel, nameFromUrl } from "@alidade/core";
+import type { LayerNode, SpreadOptions } from "@alidade/core";
+import {
+  GLOBE_IS_ROUND_BELOW,
+  describeModel,
+  findTrack,
+  looksLikeModel,
+  nameFromUrl,
+  disc,
+  newAnnotation,
+  newModel,
+  newTrack,
+  speedOf,
+  trackLength,
+} from "@alidade/core";
 
 import { SAMPLES, heightOf, metres, uploadModel, type ModelStatus, type Sample } from "../models";
-import { Section, Switch } from "./Field";
+import { Field, Section, Switch } from "./Field";
 
 interface Props {
   project: MapProject;
@@ -18,6 +31,11 @@ interface Props {
   onProblem: (message: string) => void;
   /** The scene is not being drawn because the map is a sphere. */
   globe: boolean;
+  /** Point layers a model can be placed over. */
+  pointLayers: LayerNode[];
+  onSpread: (layerId: string, options: SpreadOptions) => void;
+  playing: boolean;
+  onPlay: (on: boolean) => void;
 }
 
 /**
@@ -38,7 +56,15 @@ export function ModelsPanel({
   onRemove,
   onProblem,
   globe,
+  pointLayers,
+  onSpread,
+  playing,
+  onPlay,
 }: Props) {
+  const [overLayer, setOverLayer] = useState("");
+  const [limit, setLimit] = useState(200);
+  const [headingField, setHeadingField] = useState("");
+  const [pathId, setPathId] = useState("");
   const [link, setLink] = useState("");
   const [busy, setBusy] = useState(false);
   const file = useRef<HTMLInputElement>(null);
@@ -110,6 +136,62 @@ export function ModelsPanel({
       )}
 
       <Section title="Add a model">
+        <div className="row buttons">
+          <button
+            className="primary"
+            onClick={() => {
+              /*
+               * Something moving, without having to place a model, draw a path
+               * and press play to find out whether any of it works.
+               *
+               * An airliner at three thousand metres on a fifteen kilometre
+               * circuit: big enough on the ground to be followed from the zoom
+               * you were already at, and slow enough across the screen to
+               * watch. The circuit is an ordinary drawing and the track an
+               * ordinary track, so everything it made can then be taken apart,
+               * retimed or sent somewhere else.
+               */
+              const centre = project.view.center;
+              const ring = disc(centre, 15000, 72);
+              const plane = newModel({
+                url: "builtin:aircraft",
+                name: "Airliner",
+                position: ring[0]!,
+                altitude: 3000,
+                // Height above the ground, not above the hill under it: an
+                // aircraft's altitude is not a property of the terrain.
+                clamp: false,
+                minPixels: 34,
+                attribution: "Alidade · Apache-2.0",
+              });
+              const path = newAnnotation("line", "#4c8dff");
+              path.coordinates = ring;
+              path.name = "Flight circuit";
+
+              edit((d) => {
+                d.models ??= { visible: true, items: [] };
+                d.models.items = [...d.models.items, plane];
+                d.models.tracks = [
+                  ...(d.models.tracks ?? []),
+                  { ...newTrack(`tr_${plane.id}`, plane.id, ring), duration: 90 },
+                ];
+                d.annotations ??= { visible: true, opacity: 1, features: [] };
+                d.annotations.features.push(path);
+                return d;
+              });
+              onSelect(plane.id);
+              onPlay(true);
+            }}
+          >
+            Fly a demo
+          </button>
+        </div>
+        <p className="hint">
+          Puts an airliner on a fifteen kilometre circuit around the middle of the view
+          and starts it, so there is something moving to look at before you have placed
+          anything. It is an ordinary placement on an ordinary drawing: take it apart,
+          retime it, or send it somewhere else.
+        </p>
         <ul className="picker samples">
           {SAMPLES.map((sample) => (
             <li key={sample.id} onClick={() => addSample(sample)} title={sample.hint}>
@@ -240,6 +322,234 @@ export function ModelsPanel({
             Click a model on the map to select it. The inspector has its position, height, heading
             and size; Place on map moves it with a click.
           </p>
+        </Section>
+      )}
+
+      {selected && (
+        <Section title="Place over a layer">
+          <p className="hint">
+            One copy of the selected model at every point of a layer. Forty turbines
+            dropped by hand is forty chances to put one in the wrong field; the same
+            forty taken from the layer that already knows where they are is right by
+            construction.
+          </p>
+          {pointLayers.length === 0 ? (
+            <p className="hint">No point layers on the map yet.</p>
+          ) : (
+            <>
+              <Field label="Layer">
+                <select value={overLayer} onChange={(e) => setOverLayer(e.target.value)}>
+                  <option value="">Choose one</option>
+                  {pointLayers.map((layer) => (
+                    <option key={layer.id} value={layer.id}>
+                      {layer.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Bearing from">
+                <select value={headingField} onChange={(e) => setHeadingField(e.target.value)}>
+                  <option value="">The model's own heading</option>
+                  {(pointLayers.find((l) => l.id === overLayer)?.metadata?.fields ?? []).map(
+                    (field) => (
+                      <option key={field} value={field}>
+                        {field}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </Field>
+              <Field label="At most" value={String(limit)}>
+                <input
+                  type="range"
+                  min={10}
+                  max={1000}
+                  step={10}
+                  value={limit}
+                  onChange={(e) => setLimit(Number(e.target.value))}
+                />
+              </Field>
+              <div className="row buttons">
+                <button
+                  className="primary"
+                  disabled={!overLayer}
+                  onClick={() =>
+                    onSpread(overLayer, {
+                      limit,
+                      headingField: headingField || undefined,
+                    })
+                  }
+                >
+                  Place at every point
+                </button>
+              </div>
+              <p className="hint">
+                Taken from what is drawn on the screen now, because a vector tile is the
+                only copy of the geometry the browser has. Zoom to the layer first, and
+                the count that comes back is the count that was there.
+              </p>
+            </>
+          )}
+        </Section>
+      )}
+
+      {selected && (
+        <Section title="Movement">
+          {(() => {
+            const model = items.find((m) => m.id === selected);
+            const track = findTrack(models?.tracks, selected);
+            const paths = (project.annotations?.features ?? []).filter((f) => f.kind === "line");
+            if (!model) return null;
+
+            if (!track) {
+              const circuit = (radius: number) =>
+                edit((d) => {
+                  /*
+                   * A ready-made route, so movement can be seen without having
+                   * to draw one first. It is a real drawing rather than a
+                   * hidden path: it appears in the table of contents, exports
+                   * as a GeoJSON line, and its vertices can be dragged, which
+                   * a generated path nobody could see or edit could not.
+                   *
+                   * `disc` builds it geodesically, so the circuit is the same
+                   * radius on the ground all the way round.
+                   */
+                  const ring = disc(model.position, radius, 64);
+                  const drawn = newAnnotation("line", "#4c8dff");
+                  drawn.coordinates = ring;
+                  drawn.name = `Circuit, ${radius} m`;
+                  d.annotations ??= { visible: true, opacity: 1, features: [] };
+                  d.annotations.features.push(drawn);
+                  d.models ??= { visible: true, items: [] };
+                  d.models.tracks = [
+                    ...(d.models.tracks ?? []),
+                    newTrack(`tr_${selected}`, selected, ring),
+                  ];
+                  return d;
+                });
+
+              return paths.length === 0 ? (
+                <>
+                  <p className="hint">
+                    Nothing drawn to follow yet. Take a circuit around where it stands,
+                    or draw a line with the drawing tools and come back.
+                  </p>
+                  <div className="row buttons">
+                    <button onClick={() => circuit(150)}>Circle it, 150 m</button>
+                    <button onClick={() => circuit(600)}>600 m</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Field label="Along">
+                    <select value={pathId} onChange={(e) => setPathId(e.target.value)}>
+                      <option value="">Choose a drawing</option>
+                      {paths.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <div className="row buttons">
+                    <button onClick={() => circuit(150)}>Circle it</button>
+                    <button
+                      className="primary"
+                      disabled={!pathId}
+                      onClick={() => {
+                        const path = paths.find((p) => p.id === pathId);
+                        if (!path) return;
+                        edit((d) => {
+                          d.models ??= { visible: true, items: [] };
+                          d.models.tracks = [
+                            ...(d.models.tracks ?? []),
+                            newTrack(`tr_${selected}`, selected, path.coordinates),
+                          ];
+                          return d;
+                        });
+                      }}
+                    >
+                      Send it along this
+                    </button>
+                  </div>
+                </>
+              );
+            }
+
+            return (
+              <>
+                <Field label="Lap time" value={`${track.duration}s`}>
+                  <input
+                    type="range"
+                    min={5}
+                    max={600}
+                    step={5}
+                    value={track.duration}
+                    onChange={(e) =>
+                      edit((d) => {
+                        const t = findTrack(d.models?.tracks, selected);
+                        if (t) t.duration = Number(e.target.value);
+                        return d;
+                      })
+                    }
+                  />
+                </Field>
+                <Field label="Turn to face" value={`${track.headingOffset ?? 0}°`}>
+                  <input
+                    type="range"
+                    min={-180}
+                    max={180}
+                    step={15}
+                    value={track.headingOffset ?? 0}
+                    onChange={(e) =>
+                      edit((d) => {
+                        const t = findTrack(d.models?.tracks, selected);
+                        if (t) t.headingOffset = Number(e.target.value);
+                        return d;
+                      })
+                    }
+                  />
+                </Field>
+                <Switch
+                  label="Repeat"
+                  on={track.loop}
+                  onChange={(on) =>
+                    edit((d) => {
+                      const t = findTrack(d.models?.tracks, selected);
+                      if (t) t.loop = on;
+                      return d;
+                    })
+                  }
+                />
+                <div className="row buttons">
+                  <button className={playing ? "" : "primary"} onClick={() => onPlay(!playing)}>
+                    {playing ? "Stop" : "Play"}
+                  </button>
+                  <button
+                    className="danger"
+                    onClick={() => {
+                      onPlay(false);
+                      edit((d) => {
+                        d.models!.tracks = (d.models?.tracks ?? []).filter(
+                          (t) => t.model !== selected,
+                        );
+                        return d;
+                      });
+                    }}
+                  >
+                    Remove track
+                  </button>
+                </div>
+                <p className="hint">
+                  {Math.round(trackLength(track.path)).toLocaleString()} m at{" "}
+                  {speedOf(track).toFixed(1)} m/s, which is{" "}
+                  {(speedOf(track) * 3.6).toFixed(0)} km/h. The path is saved with the
+                  project; where the model is at this instant is not, so playing it is not
+                  an edit and cannot be undone into.
+                </p>
+              </>
+            );
+          })()}
         </Section>
       )}
 

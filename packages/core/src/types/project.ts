@@ -435,6 +435,15 @@ export interface Environment {
   hillshade?: Hillshade;
   /** Extruded footprints. Present means on, the way terrain and hillshade are. */
   buildings?: Buildings;
+  /**
+   * The instant the map is lit for, as an ISO 8601 string.
+   *
+   * Derived, not applied: the renderer knows about `light`, and this is the
+   * question `light` is the answer to. Keeping the question in the document is
+   * what lets a saved project reopen at half past three in March rather than at
+   * whatever bearing that happened to work out to.
+   */
+  sun?: { iso: string };
   fog?: { color: string; range: [number, number] };
   light?: Light;
   sky?: boolean;
@@ -596,8 +605,45 @@ export interface Model3D {
   clamp: boolean;
   visible: boolean;
   opacity: number;
+  /**
+   * Never let it draw shorter than this many pixels.
+   *
+   * A lorry is four metres long, which at zoom 10 is a third of a pixel: true to
+   * scale, and invisible, which is the state everyone reads as "it did not
+   * work". Above the zoom where the model covers this many pixels nothing
+   * happens and the size is the real one; below it the model is held at this
+   * size, the way a map holds a town's dot rather than drawing the town.
+   *
+   * Zero turns it off, for a scene where being true to scale at every zoom
+   * matters more than being able to find the thing.
+   */
+  minPixels?: number;
   /** Where the file came from and who it belongs to. Kept for the interface, never rendered. */
   attribution?: string;
+}
+
+/**
+ * A path a model follows, and how long it takes to walk it.
+ *
+ * The path and the timing are here; where the model is right now is not. That
+ * is a function of the clock, and the clock is not part of the map — the same
+ * reason the rubber band from the last drawn point to the cursor is drawn as an
+ * overlay and costs no operations. Sixty positions a second in the document
+ * would be sixty history steps a second.
+ */
+export interface Track {
+  id: string;
+  /** The `Model3D` this drives. */
+  model: string;
+  /** lon/lat, in order. Two points is a straight run. */
+  path: [number, number][];
+  /** Seconds for one pass along the whole path. */
+  duration: number;
+  loop: boolean;
+  /** Turn the model to face the way it is going. */
+  faceForward: boolean;
+  /** Degrees added to the heading, for a file whose front is not its own +z. */
+  headingOffset?: number;
 }
 
 /**
@@ -612,6 +658,8 @@ export interface Model3D {
 export interface Models {
   visible: boolean;
   items: Model3D[];
+  /** Optional so a project written before movement existed still loads. */
+  tracks?: Track[];
 }
 
 export interface MapProject {
