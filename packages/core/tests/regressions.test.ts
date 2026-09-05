@@ -10,6 +10,7 @@ import {
   selectionFilter,
 } from "../src/compile";
 import { colorExpression, strokePaint } from "../src/symbology";
+import { GLOBE_IS_ROUND_BELOW } from "../src/types/project";
 import { frameExtent, needsFraming } from "../src/frame";
 import { reconcile } from "../src/reconcile";
 import { gridKey, padded, squareGridGeoJSON, utmGridGeoJSON } from "../src/grids";
@@ -549,4 +550,14 @@ describe("selection filters", () => {
   });
 });
 
-
+describe("regressions, chrome and projection", () => {
+  /**
+   * The models pane told people to zoom past 9 to get the 3D scene back on a
+   * globe. MapLibre hands over to mercator at about 12, so at 10 and at 11 the
+   * map was still a sphere, the scene was still not drawn, and the instruction
+   * looked like a lie. Advice that names a number has to name the right one.
+   */
+  it("does not promise the globe is flat before MapLibre makes it flat", () => {
+    expect(GLOBE_IS_ROUND_BELOW).toBe(12);
+  });
+});

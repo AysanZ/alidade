@@ -418,8 +418,20 @@ export interface Buildings {
  */
 export type Projection = "mercator" | "globe" | "vertical-perspective";
 
-/** Below this zoom `globe` is drawn as a sphere; above it, it is mercator. */
-export const GLOBE_IS_ROUND_BELOW = 9;
+/**
+ * Below this zoom `globe` is drawn as a sphere; above it, it is mercator.
+ *
+ * Twelve, which is MapLibre's own figure: a globe is projected in 32-bit floats
+ * and the earth's circumference divided across a float32's mantissa is about one
+ * value every two and a half metres, so it hands over to mercator before that
+ * starts to show.
+ *
+ * This said 9, which was wrong in the direction that hurts: the models pane
+ * told people to zoom past 9 to get the 3D scene back, they zoomed to 10 or 11,
+ * the map was still a sphere, the scene was still not drawn, and the advice
+ * looked like a lie.
+ */
+export const GLOBE_IS_ROUND_BELOW = 12;
 
 export interface Light {
   anchor: "map" | "viewport";

@@ -285,7 +285,7 @@ not a published package.
 
 ```bash
 pnpm install
-pnpm test        # 401 tests, Node only: no browser, no WebGL
+pnpm test        # 402 tests, Node only: no browser, no WebGL
 pnpm typecheck   # every package and the studio
 pnpm build
 ```

@@ -36,6 +36,8 @@ interface Props {
   onSpread: (layerId: string, options: SpreadOptions) => void;
   playing: boolean;
   onPlay: (on: boolean) => void;
+  /** Where each moving model is right now. Not in the document; a few times a second. */
+  live: Record<string, { position: [number, number]; heading: number; covered: number }>;
 }
 
 /**
@@ -60,6 +62,7 @@ export function ModelsPanel({
   onSpread,
   playing,
   onPlay,
+  live,
 }: Props) {
   const [overLayer, setOverLayer] = useState("");
   const [limit, setLimit] = useState(200);
@@ -125,7 +128,8 @@ export function ModelsPanel({
       {(globe || round) && (
         <p className="warn">
           Models are not drawn on a sphere. Switch the projection to Mercator in the Scene pane, or
-          zoom in past zoom {GLOBE_IS_ROUND_BELOW} on the Globe projection.
+          zoom in past zoom {GLOBE_IS_ROUND_BELOW} on the Globe projection, which is where
+          MapLibre hands the globe over to mercator.
         </p>
       )}
       {!globe && flat && items.length > 0 && (
@@ -169,6 +173,16 @@ export function ModelsPanel({
               path.name = "Flight circuit";
 
               edit((d) => {
+                /*
+                 * A sphere draws no models at all, so a demo started under one
+                 * puts an aircraft on a circuit that nobody can see and reads
+                 * as a broken button. The demo is a demonstration: it makes the
+                 * conditions it needs rather than reporting that they are
+                 * missing.
+                 */
+                if (d.environment.projection && d.environment.projection !== "mercator") {
+                  d.environment.projection = "mercator";
+                }
                 d.models ??= { visible: true, items: [] };
                 d.models.items = [...d.models.items, plane];
                 d.models.tracks = [
@@ -540,6 +554,22 @@ export function ModelsPanel({
                     Remove track
                   </button>
                 </div>
+                {live[selected] && (
+                  <>
+                    <Field label="Now at" value={`${live[selected]!.position[1].toFixed(5)}, ${live[selected]!.position[0].toFixed(5)}`}>
+                      <span className="grow" />
+                    </Field>
+                    <Field label="Heading" value={`${Math.round(live[selected]!.heading)}°`}>
+                      <span className="grow" />
+                    </Field>
+                    <Field
+                      label="Covered"
+                      value={`${(live[selected]!.covered / 1000).toFixed(2)} km`}
+                    >
+                      <span className="grow" />
+                    </Field>
+                  </>
+                )}
                 <p className="hint">
                   {Math.round(trackLength(track.path)).toLocaleString()} m at{" "}
                   {speedOf(track).toFixed(1)} m/s, which is{" "}

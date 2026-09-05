@@ -21,7 +21,14 @@ import {
 } from "@alidade/core";
 import { MapManager, watchStyleSwaps, type Renderer } from "@alidade/maplibre";
 import { ThreeModelHost } from "@alidade/three";
-import { movedAlong, spreadModels, trackAt, type Placeable, type SpreadOptions } from "@alidade/core";
+import {
+  movedAlong,
+  spreadModels,
+  trackAt,
+  trackLength,
+  type Placeable,
+  type SpreadOptions,
+} from "@alidade/core";
 
 import { AddData } from "./components/AddData";
 import { AttributeTable } from "./components/AttributeTable";
@@ -116,6 +123,17 @@ export default function App() {
   const [presenting, setPresenting] = useState(false);
   /** Wall-clock milliseconds the tracks started from, or null when stopped. */
   const [playingSince, setPlayingSince] = useState<number | null>(null);
+  /**
+   * Where each moving model is, a few times a second.
+   *
+   * The document is not told — that is the whole point of the track — but a
+   * number nobody can read is not a readout, and "it is moving, and I cannot
+   * tell you where" is not an answer. Five times a second is faster than anyone
+   * reads a coordinate and slow enough not to re-render the sidebar per frame.
+   */
+  const [live, setLive] = useState<
+    Record<string, { position: [number, number]; heading: number; covered: number }>
+  >({});
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [locks, setLocks] = useState({ zoom: false, pan: false });
   const [camera, setCamera] = useState<Camera>({
@@ -588,13 +606,33 @@ export default function App() {
     if (playingSince === null || !scene) return;
     let frame = 0;
 
+    let reported = 0;
+
     const step = () => {
       const models = latest.current.models;
-      const elapsed = (performance.now() - playingSince) / 1000;
+      const now = performance.now();
+      const elapsed = (now - playingSince) / 1000;
+      const readout: Record<
+        string,
+        { position: [number, number]; heading: number; covered: number }
+      > = {};
+
       for (const track of models?.tracks ?? []) {
         const model = (models?.items ?? []).find((m) => m.id === track.model);
         const sample = model ? trackAt(track, elapsed) : null;
-        if (model && sample) scene.update(movedAlong(model, sample, track));
+        if (!model || !sample) continue;
+        scene.update(movedAlong(model, sample, track));
+        const laps = track.duration > 0 ? elapsed / track.duration : 0;
+        readout[track.model] = {
+          position: sample.position,
+          heading: sample.heading,
+          covered: trackLength(track.path) * (track.loop ? laps : Math.min(laps, 1)),
+        };
+      }
+
+      if (now - reported > 200) {
+        reported = now;
+        setLive(readout);
       }
       mapRef.current?.triggerRepaint();
       frame = requestAnimationFrame(step);
@@ -603,6 +641,7 @@ export default function App() {
 
     return () => {
       cancelAnimationFrame(frame);
+      setLive({});
       for (const model of latest.current.models?.items ?? []) scene.update(model);
       mapRef.current?.triggerRepaint();
     };
@@ -1057,6 +1096,7 @@ export default function App() {
                 const template = (project.models?.items ?? []).find((m) => m.id === selectedModel);
                 if (template) spreadOverLayer(layerId, template, options);
               }}
+              live={live}
               playing={playingSince !== null}
               onPlay={(on) => setPlayingSince(on ? performance.now() : null)}
             />
