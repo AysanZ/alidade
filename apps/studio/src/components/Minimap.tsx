@@ -76,7 +76,8 @@ export function Minimap({
    * manager deep-clones on update. So the overview tore down and rebuilt its
    * layers continuously and flashed black. Identity is not change; the tiles are.
    */
-  const signature = `${basemap.id}|${basemap.background}|${(basemap.raster?.tiles ?? []).join(",")}`;
+  const tiles = basemap.raster ?? basemap.overview;
+  const signature = `${basemap.id}|${basemap.background}|${(tiles?.tiles ?? []).join(",")}`;
 
   useEffect(() => {
     const overview = map.current;
@@ -93,11 +94,15 @@ export function Minimap({
         type: "background",
         paint: { "background-color": basemap.background },
       });
-      if (!basemap.raster) return;
+      /*
+       * A vector basemap has no pictures to put here, and this box is never at
+       * street zoom, so it draws the shallow raster the basemap carries for it.
+       */
+      if (!tiles) return;
       overview.addSource("mini:raster", {
         type: "raster",
-        tiles: basemap.raster.tiles,
-        tileSize: basemap.raster.tileSize ?? 256,
+        tiles: tiles.tiles,
+        tileSize: tiles.tileSize ?? 256,
       });
       overview.addLayer({ id: "mini:raster", type: "raster", source: "mini:raster", paint: {} });
     };

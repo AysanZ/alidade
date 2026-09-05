@@ -1,9 +1,30 @@
 import type { Basemap } from "@alidade/core";
+import { DARK_PALETTE, LIGHT_PALETTE } from "@alidade/core";
+
+import { OSM_SOURCE_ID } from "./sources";
 
 const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services";
 
-/** Esri numbers its tiles z/y/x, which is not the order everyone else uses. */
-const esri = (service: string, maxzoom = 19) => ({
+/**
+ * An Esri tile service.
+ *
+ * Esri numbers its tiles z/y/x, which is not the order everyone else uses.
+ *
+ * `maxzoom` is not optional in practice, and the old default of 19 was wrong for
+ * most of these. Past its deepest cached level an Esri service does not answer
+ * 404: it answers 200 with a grey image reading "Map data not yet available",
+ * which the renderer draws, because it has no way to know it was handed a
+ * placard rather than a map. Stating the real limit makes the renderer stretch
+ * the last real tile instead — blurry, and continuous, which is what a basemap
+ * has to be.
+ *
+ * The levels come from each service's own description. Where a service is
+ * documented as worldwide to one level and regional beyond it, the number here
+ * is the regional one: refusing to draw Boston at zoom 18 to punish Dushanbe
+ * helps nobody, and outside the covered regions the last worldwide level is
+ * what gets stretched, which is the same behaviour one level further out.
+ */
+const esri = (service: string, maxzoom: number) => ({
   tiles: [`${ESRI}/${service}/MapServer/tile/{z}/{y}/{x}`],
   tileSize: 256,
   maxzoom,
@@ -31,17 +52,17 @@ export const BASEMAPS: Basemap[] = [
     name: "Dark canvas",
     group: "Canvas",
     background: "#0b0b0c",
-    raster: esri("Canvas/World_Dark_Gray_Base"),
-    labelTiles: esri("Canvas/World_Dark_Gray_Reference"),
+    vector: { source: OSM_SOURCE_ID, palette: DARK_PALETTE },
+    overview: esri("Canvas/World_Dark_Gray_Base", 10),
     labels: true,
   },
   {
     id: "light",
     name: "Light canvas",
     group: "Canvas",
-    background: "#f2f2f2",
-    raster: esri("Canvas/World_Light_Gray_Base"),
-    labelTiles: esri("Canvas/World_Light_Gray_Reference"),
+    background: "#f4f2ee",
+    vector: { source: OSM_SOURCE_ID, palette: LIGHT_PALETTE },
+    overview: esri("Canvas/World_Light_Gray_Base", 10),
     labels: true,
   },
   {
@@ -49,8 +70,8 @@ export const BASEMAPS: Basemap[] = [
     name: "Imagery",
     group: "Aerial",
     background: "#0f110e",
-    raster: esri("World_Imagery"),
-    labelTiles: esri("Reference/World_Boundaries_and_Places"),
+    raster: esri("World_Imagery", 19),
+    labelTiles: esri("Reference/World_Boundaries_and_Places", 16),
     labels: true,
   },
   {
@@ -64,7 +85,7 @@ export const BASEMAPS: Basemap[] = [
       maxzoom: 14,
       attribution: "Sentinel-2 cloudless 2020 by EOX, modified Copernicus data",
     },
-    labelTiles: esri("Reference/World_Boundaries_and_Places"),
+    labelTiles: esri("Reference/World_Boundaries_and_Places", 16),
     labels: true,
   },
   {
@@ -72,8 +93,8 @@ export const BASEMAPS: Basemap[] = [
     name: "Imagery with roads",
     group: "Aerial",
     background: "#0f110e",
-    raster: esri("World_Imagery"),
-    labelTiles: esri("Reference/World_Transportation"),
+    raster: esri("World_Imagery", 19),
+    labelTiles: esri("Reference/World_Transportation", 19),
     labels: true,
   },
   {
@@ -81,7 +102,7 @@ export const BASEMAPS: Basemap[] = [
     name: "Streets",
     group: "Street",
     background: "#efeae2",
-    raster: esri("World_Street_Map"),
+    raster: esri("World_Street_Map", 19),
     labels: false,
   },
   {
@@ -110,7 +131,7 @@ export const BASEMAPS: Basemap[] = [
     name: "Topographic",
     group: "Terrain",
     background: "#e8e4dc",
-    raster: esri("World_Topo_Map"),
+    raster: esri("World_Topo_Map", 19),
     labels: false,
   },
   {
@@ -123,6 +144,17 @@ export const BASEMAPS: Basemap[] = [
       "© OpenStreetMap contributors, SRTM · © OpenTopoMap (CC-BY-SA)",
     ),
     labels: false,
+  },
+  {
+    id: "esri-canvas",
+    name: "Esri gray canvas",
+    group: "Canvas",
+    background: "#f2f2f2",
+    // Worldwide to level 10, regional to 16. Kept as a raster alternative to
+    // the vector canvases; past 16 it is stretched rather than requested.
+    raster: esri("Canvas/World_Light_Gray_Base", 16),
+    labelTiles: esri("Canvas/World_Light_Gray_Reference", 16),
+    labels: true,
   },
   {
     id: "relief",

@@ -11,6 +11,21 @@ export {
   markersIn,
   selectionFilter,
 } from "./compile";
+export {
+  BUILDINGS_LAYER_ID,
+  defaultBuildings,
+  buildingsLayer,
+  heightExpression,
+  baseExpression,
+  opacityExpression,
+} from "./buildings";
+export {
+  LABEL_FONT,
+  LABEL_FONT_BOLD,
+  vectorBasemapLayers,
+  DARK_PALETTE,
+  LIGHT_PALETTE,
+} from "./basemap";
 export { reconcile } from "./reconcile";
 export { toExpression, toSql } from "./filter";
 export type { SqlFilter } from "./filter";

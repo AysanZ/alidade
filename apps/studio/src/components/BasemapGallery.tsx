@@ -33,10 +33,12 @@ export function BasemapGallery({
                 key={b.id}
                 className={`card${b.id === project.basemap.id ? " on" : ""}`}
                 onClick={() => choose(b)}
-                title={b.raster?.attribution ?? "No tiles"}
+                title={(b.raster ?? b.overview)?.attribution ?? "No tiles"}
               >
                 <span className="thumb" style={{ background: b.background }}>
-                  {b.raster && <img src={preview(b.raster.tiles[0]!)} alt="" loading="lazy" />}
+                  {(b.raster ?? b.overview) && (
+                    <img src={preview((b.raster ?? b.overview)!.tiles[0]!)} alt="" loading="lazy" />
+                  )}
                 </span>
                 <span className="label">{b.name}</span>
               </button>

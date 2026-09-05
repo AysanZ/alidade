@@ -50,6 +50,29 @@ None of that live feedback is in the document. The rubber band is a function of
 where the mouse is, and the mouse is not part of the map: it is drawn as an
 overlay above the canvas, so it costs no operations and cannot be undone into.
 
+### 3D buildings
+
+Building footprints raised to their real height, from open vector tiles with no
+key: OpenFreeMap's planet in the OpenMapTiles schema, heights out of
+OpenStreetMap. It sits in the environment beside terrain and hillshade rather
+than in the table of contents, because it is one layer whatever city it is over
+and there is nothing about it to reorder.
+
+The fields are named in the document rather than assumed, so the same switch
+works against a plain OSM extract (`height`, `min_height`) or against footprints
+you loaded into PostGIS yourself. A footprint nobody has surveyed is drawn at a
+default height instead of being dropped: a gap in a street reads as a bug, and a
+low block reads as a low block. Colour runs from the wall colour up to the roof
+colour over the first eighty metres, which separates the towers from the terrace
+without inventing a classification nobody asked for, and the whole thing fades
+in over the half zoom above 14, because a city that appears between two frames
+looks like a fault.
+
+The extrusions go under the model scene and over your data, and share its depth
+buffer, so a lorry parked behind a tower is behind it. Under terrain they stand
+on the hill they are on. `3D` in the Scene pane turns them on with the camera;
+`2.5D` does not, because a tilted map is a different and much cheaper request.
+
 ### 3D models
 
 A glTF model is placed the way a surveyor would state it: a position, a height
@@ -120,8 +143,25 @@ in the same request. Paste a link and GDAL reads it over HTTP without it ever
 touching your disk. Or point Alidade at a WMS and pick a layer, style and format
 from what the server advertises in GetCapabilities.
 
-Nothing here needs an API key. The basemaps are CARTO and Esri tiles and the
-elevation is Mapzen terrarium, so it stays up without a billing account.
+Nothing here needs an API key, and that is a constraint rather than a boast: a
+demo that dies when someone's free tier changes is worse than a demo with fewer
+basemaps. The canvases and the buildings are OpenFreeMap, the imagery and the
+terrain styles are Esri, and the elevation is Mapzen terrarium.
+
+The two canvas basemaps are drawn from vector tiles by `packages/core/basemap.ts`
+rather than fetched as pictures, which is what lets them stay sharp at zoom 19:
+the tiles stop at 14 and are overzoomed with the geometry intact. Compiling the
+basemap here instead of handing MapLibre a foreign style URL keeps the one
+property the whole application is arranged around — the user's data underneath
+the place names — a fact rather than a guess about which of someone else's two
+hundred layers to insert before.
+
+Every raster basemap states the deepest zoom its service actually caches. That
+is not a limit on the map: past it the renderer stretches the last real tile,
+which is blurry and continuous. Leaving it off is what is not continuous,
+because a tile service past its cache does not have to answer 404 and Esri does
+not — it answers with an image reading "Map data not yet available", which the
+renderer draws, having no way to know it was handed a placard rather than a map.
 
 The database ships empty. There is no seeded demo layer: one cannot be deleted
 from the studio, it comes back on every fresh volume, and it makes an install
@@ -188,7 +228,7 @@ not a published package.
 
 ```bash
 pnpm install
-pnpm test        # 336 tests, Node only: no browser, no WebGL
+pnpm test        # 359 tests, Node only: no browser, no WebGL
 pnpm typecheck   # every package and the studio
 pnpm build
 ```

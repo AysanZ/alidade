@@ -22,7 +22,15 @@ export interface ScaleRange {
 
 export interface VectorSource {
   type: "vector";
-  tiles: string[];
+  /**
+   * A TileJSON document, read by the renderer for the tile template and the
+   * zoom range. Use this rather than `tiles` for a service whose tile URL is
+   * versioned — OpenFreeMap puts the build date in the path and rotates it
+   * weekly, so a template pinned in the document goes stale on its own.
+   */
+  url?: string;
+  /** The template, when it is stable enough to write down. Either this or `url`. */
+  tiles?: string[];
   minzoom?: number;
   maxzoom?: number;
   attribution?: string;
@@ -37,6 +45,18 @@ export interface RasterSource {
   type: "raster";
   tiles: string[];
   tileSize?: number;
+  minzoom?: number;
+  /**
+   * The deepest zoom the service actually has tiles for.
+   *
+   * This is not a limit on how far the map zooms: past it the renderer stretches
+   * the last real tile, which is blurry and continuous. Leaving it off is what
+   * is not continuous, because then the renderer asks for tiles the service does
+   * not have and draws whatever comes back — and a tile service does not
+   * necessarily answer 404. Esri answers with an image that says "Map data not
+   * yet available", so the map fills with grey placards instead of the map.
+   */
+  maxzoom?: number;
   attribution?: string;
 }
 
@@ -273,6 +293,40 @@ export interface BasemapTiles {
   attribution: string;
 }
 
+/**
+ * The colours a vector basemap is drawn in.
+ *
+ * A raster basemap arrives already coloured; a vector one is coloured here, so
+ * the palette is part of the document and a basemap is a small object rather
+ * than a link to someone's server.
+ */
+export interface BasemapPalette {
+  water: string;
+  green: string;
+  sand: string;
+  built: string;
+  roadFill: string;
+  roadCasing: string;
+  rail: string;
+  boundary: string;
+  label: string;
+  labelHalo: string;
+  minorLabel: string;
+}
+
+/**
+ * A basemap drawn from vector tiles rather than pictures of tiles.
+ *
+ * Crisp at every zoom because the labels are drawn by the renderer, and free of
+ * the cache ceiling a raster service has: the tiles stop at 14 and are
+ * overzoomed with the geometry intact, so zoom 19 is sharp rather than blurry.
+ */
+export interface VectorBasemap {
+  /** Names a vector source in `sources`, in the OpenMapTiles schema. */
+  source: string;
+  palette: BasemapPalette;
+}
+
 export interface Basemap {
   id: string;
   name: string;
@@ -282,6 +336,17 @@ export interface Basemap {
   background: string;
   opacity?: number;
   raster?: BasemapTiles;
+  /** Drawn from vector tiles. Mutually exclusive with `raster` in practice. */
+  vector?: VectorBasemap;
+  /**
+   * Low-zoom pictures, for the overview map and the gallery thumbnail only.
+   *
+   * A vector basemap has nothing to show in an `<img>`, and the overview map
+   * draws the whole world in a two-inch box. A raster service that only has
+   * shallow zooms is exactly right for both, and wrong for nothing, because
+   * neither of them is ever at street zoom.
+   */
+  overview?: BasemapTiles;
   /**
    * A labels-only overlay. It is compiled into the labels slot, above the user's
    * data, because place names belong on top of a choropleth and not under it.
@@ -298,6 +363,49 @@ export interface Hillshade {
   intensity: number;
   shadowColor: string;
   highlightColor: string;
+}
+
+/**
+ * Building footprints raised to their real height.
+ *
+ * This is the basemap in 3D rather than a data layer: the footprints come from
+ * open vector tiles, the heights come from OpenStreetMap, and the whole thing
+ * is one engine layer whatever city it is over — so it belongs beside terrain
+ * and hillshade in the environment, not in the table of contents.
+ *
+ * The fields are named rather than assumed because a schema is a choice. These
+ * defaults are OpenMapTiles', which is what the open tile services publish;
+ * point them at `height` and `min_height` for a plain OSM extract, or at your
+ * own columns for footprints you loaded into PostGIS yourself.
+ */
+export interface Buildings {
+  /** Names a vector source in `sources`. */
+  source: string;
+  /** The layer inside the tile. `building` in OpenMapTiles. */
+  sourceLayer: string;
+  /** Metres to the top. `render_height` in OpenMapTiles. */
+  heightField: string;
+  /** Metres to the bottom, for a thing that starts above the ground. */
+  baseField?: string;
+  color: string;
+  /** Roofs are drawn lighter than walls, so a block reads as blocks. */
+  roofColor?: string;
+  opacity: number;
+  /**
+   * Footprints are not in the tiles below this zoom, so asking for them below it
+   * is a request that can only come back empty. 14 is where OpenMapTiles starts
+   * carrying them.
+   */
+  minzoom: number;
+  /** Multiplies every height. 1 is the truth; more is a diagram. */
+  exaggeration: number;
+  /**
+   * Metres for a building whose height nobody has surveyed, which is most of
+   * them outside a handful of cities. Zero would make a mapped city look empty.
+   */
+  defaultHeight: number;
+  /** Shade the walls from dark at the base to the fill colour at the top. */
+  verticalGradient: boolean;
 }
 
 /**
@@ -325,6 +433,8 @@ export interface Environment {
   terrain?: { source: string; exaggeration: number };
   /** Drawn just above the basemap, below everything the user added. */
   hillshade?: Hillshade;
+  /** Extruded footprints. Present means on, the way terrain and hillshade are. */
+  buildings?: Buildings;
   fog?: { color: string; range: [number, number] };
   light?: Light;
   sky?: boolean;

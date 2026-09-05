@@ -3,7 +3,8 @@ import type { Bookmark, MapProject, Projection } from "@alidade/core";
 import { useState } from "react";
 import { GLOBE_IS_ROUND_BELOW, parseCoordinate } from "@alidade/core";
 
-import { HILLSHADE } from "../project";
+import { BUILDINGS, HILLSHADE } from "../project";
+import { OSM_SOURCE, OSM_SOURCE_ID } from "../sources";
 import { Field, Section, Switch } from "./Field";
 
 const VIEWS = [
@@ -27,6 +28,37 @@ const PROJECTIONS: { id: Projection; label: string; hint: string }[] = [
 /** Relief needs a minimum scale before it reads as anything but a flat sheet. */
 const TERRAIN_DENOMINATOR = 3_000_000;
 
+/**
+ * Is this basemap a dark one?
+ *
+ * Buildings are drawn in the basemap's own register: pale blocks on a dark
+ * canvas read as holes punched through the map, and dark ones on imagery read
+ * as shadows. Perceived luminance off the background colour, which every
+ * basemap declares, is enough to pick the pair and needs nothing from the tiles.
+ */
+/**
+ * Turn the buildings on, source and all.
+ *
+ * The switch declares the source itself rather than trusting the document to
+ * already have one. It used to trust it, and the source was only ever written
+ * by the blank project, so on any map restored from storage the switch wrote
+ * itself into the document and drew nothing at all: the compiler will not point
+ * a layer at a source that was not declared. Whatever turns a thing on is
+ * responsible for what that thing needs.
+ */
+function turnBuildingsOn(draft: MapProject): MapProject {
+  draft.sources[OSM_SOURCE_ID] ??= OSM_SOURCE;
+  draft.environment.buildings ??= BUILDINGS(isDark(draft.basemap.background));
+  return draft;
+}
+
+function isDark(background: string): boolean {
+  const hex = background.replace("#", "");
+  if (hex.length !== 6) return true;
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b! < 128;
+}
+
 export function ScenePanel({
   project,
   edit,
@@ -45,6 +77,7 @@ export function ScenePanel({
   const [target, setTarget] = useState("");
   const parsed = parseCoordinate(target);
   const { view, environment, chrome } = project;
+  const buildings = environment.buildings;
   const mode = VIEWS.find((v) => v.pitch === view.pitch)?.id ?? "custom";
   const tooFarOutForRelief = denominator > TERRAIN_DENOMINATOR;
 
@@ -63,10 +96,15 @@ export function ScenePanel({
                   // the relief with it, which is what the button is really asking for.
                   if (v.id === "2d") {
                     delete d.environment.terrain;
+                    delete d.environment.buildings;
                   } else {
                     d.environment.terrain ??= { source: "dem", exaggeration: 1.4 };
                     d.environment.hillshade ??= { ...HILLSHADE };
                   }
+                  // 3D is the one that means buildings. 2.5D is a tilted map,
+                  // which is a different request and a much cheaper one: it
+                  // costs no vector tiles and works at any zoom.
+                  if (v.id === "3d") turnBuildingsOn(d);
                   return d;
                 })
               }
@@ -255,6 +293,93 @@ export function ScenePanel({
                 }
               />
             </Field>
+          </>
+        )}
+      </Section>
+
+      <Section title="Buildings">
+        {buildings && view.zoom < buildings.minzoom && (
+          <p className="warn">
+            Buildings are on, and the map is at zoom {view.zoom.toFixed(1)}. Footprints are not in
+            the tiles below zoom {buildings.minzoom}, so there is nothing to draw until you zoom in.
+          </p>
+        )}
+        {buildings && view.pitch < 15 && (
+          <p className="hint">
+            Looking straight down at a 3D city shows you its roofs. Tilt the camera — 2.5D or 3D
+            above — to see the buildings stand up.
+          </p>
+        )}
+        <Switch
+          label="3D buildings from OpenStreetMap"
+          on={Boolean(buildings)}
+          onChange={(on) =>
+            edit((d) => {
+              if (on) return turnBuildingsOn(d);
+              delete d.environment.buildings;
+              return d;
+            })
+          }
+        />
+        {buildings && (
+          <>
+            <Field label="Height" value={`${buildings.exaggeration.toFixed(1)}×`}>
+              <input
+                type="range"
+                min={5}
+                max={50}
+                value={buildings.exaggeration * 10}
+                onChange={(e) =>
+                  edit((d) => {
+                    d.environment.buildings!.exaggeration = Number(e.target.value) / 10;
+                    return d;
+                  })
+                }
+              />
+            </Field>
+            <Field label="Opacity" value={buildings.opacity.toFixed(2)}>
+              <input
+                type="range"
+                min={10}
+                max={100}
+                value={buildings.opacity * 100}
+                onChange={(e) =>
+                  edit((d) => {
+                    d.environment.buildings!.opacity = Number(e.target.value) / 100;
+                    return d;
+                  })
+                }
+              />
+            </Field>
+            <Field label="Walls">
+              <input
+                type="color"
+                value={buildings.color}
+                onChange={(e) =>
+                  edit((d) => {
+                    d.environment.buildings!.color = e.target.value;
+                    return d;
+                  })
+                }
+              />
+            </Field>
+            <Field label="Towers">
+              <input
+                type="color"
+                value={buildings.roofColor ?? buildings.color}
+                onChange={(e) =>
+                  edit((d) => {
+                    d.environment.buildings!.roofColor = e.target.value;
+                    return d;
+                  })
+                }
+              />
+            </Field>
+            <p className="hint">
+              Heights come from OpenStreetMap. A footprint nobody has surveyed is drawn at{" "}
+              {buildings.defaultHeight} m rather than left out, because a gap in a street looks
+              like a bug and a low block looks like a low block. Lighting above shades them.
+            </p>
           </>
         )}
       </Section>

@@ -1,3 +1,4 @@
+import { LABEL_FONT } from "./basemap";
 import type { Geometry, LabelStyle, Symbology } from "./types/project";
 
 /** Symbology plus the effective opacity becomes a paint object. */
@@ -107,6 +108,9 @@ export function strokePaint(sym: Symbology, opacity: number): Record<string, unk
 export function labelLayout(labels: LabelStyle): Record<string, unknown> {
   return {
     "text-field": templateToExpression(labels.template),
+    // Named, not defaulted: the renderer's default stack is not one the glyph
+    // service publishes, and a label whose font 404s just does not appear.
+    "text-font": LABEL_FONT,
     "text-size": labels.size,
     "text-allow-overlap": labels.allowOverlap ?? false,
     "symbol-placement": labels.placement ?? "point",

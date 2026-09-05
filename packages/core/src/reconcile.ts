@@ -2,6 +2,15 @@ import { compile } from "./compile";
 import type { EngineLayer, Op } from "./types/ops";
 import type { MapProject, Source } from "./types/project";
 
+/** The environment keys the renderer has a setter for. The rest become layers. */
+const ENGINE_ENVIRONMENT = new Set<keyof MapProject["environment"]>([
+  "terrain",
+  "fog",
+  "light",
+  "sky",
+  "projection",
+]);
+
 /**
  * Diff two project states and produce the operations between them.
  *
@@ -108,6 +117,14 @@ export function reconcile(prev: MapProject | null, next: MapProject): Op[] {
     ...Object.keys(next.environment),
   ]) as Set<keyof MapProject["environment"]>;
   for (const key of envKeys) {
+    /*
+     * Not everything in the environment is an engine setting. Hillshade and
+     * buildings are compiled to layers and reach the renderer as layer
+     * operations; emitting an `env.set` for them as well produces an operation
+     * the adapter has no case for, which is a no-op in the map, a line of noise
+     * in the log, and a history step for an edit that was already recorded.
+     */
+    if (!ENGINE_ENVIRONMENT.has(key)) continue;
     const before = prev?.environment[key];
     const after = next.environment[key];
     if (!same(before, after)) ops.push({ t: "env.set", key, value: after ?? null });

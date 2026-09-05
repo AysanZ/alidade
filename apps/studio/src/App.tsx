@@ -42,7 +42,7 @@ import { ProjectPanel } from "./components/ProjectPanel";
 import { Rail, type PaneId } from "./components/Rail";
 import { ScenePanel } from "./components/ScenePanel";
 import { TitleBar } from "./components/TitleBar";
-import { emptyProject, emptyStyle } from "./project";
+import { emptyProject, emptyStyle, migrate } from "./project";
 import { allLayers, bundleIdsOf, duplicateNode, findLayer, removeNode, withNode } from "./tree";
 import { featureLabel } from "./label";
 import { markerImageFor, registerMarkers } from "./markers";
@@ -186,7 +186,7 @@ export default function App() {
   const reopen = useCallback(
     (text: string, filename: string) => {
       try {
-        open(parseProject(text));
+        open(migrate(parseProject(text)));
       } catch (error) {
         setProblem(
           `${filename} could not be opened: ${error instanceof Error ? error.message : String(error)}`,
@@ -279,7 +279,7 @@ export default function App() {
        * builds the map from it exactly as it would from any other edit.
        */
       const saved = restore(emptyProject.schema);
-      const manager = new MapManager(map as unknown as Renderer, saved ?? emptyProject, {
+      const manager = new MapManager(map as unknown as Renderer, migrate(saved ?? emptyProject), {
         onWarning: (message) => setProblem(message),
         host: models,
       });

@@ -13,6 +13,8 @@ import type {
 } from "./types/project";
 import { SLOT_ORDER } from "./types/project";
 import { annotationSourceId, annotationsGeoJSON, vertexGeoJSON } from "./annotate";
+import { LABEL_FONT, vectorBasemapLayers } from "./basemap";
+import { buildingsLayer } from "./buildings";
 import { toExpression } from "./filter";
 import { graticuleGeoJSON, graticuleSourceId } from "./graticule";
 import { squareGridGeoJSON, squareGridSourceId, utmGridGeoJSON, utmGridSourceId } from "./grids";
@@ -149,6 +151,18 @@ export function compile(project: MapProject): Compiled {
     });
   }
 
+  /*
+   * A vector basemap is layers of ours, so it goes in here rather than arriving
+   * as a foreign style. Its own labels are held back until the labels slot,
+   * which is what keeps place names above the user's data.
+   */
+  const vectorLabels: EngineLayer[] = [];
+  if (project.basemap.vector && sources[project.basemap.vector.source]) {
+    const drawn = vectorBasemapLayers(project.basemap.vector);
+    systemBase.push(...drawn.base);
+    if (project.basemap.labels) vectorLabels.push(...drawn.labels);
+  }
+
   // Hillshade sits on the basemap, under everything the user added.
   const hillshade = project.environment.hillshade;
   if (hillshade) {
@@ -167,6 +181,8 @@ export function compile(project: MapProject): Compiled {
       layout: {},
     });
   }
+
+  systemLabels.push(...vectorLabels);
 
   if (project.basemap.labelTiles && project.basemap.labels) {
     sources["basemap:labels"] = { type: "raster", ...project.basemap.labelTiles };
@@ -199,6 +215,19 @@ export function compile(project: MapProject): Compiled {
    * are covered by a solid object the way anything on the ground is.
    */
   const systemScene: EngineLayer[] = [];
+
+  /*
+   * Extruded footprints go in first, so the models stand among them rather than
+   * over them: both are solid, both write depth, and the one in front is the one
+   * the camera can see. A model dropped behind a tower is behind it.
+   *
+   * Nothing is emitted when the source is not declared. A fill-extrusion reading
+   * a source that is not there is refused by the renderer, and the operation
+   * after it in the batch is the one that would have drawn something.
+   */
+  const buildings = project.environment.buildings;
+  if (buildings && sources[buildings.source]) systemScene.push(buildingsLayer(buildings));
+
   const models = project.models;
   if (models && models.items.length > 0) {
     systemScene.push({
@@ -229,6 +258,7 @@ export function compile(project: MapProject): Compiled {
       paint: { "text-color": grids.color, "text-halo-color": "#050505", "text-halo-width": 1.2 },
       layout: {
         "text-field": ["get", "label"],
+        "text-font": LABEL_FONT,
         "text-size": 10,
         "symbol-placement": "line",
         "text-allow-overlap": false,
@@ -278,6 +308,7 @@ export function compile(project: MapProject): Compiled {
         paint: { "text-color": color, "text-halo-color": "#050505", "text-halo-width": 1 },
         layout: {
           "text-field": ["get", "label"],
+          "text-font": LABEL_FONT,
           "text-size": 10,
           "symbol-placement": "line",
           "text-allow-overlap": false,
@@ -409,6 +440,7 @@ export function compile(project: MapProject): Compiled {
       layout: {
         visibility: shown,
         "text-field": ["get", "label"],
+        "text-font": LABEL_FONT,
         "text-size": 11,
         "text-offset": [0, 1.1],
         "text-anchor": "top",

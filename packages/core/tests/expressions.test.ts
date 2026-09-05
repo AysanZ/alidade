@@ -4,8 +4,9 @@ import { expression, v8 } from "@maplibre/maplibre-gl-style-spec";
 import { compile } from "../src/compile";
 import { colorExpression, templateToExpression } from "../src/symbology";
 import { toExpression } from "../src/filter";
+import { buildingsLayer, defaultBuildings } from "../src/buildings";
 import { defaultChrome } from "../src/types/project";
-import type { LayerNode, MapProject, Symbology } from "../src/types/project";
+import type { Buildings, LayerNode, MapProject, Symbology } from "../src/types/project";
 
 /**
  * A malformed expression is not a small mistake.
@@ -32,9 +33,16 @@ const parse = (expr: unknown, spec: unknown) =>
 /**
  * A value that is an array is not necessarily an expression: `line-dasharray` is
  * genuinely `[3, 5]`. An expression always starts with the name of an operator.
+ *
+ * `text-font` is the awkward case, because it is genuinely a list of font names
+ * and so it genuinely starts with a string. Reading it as an expression makes
+ * the parser report the first font as an unknown operator, which is a failure
+ * of this heuristic rather than of the thing it is checking.
  */
-const looksLikeAnExpression = (value: unknown): boolean =>
-  Array.isArray(value) && typeof value[0] === "string";
+const NOT_EXPRESSIONS = new Set(["text-font"]);
+
+const looksLikeAnExpression = (value: unknown, key = ""): boolean =>
+  !NOT_EXPRESSIONS.has(key) && Array.isArray(value) && typeof value[0] === "string";
 
 const check = (expr: unknown, spec: unknown, what: string) => {
   const result = parse(expr, spec);
@@ -228,17 +236,48 @@ describe("a whole compiled project parses", () => {
       for (const [key, value] of Object.entries(engine.paint)) {
         const spec = paintSpec?.[key];
         expect(spec, `${engine.type} has no paint property ${key}`).toBeDefined();
-        if (looksLikeAnExpression(value)) check(value, spec, `${engine.id}.paint.${key}`);
+        if (looksLikeAnExpression(value, key)) check(value, spec, `${engine.id}.paint.${key}`);
       }
       for (const [key, value] of Object.entries(engine.layout)) {
         if (key === "visibility") continue;
         const spec = layoutSpec?.[key];
         expect(spec, `${engine.type} has no layout property ${key}`).toBeDefined();
-        if (looksLikeAnExpression(value)) check(value, spec, `${engine.id}.layout.${key}`);
+        if (looksLikeAnExpression(value, key)) check(value, spec, `${engine.id}.layout.${key}`);
       }
       if (engine.filter !== undefined) {
         check(engine.filter, v8.filter, `${engine.id}.filter`);
       }
     }
   });
+});
+
+/**
+ * The 3D basemap, run through the same parser.
+ *
+ * A height expression that does not parse is worse than a colour one that does
+ * not: the renderer drops the property, falls back to a height of zero, and the
+ * city is a flat sheet with no error anywhere near it.
+ */
+describe("building extrusions parse", () => {
+  const EXTRUSION = v8["paint_fill-extrusion"] as Record<string, unknown>;
+  const cases: [string, Buildings][] = [
+    ["defaults", defaultBuildings()],
+    ["exaggerated", { ...defaultBuildings(), exaggeration: 3 }],
+    ["one flat colour", { ...defaultBuildings(), roofColor: undefined }],
+    ["no base field", { ...defaultBuildings(), baseField: undefined }],
+    [
+      "a plain OSM extract rather than OpenMapTiles",
+      { ...defaultBuildings(), heightField: "height", baseField: "min_height" },
+    ],
+  ];
+
+  for (const [name, buildings] of cases) {
+    it(name, () => {
+      const { paint } = buildingsLayer(buildings);
+      for (const [key, value] of Object.entries(paint)) {
+        if (!looksLikeAnExpression(value, key)) continue;
+        check(value, EXTRUSION[key], `${name} ${key}`);
+      }
+    });
+  }
 });
