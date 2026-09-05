@@ -444,6 +444,66 @@ export interface Bookmark {
   view: View;
 }
 
+/* ---------------------------------------------------------------- models */
+
+/**
+ * Where a model's origin is held against the ground.
+ *
+ * `base` puts the lowest point of the mesh on the ground, which is what a
+ * building or a vehicle wants and what most exported files do not do for
+ * themselves: a glTF's origin is wherever the modeller left it, and that is
+ * often the middle of the object. `origin` trusts the file.
+ */
+export type ModelAnchor = "base" | "origin";
+
+/**
+ * A glTF model placed on the map.
+ *
+ * The document holds a reference and a placement, never the geometry. A model
+ * is fetched from its URL by the renderer the way a tile is, so a project with
+ * a hundred models is still forty kilobytes, and two placements of the same
+ * file share one download.
+ *
+ * The placement is stated the way a surveyor would state it — a position, a
+ * height, a bearing — rather than as a matrix. A matrix cannot be edited one
+ * number at a time and cannot be read back into words.
+ */
+export interface Model3D {
+  id: string;
+  name: string;
+  /** A .glb or .gltf, absolute or relative to the studio. */
+  url: string;
+  /** lon, lat of the model's origin. */
+  position: [number, number];
+  /** Metres above the ground. Measured from the terrain surface when `clamp` is set and terrain is on. */
+  altitude: number;
+  /** Degrees clockwise from north, the way a bearing is stated. */
+  heading: number;
+  /** Uniform. 1 draws the file's own units as metres, which is what glTF specifies. */
+  scale: number;
+  anchor: ModelAnchor;
+  /** Sit on the terrain surface rather than on sea level. Only matters when terrain is on. */
+  clamp: boolean;
+  visible: boolean;
+  opacity: number;
+  /** Where the file came from and who it belongs to. Kept for the interface, never rendered. */
+  attribution?: string;
+}
+
+/**
+ * Every model on the map.
+ *
+ * Models live beside the tree rather than in it for the same reason drawings
+ * do: they are one layer no matter how many there are, drawn together into one
+ * scene with one light, and a table of contents entry per model would be a
+ * list of things that cannot be reordered because a 3D scene is ordered by
+ * depth and not by the user.
+ */
+export interface Models {
+  visible: boolean;
+  items: Model3D[];
+}
+
 export interface MapProject {
   schema: 3;
   id: string;
@@ -458,6 +518,8 @@ export interface MapProject {
   annotations?: Annotations;
   bookmarks?: Bookmark[];
   selection?: Selection;
+  /** Optional so a project written before models existed still loads. */
+  models?: Models;
 }
 
 export const defaultGrids = (): Grids => ({
@@ -480,4 +542,9 @@ export const defaultAnnotations = (): Annotations => ({
   visible: true,
   opacity: 1,
   features: [],
+});
+
+export const defaultModels = (): Models => ({
+  visible: true,
+  items: [],
 });

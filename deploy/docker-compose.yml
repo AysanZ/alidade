@@ -31,6 +31,10 @@ services:
       POSTGRES_PORT: 5432
       TILE_CACHE_SECONDS: ${TILE_CACHE_SECONDS:-300}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      MODELS_DIR: /srv/models
+    volumes:
+      # Uploaded 3D models. Files, not rows, so they get a volume of their own.
+      - models:/srv/models
     depends_on:
       postgis:
         condition: service_healthy
@@ -50,3 +54,4 @@ services:
 
 volumes:
   pgdata:
+  models:

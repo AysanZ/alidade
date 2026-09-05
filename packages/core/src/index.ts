@@ -106,3 +106,22 @@ export {
   rampOf,
   representativeColor,
 } from "./palette";
+
+export {
+  MODELS_LAYER_ID,
+  EARTH_RADIUS,
+  unitsPerMetre,
+  toMercator,
+  frameOf,
+  yawOf,
+  newModel,
+  nameFromUrl,
+  findModel,
+  withModel,
+  removeModel,
+  duplicateModel,
+  looksLikeModel,
+  describeModel,
+  anchorLift,
+} from "./models";
+export type { Mercator, Frame } from "./models";

@@ -1,9 +1,9 @@
 import type { JSX } from "react";
 
-export type PaneId = "layers" | "basemaps" | "scene" | "draw" | "project";
+export type PaneId = "layers" | "basemaps" | "scene" | "models" | "draw" | "project";
 
 /**
- * Drawn rather than imported: four icons is not worth a dependency.
+ * Drawn rather than imported: six icons is not worth a dependency.
  *
  * They are set on a 24 unit grid but drawn at 18, so the stroke is deliberately
  * heavy and there is no hairline detail. Anything thinner reads as a smudge at
@@ -29,6 +29,12 @@ const ICONS: Record<PaneId, JSX.Element> = {
       <circle cx="17" cy="5.5" r="2.5" />
     </>
   ),
+  models: (
+    <>
+      <path d="M12 3.5 4.5 7.75v8.5L12 20.5l7.5-4.25v-8.5L12 3.5Z" />
+      <path d="M4.5 7.75 12 12l7.5-4.25M12 12v8.5" />
+    </>
+  ),
   draw: (
     <>
       <path d="M4 20.5 5 16l10.5-10.5a2.1 2.1 0 0 1 3 3L8 19l-4 1.5Z" />
@@ -47,6 +53,7 @@ const PANES: { id: PaneId; label: string }[] = [
   { id: "layers", label: "Layers" },
   { id: "basemaps", label: "Basemaps" },
   { id: "scene", label: "Scene" },
+  { id: "models", label: "3D models" },
   { id: "draw", label: "Draw and measure" },
   { id: "project", label: "Project" },
 ];

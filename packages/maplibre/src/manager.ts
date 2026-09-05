@@ -1,13 +1,15 @@
 import { reconcile, type MapProject, type Op } from "@alidade/core";
 
 import { apply } from "./apply";
-import type { Renderer } from "./renderer";
+import type { ModelHost, Renderer } from "./renderer";
 
 export interface ManagerOptions {
   /** Called with every batch, which is where undo history and the log hang off. */
   onOps?: (ops: Op[]) => void;
   /** Called when the engine cannot carry out an operation. */
   onWarning?: (message: string) => void;
+  /** Draws the 3D models. Without one, a project with models warns and draws the rest. */
+  host?: ModelHost;
 }
 
 /**
@@ -22,12 +24,14 @@ export class MapManager {
   #renderer: Renderer;
   #onOps: ((ops: Op[]) => void) | undefined;
   #onWarning: ((message: string) => void) | undefined;
+  #host: ModelHost | undefined;
 
   constructor(renderer: Renderer, project: MapProject, options: ManagerOptions = {}) {
     this.#renderer = renderer;
     this.#project = project;
     this.#onOps = options.onOps;
     this.#onWarning = options.onWarning;
+    this.#host = options.host;
     this.#run(reconcile(null, project));
   }
 
@@ -67,7 +71,7 @@ export class MapManager {
 
   #run(ops: Op[]): void {
     if (ops.length === 0) return;
-    apply(this.#renderer, ops, this.#onWarning);
+    apply(this.#renderer, ops, this.#onWarning, this.#host);
     this.#onOps?.(ops);
   }
 }

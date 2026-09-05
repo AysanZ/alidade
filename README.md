@@ -1,7 +1,7 @@
 # Alidade
 
 An open-source Web-GIS platform. PostGIS vector tiles, OGC services, full symbology,
-and a real-time asset layer.
+3D models on the terrain, and a real-time asset layer.
 
 This repository is at **phase 3**. The map is described by a single project object.
 The core diffs two versions of it and emits a list of operations; the adapter applies
@@ -10,10 +10,10 @@ basemap does not destroy the layers.
 
 Working now: a table of contents grouped by slot, a basemap gallery on open tiles,
 2D, 2.5D and 3D views, three projections including a real globe, terrain and
-hillshade from open elevation tiles, a graticule, UTM and metric reference grids,
-an overview map, drawing and geodesic measurement with buffers, camera bookmarks,
-a scale bar in three unit systems, and a coordinate readout in decimal degrees,
-DMS or UTM.
+hillshade from open elevation tiles, glTF models placed on the map and standing on
+the terrain, a graticule, UTM and metric reference grids, an overview map, drawing
+and geodesic measurement with buffers, camera bookmarks, a scale bar in three unit
+systems, and a coordinate readout in decimal degrees, DMS or UTM.
 
 Drawings and measurements are ordinary parts of the project document, so they
 survive a basemap swap, appear in the operation log, and export to GeoJSON, KML,
@@ -49,6 +49,40 @@ three points and a line will not go below two.
 None of that live feedback is in the document. The rubber band is a function of
 where the mouse is, and the mouse is not part of the map: it is drawn as an
 overlay above the canvas, so it costs no operations and cannot be undone into.
+
+### 3D models
+
+A glTF model is placed the way a surveyor would state it: a position, a height
+above the ground, a bearing, a scale. That placement is part of the project
+document — forty bytes, not the mesh — so it is saved, exported, undone and
+replayed across a basemap swap like anything else, and two placements of the
+same file share one download. The file itself is fetched by the renderer the way
+a tile is, from a link, from the studio's own catalogue of openly licensed
+samples, or from the API, which keeps an uploaded `.glb` under a name it chose
+and serves it back with a URL the project can hold.
+
+The models are drawn by three.js into a MapLibre custom layer that shares the
+map's camera and depth buffer, so a lorry stands behind the building in front
+of it and under the place name above it. With terrain on, a model sits on the
+hill it is on: the ground height under it is read from the terrain and added to
+its own. The scene is re-anchored at the map centre on every frame, and the
+map's projection matrix is composed with that change of frame in double
+precision before the GPU sees it, which is what keeps a building-sized object
+from twitching at street zoom — the standard example does the multiplication
+where single precision cannot hold it.
+
+Click a model to select it; the inspector has the numbers, and **Place on map**
+moves it with a click. Size can be set in metres once the file has arrived and
+its real extent is known, because "make it twelve metres tall" is what someone
+placing a building means. Day and Night in the Scene pane light the models
+along with the buildings. Under a globe projection the scene is not drawn — a
+mesh in mercator would float beside the sphere — and the pane says so.
+
+`packages/core` holds the arithmetic and knows nothing of meshes;
+`packages/three` is the only folder that knows three.js exists, and it is given
+placements, never documents. The adapter sees the scene as one custom layer with
+a place in the draw order — over the data, under the labels — and the models in
+it as operations of their own.
 
 ### The document
 
@@ -145,6 +179,7 @@ psql postgresql://alidade:change_me@localhost:5433/alidade -f data/drop-demo.sql
 
 | `packages/core/` | Project model, reconciler, symbology, filter compiler |
 | `packages/maplibre/` | The only folder that knows MapLibre exists |
+| `packages/three/` | The only folder that knows three.js exists: the 3D model host |
 
 `packages/core` is internally named **layersync**. It is a folder in this repository,
 not a published package.
@@ -153,7 +188,7 @@ not a published package.
 
 ```bash
 pnpm install
-pnpm test        # 300 tests, Node only: no browser, no WebGL
+pnpm test        # 336 tests, Node only: no browser, no WebGL
 pnpm typecheck   # every package and the studio
 pnpm build
 ```
@@ -163,6 +198,9 @@ project states, so slot ordering, bundle expansion, classification and filter
 compilation are all tested without rendering anything. Adapter tests use a fake
 renderer that records calls, and refuse the same things a real one refuses:
 adding a layer before its source, removing a source something is still reading.
+The 3D host is tested the same way, through a fake that records what it was
+handed; the matrices that put a metric scene onto a mercator map are tested
+against the mercator arithmetic directly. Nothing in the suite touches a GPU.
 
 `packages/core/tests/regressions.test.ts` holds one test per defect that has been
 fixed, named after the symptom rather than the cause.

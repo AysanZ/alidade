@@ -42,6 +42,9 @@ def test_the_endpoints_the_studio_calls_all_exist():
         ("/api/layers/{layer_id}/features", "GET"),
         ("/api/services/wms/capabilities", "GET"),
         ("/api/tiles/{layer_id}/{z}/{x}/{y}.mvt", "GET"),
+        ("/api/models", "POST"),
+        ("/api/models", "GET"),
+        ("/api/models/{stored}", "GET"),
     ]
     missing = [pair for pair in expected if pair not in routes()]
     assert missing == []

@@ -6,6 +6,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@alidade/core": fileURLToPath(new URL("./packages/core/src/index.ts", import.meta.url)),
+      "@alidade/maplibre": fileURLToPath(new URL("./packages/maplibre/src/index.ts", import.meta.url)),
     },
   },
   test: {

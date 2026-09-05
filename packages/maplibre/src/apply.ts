@@ -1,9 +1,11 @@
 import type { Op } from "@alidade/core";
 
-import { toSpec, type Renderer } from "./renderer";
+import { toSpec, type ModelHost, type Renderer } from "./renderer";
 
 /** Told when the engine cannot do something, rather than swallowing it. */
 export type Warn = (message: string) => void;
+
+const NO_HOST = "This map has no 3D host, so models cannot be drawn.";
 
 /**
  * Operations in, engine calls out.
@@ -15,10 +17,10 @@ export type Warn = (message: string) => void;
  * was importing a layer and watching nothing appear, with no error anywhere,
  * because the `layer.add` was the operation after the one that threw.
  */
-export function apply(renderer: Renderer, ops: Op[], warn?: Warn): void {
+export function apply(renderer: Renderer, ops: Op[], warn?: Warn, host?: ModelHost): void {
   for (const op of ops) {
     try {
-      run(renderer, op, warn);
+      run(renderer, op, warn, host);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       warn?.(`${op.t}${"id" in op ? ` on ${op.id}` : ""} failed: ${detail}`);
@@ -27,7 +29,7 @@ export function apply(renderer: Renderer, ops: Op[], warn?: Warn): void {
   }
 }
 
-function run(renderer: Renderer, op: Op, warn?: Warn): void {
+function run(renderer: Renderer, op: Op, warn?: Warn, host?: ModelHost): void {
   switch (op.t) {
     case "source.add":
       // Replaying against a style that was not as empty as expected is normal, so
@@ -45,15 +47,32 @@ function run(renderer: Renderer, op: Op, warn?: Warn): void {
       if (renderer.getSource && !renderer.getSource(op.id)) return;
       renderer.removeSource(op.id);
       break;
-    case "layer.add":
+    case "layer.add": {
       if (renderer.getLayer(op.spec.id)) renderer.removeLayer(op.spec.id);
       // A layer cannot be added under something that is not there yet. Falling
       // back to the top is wrong by one position; throwing loses the layer.
-      renderer.addLayer(
-        toSpec(op.spec),
-        op.before && renderer.getLayer(op.before) ? op.before : undefined,
-      );
+      const before = op.before && renderer.getLayer(op.before) ? op.before : undefined;
+      if (op.spec.type !== "custom") {
+        renderer.addLayer(toSpec(op.spec), before);
+        break;
+      }
+      /*
+       * A custom layer is code, not a description, and the engine wants the
+       * code. It comes from the host, which is the one thing that knows what
+       * the scene looks like. The engine ignores `layout` on a custom layer at
+       * construction and honours it afterwards, so a scene that should start
+       * hidden is hidden in a second call.
+       */
+      if (!host) {
+        warn?.(NO_HOST);
+        break;
+      }
+      renderer.addLayer(host.layer(op.spec.id), before);
+      if (op.spec.layout["visibility"] === "none") {
+        renderer.setLayoutProperty(op.spec.id, "visibility", "none");
+      }
       break;
+    }
     case "layer.remove":
       if (!renderer.getLayer(op.id)) return;
       renderer.removeLayer(op.id);
@@ -83,6 +102,20 @@ function run(renderer: Renderer, op: Op, warn?: Warn): void {
       break;
     case "env.set":
       applyEnvironment(renderer, op.key, op.value, warn);
+      // The scene's light is the map's light, so Day and Night reach the models.
+      if (op.key === "light") host?.light?.((op.value as Parameters<NonNullable<ModelHost["light"]>>[0]) ?? null);
+      break;
+    case "model.add":
+      if (!host) return warn?.(NO_HOST);
+      host.add(op.model);
+      break;
+    case "model.update":
+      if (!host) return warn?.(NO_HOST);
+      host.update(op.model);
+      break;
+    case "model.remove":
+      // Nothing to warn about: a scene that was never drawn has nothing to remove.
+      host?.remove(op.id);
       break;
   }
 }

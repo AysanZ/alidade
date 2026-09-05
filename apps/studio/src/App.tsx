@@ -2,20 +2,25 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Map as MapLibreMap, type MapMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import type { Bookmark, Extent, LayerNode, Projection, Selection } from "@alidade/core";
+import type { Bookmark, Extent, LayerNode, Model3D, Projection, Selection } from "@alidade/core";
 import {
   GLOBE_IS_ROUND_BELOW,
   denominatorAt,
+  findModel,
   formatCoordinate,
   gridKey,
+  newModel,
   padded,
   needsFraming,
+  removeModel,
   toleranceInMetres,
   utmCell,
   viewForExtent,
   withMinimumSize,
+  withModel,
 } from "@alidade/core";
 import { MapManager, watchStyleSwaps, type Renderer } from "@alidade/maplibre";
+import { ThreeModelHost } from "@alidade/three";
 
 import { AddData } from "./components/AddData";
 import { AttributeTable } from "./components/AttributeTable";
@@ -31,6 +36,8 @@ import { LayerTree } from "./components/LayerTree";
 import { MapChrome, type Camera } from "./components/MapChrome";
 import { MapControls } from "./components/MapControls";
 import { Minimap } from "./components/Minimap";
+import { ModelInspector } from "./components/ModelInspector";
+import { ModelsPanel } from "./components/ModelsPanel";
 import { ProjectPanel } from "./components/ProjectPanel";
 import { Rail, type PaneId } from "./components/Rail";
 import { ScenePanel } from "./components/ScenePanel";
@@ -39,6 +46,7 @@ import { emptyProject, emptyStyle } from "./project";
 import { allLayers, bundleIdsOf, duplicateNode, findLayer, removeNode, withNode } from "./tree";
 import { featureLabel } from "./label";
 import { markerImageFor, registerMarkers } from "./markers";
+import type { ModelStatus } from "./models";
 import { useDrawing } from "./useDrawing";
 import { useProject } from "./useProject";
 import { stampedPng } from "./export";
@@ -67,9 +75,19 @@ const TITLES: Record<PaneId, string> = {
   layers: "Layers",
   basemaps: "Basemaps",
   scene: "Scene",
+  models: "3D models",
   draw: "Draw and measure",
   project: "Project",
 };
+
+/**
+ * Where the camera goes to look at a model.
+ *
+ * Close enough that a lorry is a lorry and not a pixel, tilted enough that it
+ * has a side, and no closer: at zoom 18 the sample lantern fills the screen.
+ */
+const MODEL_ZOOM = 17;
+const MODEL_PITCH = 60;
 
 export default function App() {
   const holder = useRef<HTMLDivElement>(null);
@@ -107,6 +125,21 @@ export default function App() {
   const [pointer, setPointer] = useState<[number, number]>(emptyProject.view.center);
   const [found, setFound] = useState<Identified | null>(null);
   const [focus, setFocus] = useState<{ field: string; value: string } | null>(null);
+  /*
+   * The 3D models. One host for the life of the map, made before the map is:
+   * the manager is built with it, and a project restored from storage with
+   * models in it replays them into the host on the first pass like anything
+   * else. What the host learns about each file comes back as status, which is
+   * React's, so the panel can say "loading", "failed" or "4.2 m tall".
+   */
+  const host = useRef<ThreeModelHost | null>(null);
+  const [modelStatus, setModelStatus] = useState<Record<string, ModelStatus>>({});
+  const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  /** The model the next click on the map will move. */
+  const [placing, setPlacing] = useState<string | null>(null);
+  /** The scene is being skipped because the map is a sphere. */
+  const [globe, setGlobe] = useState(false);
+  const [modelHover, setModelHover] = useState<string | null>(null);
   const [hover, setHover] = useState<{ layer: string; properties: Record<string, unknown> } | null>(
     null,
   );
@@ -194,6 +227,10 @@ export default function App() {
   scale.current = { zoom: camera.zoom, latitude: camera.latitude };
   const latest = useRef(project);
   latest.current = project;
+  const placingNow = useRef<string | null>(null);
+  placingNow.current = placing;
+  const onPlaced = useRef((_id: string, _at: [number, number]) => {});
+  const onModelPicked = useRef((_id: string) => {});
 
   const readCamera = useCallback((map: MapLibreMap) => {
     const middle = map.getCenter();
@@ -214,6 +251,13 @@ export default function App() {
      * application a manager bound to a map that is no longer on the screen.
      */
     let cancelled = false;
+
+    const models = new ThreeModelHost({
+      onLoaded: (id, info) => setModelStatus((was) => ({ ...was, [id]: { state: "ready", info } })),
+      onFailed: (id, reason) => setModelStatus((was) => ({ ...was, [id]: { state: "failed", reason } })),
+      onGlobe: setGlobe,
+    });
+    host.current = models;
 
     const map = new MapLibreMap({
       container: holder.current,
@@ -237,6 +281,7 @@ export default function App() {
       const saved = restore(emptyProject.schema);
       const manager = new MapManager(map as unknown as Renderer, saved ?? emptyProject, {
         onWarning: (message) => setProblem(message),
+        host: models,
       });
       watchStyleSwaps(map as never, manager);
       attach(manager);
@@ -331,7 +376,25 @@ export default function App() {
           toleranceInMetres(SNAP_PIXELS, scale.current.zoom, scale.current.latitude),
         );
       }
-      if (drawingNow.current) return clearHover();
+      if (drawingNow.current || placingNow.current) return clearHover();
+      /*
+       * A model stands over whatever is under it, so it is asked first. The
+       * quick test is a box per model, which is what a pointer can afford at
+       * frame rate; the click that follows tests the triangles.
+       */
+      const model = latest.current.models?.items.length ? models.pick(e.point.x, e.point.y) : null;
+      if (model) {
+        map.getCanvas().style.cursor = "pointer";
+        if (hovering.key !== null) {
+          hovering.key = null;
+          setHover(null);
+        }
+        setModelHover(model);
+        const canvas = map.getCanvas();
+        setTipAt({ x: e.point.x, y: e.point.y, width: canvas.clientWidth, height: canvas.clientHeight });
+        return;
+      }
+      setModelHover(null);
       const under = hit(e);
       map.getCanvas().style.cursor = under ? "pointer" : "";
       if (!under) return clearHover();
@@ -353,7 +416,10 @@ export default function App() {
 
     // Leaving the canvas is not a mousemove, so without this the tooltip and the
     // highlight stayed behind on whatever was under the pointer as it left.
-    map.on("mouseout", clearHover);
+    map.on("mouseout", () => {
+      setModelHover(null);
+      clearHover();
+    });
 
     /*
      * A double click finishes the shape, because that is what every GIS does and
@@ -369,6 +435,12 @@ export default function App() {
 
     map.on("click", (e: MapMouseEvent) => {
       if (drawingNow.current) return onClick.current([e.lngLat.lng, e.lngLat.lat]);
+      // A placement in progress owns the click: the model goes where it landed.
+      if (placingNow.current) return onPlaced.current(placingNow.current, [e.lngLat.lng, e.lngLat.lat]);
+      if (latest.current.models?.items.length) {
+        const model = models.pick(e.point.x, e.point.y, true);
+        if (model) return onModelPicked.current(model);
+      }
       const under = hit(e);
       if (!under) return setFound(null);
       setFound({
@@ -407,8 +479,95 @@ export default function App() {
       cancelled = true;
       mapRef.current = null;
       map.remove();
+      models.dispose();
+      host.current = null;
     };
   }, [adopt, attach, readCamera, sync]);
+
+  /*
+   * A dropped placement lands here from the map's own click handler, through a
+   * ref, because that handler was registered once and this closure changes.
+   */
+  onPlaced.current = (id, at) => {
+    edit((d) => withModel(d, id, (m) => void (m.position = [Number(at[0].toFixed(7)), Number(at[1].toFixed(7))])));
+    setPlacing(null);
+  };
+  onModelPicked.current = (id) => {
+    setSelectedModel(id);
+    setSelected(null);
+    setFound(null);
+    setPane("models");
+  };
+
+  /* The outline follows the selection, and a selection of a model is not one of a layer. */
+  useEffect(() => {
+    host.current?.select(selectedModel);
+  }, [selectedModel]);
+
+  /* A selected model that is no longer in the document is no longer selected. */
+  useEffect(() => {
+    if (selectedModel && !findModel(project, selectedModel)) setSelectedModel(null);
+    if (placing && !findModel(project, placing)) setPlacing(null);
+    // Status for models that are gone is not worth keeping, however cheap.
+    setModelStatus((was) => {
+      const ids = new Set((project.models?.items ?? []).map((m) => m.id));
+      const kept = Object.fromEntries(Object.entries(was).filter(([id]) => ids.has(id)));
+      return Object.keys(kept).length === Object.keys(was).length ? was : kept;
+    });
+  }, [project, selectedModel, placing]);
+
+  /* The pointer becomes a crosshair while a placement is waiting for a click. */
+  useEffect(() => {
+    const canvas = mapRef.current?.getCanvas();
+    if (canvas && !drawing.session.mode) canvas.style.cursor = placing ? "crosshair" : "";
+  }, [placing, drawing.session.mode]);
+
+  /**
+   * Put a file on the map.
+   *
+   * At the centre of the view, because that is the one place the user is
+   * certainly looking at, and then the camera comes in to where the thing has a
+   * size, unless it is already there. Adding a lorry at zoom 3 and leaving the
+   * camera where it was is adding an invisible lorry.
+   */
+  const addModel = useCallback(
+    (partial: Pick<Model3D, "url" | "name"> & Partial<Model3D>) => {
+      const map = mapRef.current;
+      if (!map) return;
+      const centre = map.getCenter();
+      const model = newModel({
+        ...partial,
+        position: [Number(centre.lng.toFixed(7)), Number(centre.lat.toFixed(7))],
+      });
+      edit((d) => {
+        d.models ??= { visible: true, items: [] };
+        d.models.visible = true;
+        d.models.items.push(model);
+        return d;
+      });
+      setSelectedModel(model.id);
+      setSelected(null);
+      if (map.getZoom() < MODEL_ZOOM - 1.5 || map.getPitch() < 20) {
+        map.easeTo({ zoom: Math.max(map.getZoom(), MODEL_ZOOM), pitch: MODEL_PITCH, duration: 1100 });
+      }
+    },
+    [edit],
+  );
+
+  const zoomToModel = useCallback(
+    (id: string) => {
+      const model = findModel(project, id);
+      const map = mapRef.current;
+      if (!model || !map) return;
+      map.flyTo({
+        center: model.position,
+        zoom: Math.max(map.getZoom(), MODEL_ZOOM),
+        pitch: Math.max(map.getPitch(), MODEL_PITCH),
+        duration: 900,
+      });
+    },
+    [project],
+  );
 
   /*
    * The hover becomes a selection on the project, which is what the compiler
@@ -481,12 +640,13 @@ export default function App() {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      if (found) setFound(null);
+      if (placing) setPlacing(null);
+      else if (found) setFound(null);
       else if (presenting) setPresenting(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [found, presenting]);
+  }, [found, presenting, placing]);
 
   /* navigation locks */
   useEffect(() => {
@@ -598,15 +758,23 @@ export default function App() {
    */
   const hoverNode = hover ? findLayer(project, hover.layer) : undefined;
   const hoverName = hover ? featureLabel(hoverNode, hover.properties) : null;
+  const hoveredModel = modelHover ? findModel(project, modelHover) : undefined;
   const tip: Tip | null =
-    hover && tipAt && hoverName && !found && !drawing.session.mode
+    hoveredModel && tipAt && !found && !drawing.session.mode && !placing
       ? {
-          name: hoverName,
-          layer: hoverNode?.name ?? hover.layer,
+          name: hoveredModel.name,
+          layer: "3D model",
           at: { x: tipAt.x, y: tipAt.y },
           viewport: { width: tipAt.width, height: tipAt.height },
         }
-      : null;
+      : hover && tipAt && hoverName && !found && !drawing.session.mode
+        ? {
+            name: hoverName,
+            layer: hoverNode?.name ?? hover.layer,
+            at: { x: tipAt.x, y: tipAt.y },
+            viewport: { width: tipAt.width, height: tipAt.height },
+          }
+        : null;
 
   const exportImage = () => {
     const map = mapRef.current;
@@ -739,7 +907,10 @@ export default function App() {
             <LayerTree
               project={project}
               selected={selected}
-              onSelect={setSelected}
+              onSelect={(id) => {
+                setSelected(id);
+                setSelectedModel(null);
+              }}
               edit={edit}
               onMenu={(id, at) => setMenu({ id, at })}
               onAdd={() => setAdding(true)}
@@ -756,6 +927,26 @@ export default function App() {
               onGoTo={goTo}
               onProjection={setProjection}
               onRecall={recall}
+            />
+          )}
+          {pane === "models" && (
+            <ModelsPanel
+              project={project}
+              edit={edit}
+              status={modelStatus}
+              selected={selectedModel}
+              onSelect={(id) => {
+                setSelectedModel(id);
+                if (id) setSelected(null);
+              }}
+              onAdd={addModel}
+              onZoomTo={zoomToModel}
+              onRemove={(id) => {
+                edit((d) => removeModel(d, id));
+                if (selectedModel === id) setSelectedModel(null);
+              }}
+              onProblem={setProblem}
+              globe={globe}
             />
           )}
           {pane === "draw" && (
@@ -807,6 +998,12 @@ export default function App() {
               bearing={camera.bearing}
               onGoTo={goTo}
             />
+          )}
+          {placing && !drawing.session.mode && (
+            <div className="drawhint">
+              <b>Placing {findModel(project, placing)?.name ?? "model"}</b>
+              <span>Click the map to put it there · Escape keeps it where it is</span>
+            </div>
           )}
           {(drawing.session.mode || drawing.editing) && (
             <div className="drawhint">
@@ -912,15 +1109,28 @@ export default function App() {
           <p className="attribution">{project.basemap.raster?.attribution}</p>
         </div>
 
-        <Inspector
-          project={project}
-          selected={selected}
-          edit={edit}
-          denominator={denominator}
-          onFlyTo={flyTo}
-          onRemoved={() => setSelected(null)}
-          onAttributes={setTable}
-        />
+        {selectedModel ? (
+          <ModelInspector
+            project={project}
+            id={selectedModel}
+            status={modelStatus[selectedModel]}
+            edit={edit}
+            placing={placing === selectedModel}
+            onPlace={(on) => setPlacing(on ? selectedModel : null)}
+            onZoomTo={() => zoomToModel(selectedModel)}
+            onSelect={setSelectedModel}
+          />
+        ) : (
+          <Inspector
+            project={project}
+            selected={selected}
+            edit={edit}
+            denominator={denominator}
+            onFlyTo={flyTo}
+            onRemoved={() => setSelected(null)}
+            onAttributes={setTable}
+          />
+        )}
 
         {menu && (
           <LayerMenu
@@ -937,6 +1147,7 @@ export default function App() {
             onClose={() => setAdding(false)}
             onAdded={(id) => {
               setSelected(id);
+              setSelectedModel(null);
               setTable(id);
             }}
             onFlyTo={(extent) => flyTo(extent, true)}

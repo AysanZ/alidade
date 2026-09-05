@@ -113,6 +113,29 @@ export function reconcile(prev: MapProject | null, next: MapProject): Op[] {
     if (!same(before, after)) ops.push({ t: "env.set", key, value: after ?? null });
   }
 
+  /*
+   * Models, after the layers: the scene layer they are drawn into is added
+   * above, so by the time these run it is there to receive them. A model whose
+   * placement did not change emits nothing, which is what keeps dragging a
+   * slider on one model from re-sending the other forty.
+   */
+  ops.push(...diffModels(prev, next));
+
+  return ops;
+}
+
+function diffModels(prev: MapProject | null, next: MapProject): Op[] {
+  const ops: Op[] = [];
+  const before = new Map((prev?.models?.items ?? []).map((m) => [m.id, m]));
+  const after = new Map((next.models?.items ?? []).map((m) => [m.id, m]));
+  for (const id of before.keys()) {
+    if (!after.has(id)) ops.push({ t: "model.remove", id });
+  }
+  for (const [id, model] of after) {
+    const was = before.get(id);
+    if (!was) ops.push({ t: "model.add", model });
+    else if (!same(was, model)) ops.push({ t: "model.update", model });
+  }
   return ops;
 }
 

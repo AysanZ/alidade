@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 
 from .config import settings
 from .db import close_pool, open_pool, pool
-from .routers import layers, services, tiles
+from .routers import layers, models, services, tiles
 
 
 @asynccontextmanager
@@ -27,6 +27,7 @@ app.add_middleware(
 app.include_router(tiles.router)
 app.include_router(layers.router)
 app.include_router(services.router)
+app.include_router(models.router)
 
 logger = logging.getLogger(__name__)
 

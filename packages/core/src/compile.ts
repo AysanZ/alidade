@@ -17,6 +17,7 @@ import { toExpression } from "./filter";
 import { graticuleGeoJSON, graticuleSourceId } from "./graticule";
 import { squareGridGeoJSON, squareGridSourceId, utmGridGeoJSON, utmGridSourceId } from "./grids";
 import { zoomRange } from "./scale";
+import { MODELS_LAYER_ID } from "./models";
 import { labelLayout, labelPaint, paintFor, strokePaint } from "./symbology";
 
 export interface Compiled {
@@ -185,6 +186,28 @@ export function compile(project: MapProject): Compiled {
     for (const engine of engineLayersFor(entry, lat)) {
       bySlot.get(entry.layer.slot)!.push(engine);
     }
+  }
+
+  /*
+   * The 3D scene. One engine layer whatever is in it; the models themselves
+   * reach the renderer as `model.*` operations, not as layers. It goes at the
+   * bottom of the labels slot: over everything the user added, which it shares
+   * a depth buffer with, so a fill cannot paint across a truck and a building
+   * extrusion hides what is behind it; and under the place names, the grids and
+   * the graticule, because a name belongs on top of a building and not inside
+   * it. A data layer's own labels are drawn on the ground with the data, and
+   * are covered by a solid object the way anything on the ground is.
+   */
+  const systemScene: EngineLayer[] = [];
+  const models = project.models;
+  if (models && models.items.length > 0) {
+    systemScene.push({
+      id: MODELS_LAYER_ID,
+      type: "custom",
+      slot: "labels",
+      paint: {},
+      layout: { visibility: models.visible ? "visible" : "none" },
+    });
   }
 
   const grids = project.chrome.grids;
@@ -399,7 +422,7 @@ export function compile(project: MapProject): Compiled {
   const layers: EngineLayer[] = [];
   for (const slot of SLOT_ORDER) {
     if (slot === "base") layers.push(...systemBase);
-    if (slot === "labels") layers.push(...systemLabels);
+    if (slot === "labels") layers.push(...systemScene, ...systemLabels);
     layers.push(...groupsReversed(bySlot.get(slot)!));
     if (slot === "overlay") layers.push(...systemOverlay);
   }

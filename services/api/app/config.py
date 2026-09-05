@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     tile_cache_seconds: int = 300
     cors_origins: str = "http://localhost:5173"
     max_upload_mb: int = 200
+    # Where uploaded 3D models are kept. A volume in the compose stack.
+    models_dir: str = "./models"
 
     @property
     def dsn(self) -> str:

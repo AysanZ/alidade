@@ -1,4 +1,4 @@
-import { defaultAnnotations, defaultChrome, type MapProject } from "@alidade/core";
+import { defaultAnnotations, defaultChrome, defaultModels, type MapProject } from "@alidade/core";
 
 import { BASEMAPS } from "./basemaps";
 
@@ -19,6 +19,7 @@ export const emptyProject: MapProject = {
   environment: {},
   chrome: { ...defaultChrome(), overview: true },
   annotations: defaultAnnotations(),
+  models: defaultModels(),
   bookmarks: [],
   sources: {
     // Open elevation tiles, no key required. Terrain and hillshade both read this.

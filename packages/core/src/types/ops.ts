@@ -1,6 +1,13 @@
-import type { Slot, Source, View, Environment } from "./project";
+import type { Slot, Source, View, Environment, Model3D } from "./project";
 
-/** What the renderer is asked to draw. Produced by the compiler, never authored. */
+/**
+ * What the renderer is asked to draw. Produced by the compiler, never authored.
+ *
+ * `custom` is a layer the engine does not know how to draw and hands to code
+ * of ours at render time. It has a place in the order like any other layer,
+ * which is the whole reason it is a layer: the 3D scene has to be under the
+ * labels and over the buildings, and that is a question of order.
+ */
 export interface EngineLayer {
   id: string;
   type:
@@ -11,7 +18,8 @@ export interface EngineLayer {
     | "circle"
     | "raster"
     | "hillshade"
-    | "fill-extrusion";
+    | "fill-extrusion"
+    | "custom";
   source?: string;
   sourceLayer?: string;
   slot: Slot;
@@ -45,4 +53,14 @@ export type Op =
   | { t: "layer.filter"; id: string; value: unknown }
   | { t: "layer.zoom"; id: string; minzoom?: number; maxzoom?: number }
   | { t: "camera.set"; view: View }
-  | { t: "env.set"; key: keyof Environment; value: unknown };
+  | { t: "env.set"; key: keyof Environment; value: unknown }
+  /*
+   * A model is content for the custom layer rather than a layer of its own, so
+   * it has its own operations: the layer goes up and down with the draw order,
+   * and these say what is in it. `model.update` carries the whole model rather
+   * than a key and a value because a placement is one thing — a position moved
+   * and a heading turned in the same edit should be one frame, not two.
+   */
+  | { t: "model.add"; model: Model3D }
+  | { t: "model.update"; model: Model3D }
+  | { t: "model.remove"; id: string };

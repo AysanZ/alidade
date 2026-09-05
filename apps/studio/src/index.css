@@ -1754,3 +1754,76 @@ input.doc:focus { border-color: var(--accent); color: var(--txt); outline: none;
 /* Disabled, not hidden: "there is nothing to undo" is information. */
 .titlebar button.icon:disabled { opacity: 0.32; cursor: default; }
 .titlebar .small { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+
+/* ---------------------------------------------------------------- 3D models */
+
+/*
+ * A text input in a sidebar row.
+ *
+ * The dialogs and the filter editor each styled their own; the panels never
+ * did, so the Go to field was the browser's own box in the middle of a styled
+ * row, and the model link would have been another. This is the one the rows
+ * share.
+ */
+.pbody .row .text {
+  flex: 1;
+  height: 24px;
+  background: var(--raise);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--txt);
+  padding-inline: 7px;
+  font-size: 11.5px;
+}
+.pbody .row .text:hover { border-color: #3a3a40; }
+.pbody .row .text:focus { border-color: var(--accent); outline: none; }
+.pbody .row button.primary {
+  flex: none;
+  padding-inline: 12px;
+  background: #2e6fe0;
+  border-color: #3f7fe8;
+  color: #fff;
+}
+.pbody .row button.primary:hover:not(:disabled) { background: #3f7fe8; color: #fff; }
+.pbody .row button.primary:disabled { opacity: 0.5; cursor: default; }
+
+/* The catalogue, in the panel rather than in a dialog. */
+.pane .picker.samples { margin: 2px 11px 8px; max-height: none; }
+.picker.samples li:hover em { color: var(--txt); }
+
+/* Six decimal places of latitude do not fit in the number box built for a width. */
+.row input[type="number"].num.wide { width: 110px; }
+.row input[type="number"].num:focus { border-color: var(--accent); outline: none; }
+
+/*
+ * The list of placements. It is the drawings' list — the same row, the same
+ * rhythm — with an eye where the colour chip was, because a model has no
+ * colour to pick, and a reading of its height where a drawing has its length.
+ */
+.drawlist.models li {
+  cursor: pointer;
+  padding-inline: 4px;
+  border-radius: 2px;
+  border-inline-start: 2px solid transparent;
+  transition: background 0.1s ease;
+}
+.drawlist.models li:hover { background: var(--raise); }
+.drawlist.models li.on {
+  background: linear-gradient(to inline-end, rgba(76, 141, 255, 0.18), rgba(76, 141, 255, 0.06) 60%, transparent);
+  border-inline-start-color: var(--accent);
+}
+.drawlist.models li.on .name { color: var(--txt); font-weight: 500; }
+.drawlist.models li.off .name { color: var(--txt-3); text-decoration: line-through; text-decoration-color: #3a3a40; }
+.drawlist.models .eye {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+}
+.drawlist.models .eye svg { width: 12px; height: 12px; }
+.drawlist.models li.off .eye { color: #3a3a40; }
+.drawlist.models .value.loading { color: var(--txt-3); }
+.drawlist.models .tag { flex: none; }
+.drawlist.models .name { unicode-bidi: plaintext; }

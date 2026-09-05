@@ -1,7 +1,9 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022"
+    ],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "strict": true,
@@ -10,8 +12,15 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@alidade/core": ["packages/core/src/index.ts"],
-      "@alidade/maplibre": ["packages/maplibre/src/index.ts"]
+      "@alidade/core": [
+        "packages/core/src/index.ts"
+      ],
+      "@alidade/maplibre": [
+        "packages/maplibre/src/index.ts"
+      ],
+      "@alidade/three": [
+        "packages/three/src/index.ts"
+      ]
     }
   }
 }

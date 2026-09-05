@@ -1,7 +1,10 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022", "DOM"],
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
@@ -10,12 +13,24 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "esModuleInterop": true,
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "baseUrl": ".",
     "paths": {
-      "@alidade/core": ["../../packages/core/src/index.ts"],
-      "@alidade/maplibre": ["../../packages/maplibre/src/index.ts"]
+      "@alidade/core": [
+        "../../packages/core/src/index.ts"
+      ],
+      "@alidade/maplibre": [
+        "../../packages/maplibre/src/index.ts"
+      ],
+      "@alidade/three": [
+        "../../packages/three/src/index.ts"
+      ]
     }
   },
-  "include": ["src", "vite.config.ts"]
+  "include": [
+    "src",
+    "vite.config.ts"
+  ]
 }
