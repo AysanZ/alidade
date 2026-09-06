@@ -18,6 +18,7 @@ import { buildingsLayer } from "./buildings";
 import { toExpression } from "./filter";
 import { graticuleGeoJSON, graticuleSourceId } from "./graticule";
 import { squareGridGeoJSON, squareGridSourceId, utmGridGeoJSON, utmGridSourceId } from "./grids";
+import { assetsGeoJSON, assetsSourceId, headingGeoJSON, headingSourceId } from "./live";
 import { zoomRange } from "./scale";
 import { MODELS_LAYER_ID } from "./models";
 import { labelLayout, labelPaint, paintFor, strokePaint } from "./symbology";
@@ -27,6 +28,16 @@ export interface Compiled {
   /** Bottom first, which is the order the renderer wants. */
   layers: EngineLayer[];
 }
+
+/**
+ * What an asset that has stopped reporting is drawn in.
+ *
+ * Not red. A stale dot is not an alarm — the map does not know whether the
+ * lorry broke down or the radio did — and a map that shouts at every dropped
+ * connection is a map whose warnings get ignored. This is the colour of
+ * something the map is no longer sure about.
+ */
+const STALE_COLOR = "#66666d";
 
 /**
  * Read a layer the way the rest of the compiler expects it.
@@ -362,6 +373,141 @@ export function compile(project: MapProject): Compiled {
         id: "chrome:selection:line",
         type: "line",
         paint: { "line-color": "#ffd166", "line-width": 2.4, "line-opacity": strong },
+      });
+    }
+  }
+
+  /*
+   * Live assets, in the overlay slot and under the drawings.
+   *
+   * Over the user's data because a thing that is somewhere right now is the
+   * point of having it on the map, and a lorry hidden under a choropleth is a
+   * lorry nobody can see. Under the drawings because a measurement in progress
+   * is what the user is doing, and nothing should be drawn over that.
+   *
+   * The layers go up as soon as the feed is switched on, before a single
+   * position has arrived, so the first frame is one `source.data` operation
+   * rather than a source and five layers. After that nothing about this block
+   * changes shape again: positions move, the source is updated in place, and
+   * the layers reading it are never taken down.
+   */
+  const assets = project.assets;
+  if (assets && (assets.enabled || assets.items.length > 0)) {
+    const shown = assets.visible ? "visible" : "none";
+    const alpha = assets.opacity;
+    const live = assets.color;
+
+    sources[assetsSourceId()] = {
+      type: "geojson",
+      data: assetsGeoJSON(assets),
+      cluster: assets.cluster,
+      clusterRadius: 46,
+      /*
+       * Past this zoom every asset is its own dot. A cluster at street level is
+       * the wrong answer to "where is unit 12": it is on the screen, and the map
+       * is drawing a circle with a 3 in it where it should be.
+       */
+      clusterMaxZoom: 13,
+    };
+
+    if (assets.heading) {
+      sources[headingSourceId()] = { type: "geojson", data: headingGeoJSON(assets) };
+      systemOverlay.push({
+        id: "chrome:assets:heading",
+        type: "line",
+        source: headingSourceId(),
+        slot: "overlay",
+        paint: {
+          "line-color": ["case", ["get", "stale"], STALE_COLOR, live],
+          "line-width": 1.6,
+          "line-opacity": 0.55 * alpha,
+        },
+        layout: { visibility: shown, "line-cap": "round" },
+      });
+    }
+
+    if (assets.cluster) {
+      /*
+       * The circle grows with what is in it, in steps rather than continuously:
+       * a radius interpolated over a count is a size nobody can read back, and
+       * three sizes are three things a person can tell apart at a glance.
+       */
+      systemOverlay.push({
+        id: "chrome:assets:cluster",
+        type: "circle",
+        source: assetsSourceId(),
+        slot: "overlay",
+        filter: ["has", "point_count"],
+        paint: {
+          "circle-color": live,
+          "circle-opacity": 0.22 * alpha,
+          "circle-radius": ["step", ["get", "point_count"], 13, 10, 17, 50, 22],
+          "circle-stroke-color": live,
+          "circle-stroke-width": 1.4,
+          "circle-stroke-opacity": 0.8 * alpha,
+        },
+        layout: { visibility: shown },
+      });
+      systemOverlay.push({
+        id: "chrome:assets:count",
+        type: "symbol",
+        source: assetsSourceId(),
+        slot: "overlay",
+        filter: ["has", "point_count"],
+        paint: { "text-color": "#e4e4e6", "text-halo-color": "#050505", "text-halo-width": 1.2 },
+        layout: {
+          visibility: shown,
+          "text-field": ["get", "point_count_abbreviated"],
+          "text-font": LABEL_FONT,
+          "text-size": 11,
+          "text-allow-overlap": true,
+        },
+      });
+    }
+
+    /*
+     * The asset itself. Stale ones are drawn rather than hidden, in grey and
+     * hollow: a feed that has gone quiet is information, and dropping the dot
+     * says the asset is gone when what is actually true is that nobody knows.
+     */
+    systemOverlay.push({
+      id: "chrome:assets:dot",
+      type: "circle",
+      source: assetsSourceId(),
+      slot: "overlay",
+      filter: ["!", ["has", "point_count"]],
+      paint: {
+        "circle-color": ["case", ["get", "stale"], "rgba(0,0,0,0)", live],
+        "circle-radius": 5,
+        "circle-opacity": alpha,
+        "circle-stroke-color": ["case", ["get", "stale"], STALE_COLOR, "#050505"],
+        "circle-stroke-width": 1.6,
+        "circle-stroke-opacity": alpha,
+      },
+      layout: { visibility: shown },
+    });
+
+    if (assets.labels) {
+      systemOverlay.push({
+        id: "chrome:assets:label",
+        type: "symbol",
+        source: assetsSourceId(),
+        slot: "overlay",
+        filter: ["!", ["has", "point_count"]],
+        paint: {
+          "text-color": ["case", ["get", "stale"], STALE_COLOR, "#e4e4e6"],
+          "text-halo-color": "#050505",
+          "text-halo-width": 1.4,
+        },
+        layout: {
+          visibility: shown,
+          "text-field": ["get", "label"],
+          "text-font": LABEL_FONT,
+          "text-size": 10.5,
+          "text-offset": [0, 1],
+          "text-anchor": "top",
+          "text-allow-overlap": false,
+        },
       });
     }
   }

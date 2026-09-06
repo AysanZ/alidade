@@ -18,6 +18,7 @@ import {
   viewForExtent,
   withMinimumSize,
   withModel,
+  withoutLiveAssets,
 } from "@alidade/core";
 import { MapManager, watchStyleSwaps, type Renderer } from "@alidade/maplibre";
 import { ThreeModelHost } from "@alidade/three";
@@ -41,6 +42,7 @@ import { Identify, type Identified } from "./components/Identify";
 import { Inspector } from "./components/Inspector";
 import { Legend } from "./components/Legend";
 import { LayerTree } from "./components/LayerTree";
+import { LIVE_ID, LiveInspector } from "./components/LiveInspector";
 import { MapChrome, type Camera } from "./components/MapChrome";
 import { MapControls } from "./components/MapControls";
 import { Minimap } from "./components/Minimap";
@@ -56,6 +58,8 @@ import { featureLabel } from "./label";
 import { markerImageFor, registerMarkers } from "./markers";
 import type { ModelStatus } from "./models";
 import { useDrawing } from "./useDrawing";
+import { useLiveFeed } from "./useLiveFeed";
+import { useLiveModels } from "./useLiveModels";
 import { useProject } from "./useProject";
 import { stampedPng } from "./export";
 import { forget, makeAutosave, parseProject, restore, save } from "./storage";
@@ -182,6 +186,22 @@ export default function App() {
   const drawing = useDrawing(project, edit, transient, checkpoint);
 
   /*
+   * The live feed. Its frames are `transient`, not `edit`, for the same reason
+   * a hover is: a lorry moving is not something the user did, and it is not
+   * something Ctrl+Z should offer to put back. Sixty positions a minute through
+   * `edit` would fill the undo stack with traffic.
+   */
+  const feed = useLiveFeed(project, transient);
+
+  /*
+   * Models standing in for live assets. Its own hook because it is a second
+   * kind of movement, not a second copy of the first: a track knows the whole
+   * route in advance and samples it against a clock, and this knows nothing in
+   * advance and interpolates between the last two things that arrived.
+   */
+  useLiveModels(project, host, mapRef);
+
+  /*
    * The map survives a refresh.
    *
    * Autosave rather than a Save button that must be remembered: the document is
@@ -192,10 +212,25 @@ export default function App() {
   const autosave = useRef(makeAutosave((message) => setProblem(message)));
   const restored = useRef(false);
 
+  /**
+   * The document as it was last queued for saving, so the feed cannot starve it.
+   *
+   * Autosave waits for the edits to stop before writing. A live feed never
+   * stops: it writes the document five times a second, which reset that timer
+   * five times a second, so with the feed on the map was never saved at all
+   * and the header cheerfully said "saved" on every frame. What is compared is
+   * the document without the positions — the part a save is actually for — so a
+   * frame arriving is not an edit, and the first real edit after it is.
+   */
+  const queued = useRef<string | null>(null);
+
   useEffect(() => {
     // Nothing to save before the manager exists, and nothing worth saving until
     // the restored document has been put back.
     if (!restored.current) return;
+    const text = JSON.stringify(withoutLiveAssets(project));
+    if (text === queued.current) return;
+    queued.current = text;
     autosave.current.schedule(project);
     setSavedAt(Date.now());
   }, [project]);
@@ -218,7 +253,11 @@ export default function App() {
   );
 
   const exportProject = useCallback(() => {
-    const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" });
+    // Without the feed's positions, for the same reason the autosave is: an
+    // exported map is a map, not a snapshot of where the traffic was.
+    const blob = new Blob([JSON.stringify(withoutLiveAssets(project), null, 2)], {
+      type: "application/json",
+    });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -619,6 +658,15 @@ export default function App() {
 
       for (const track of models?.tracks ?? []) {
         const model = (models?.items ?? []).find((m) => m.id === track.model);
+        /*
+         * A model that is following a live asset is not also walking a track.
+         * Both loops write to the same host, so if both claimed the same model
+         * it would be placed twice a frame and would sit wherever the second
+         * writer happened to run — which is a race, and would look like the
+         * model juddering between two positions. The feed wins: a track is a
+         * rehearsal and an asset is the thing itself.
+         */
+        if (model?.follow) continue;
         const sample = model ? trackAt(track, elapsed) : null;
         if (!model || !sample) continue;
         scene.update(movedAlong(model, sample, track));
@@ -642,7 +690,12 @@ export default function App() {
     return () => {
       cancelAnimationFrame(frame);
       setLive({});
-      for (const model of latest.current.models?.items ?? []) scene.update(model);
+      // Followers are not this loop's to put back. Resetting them would snap
+      // every live model to the document position for a frame before the feed's
+      // own loop moved it again, which reads as a twitch on pressing stop.
+      for (const model of latest.current.models?.items ?? []) {
+        if (!model.follow) scene.update(model);
+      }
       mapRef.current?.triggerRepaint();
     };
   }, [playingSince]);
@@ -873,6 +926,26 @@ export default function App() {
   );
 
   /**
+   * Frame everything the feed is reporting.
+   *
+   * Computed from the positions on the screen rather than from a stored extent,
+   * because a live layer has no stored extent to store: where the fleet is is a
+   * different answer every minute, which is the entire point of it.
+   */
+  const zoomToAssets = useCallback(() => {
+    const items = project.assets?.items ?? [];
+    if (items.length === 0) return;
+    const lons = items.map((a) => a.position[0]);
+    const lats = items.map((a) => a.position[1]);
+    flyTo({
+      west: Math.min(...lons),
+      east: Math.max(...lons),
+      south: Math.min(...lats),
+      north: Math.max(...lats),
+    });
+  }, [project.assets, flyTo]);
+
+  /**
    * Selecting from the table.
    *
    * Transient either way. Pointing at a row is not an edit to the map, and a
@@ -1060,6 +1133,7 @@ export default function App() {
               onAdd={() => setAdding(true)}
               onFlyTo={(extent) => flyTo(extent, true)}
               denominator={denominator}
+              feed={feed.status.state}
             />
           )}
           {pane === "basemaps" && <BasemapGallery project={project} edit={edit} />}
@@ -1271,6 +1345,14 @@ export default function App() {
             onPlace={(on) => setPlacing(on ? selectedModel : null)}
             onZoomTo={() => zoomToModel(selectedModel)}
             onSelect={setSelectedModel}
+          />
+        ) : selected === LIVE_ID ? (
+          <LiveInspector
+            project={project}
+            edit={edit}
+            feed={feed.status}
+            onClear={feed.clear}
+            onZoomTo={zoomToAssets}
           />
         ) : (
           <Inspector

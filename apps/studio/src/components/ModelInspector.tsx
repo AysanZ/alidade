@@ -1,5 +1,5 @@
 import type { MapProject, Model3D, ModelAnchor } from "@alidade/core";
-import { duplicateModel, findModel, removeModel, withModel } from "@alidade/core";
+import { GLOBE_IS_ROUND_BELOW, duplicateModel, findModel, removeModel, withModel } from "@alidade/core";
 
 import { heightOf, metres, type ModelStatus } from "../models";
 import { Field, Section, Switch } from "./Field";
@@ -178,6 +178,8 @@ export function ModelInspector({ project, id, status, edit, placing, onPlace, on
           </p>
         </Section>
 
+        <LiveSection project={project} model={model} change={change} />
+
         <Section title="Size">
           {info && (
             <Field label="In the file">
@@ -243,5 +245,129 @@ export function ModelInspector({ project, id, status, edit, placing, onPlace, on
         </Section>
       </div>
     </aside>
+  );
+}
+
+/**
+ * Which live asset this model stands in for.
+ *
+ * Placed after the placement section rather than inside it, because turning it
+ * on takes the placement away: the position and, if it faces forward, the
+ * heading stop being numbers the user sets and become numbers the feed sends.
+ * A control that quietly disables the two sliders above it should not be one of
+ * them.
+ */
+function LiveSection({
+  project,
+  model,
+  change,
+}: {
+  project: MapProject;
+  model: Model3D;
+  change: (apply: (m: Model3D) => void) => void;
+}) {
+  const assets = project.assets;
+  const follow = model.follow;
+  const reporting = assets?.items ?? [];
+  /*
+   * The asset the model names, even when the feed is not currently reporting it
+   * — a vehicle that has gone off shift is still the vehicle this model is for,
+   * and dropping the selection because it went quiet would mean re-choosing it
+   * every morning.
+   */
+  const missing = follow !== undefined && !reporting.some((a) => a.id === follow.asset);
+
+  return (
+    <Section title="Live movement" open={follow !== undefined}>
+      {!assets && (
+        <p className="hint">This project has no live layer, so there is nothing to follow.</p>
+      )}
+      {assets && (
+        <>
+          <Field label="Driven by">
+            <select
+              value={follow?.asset ?? ""}
+              aria-label="The live asset this model follows"
+              onChange={(e) =>
+                change((m) => {
+                  if (!e.target.value) delete m.follow;
+                  else {
+                    m.follow = {
+                      ...(m.follow ?? { faceForward: true, fromZoom: 14 }),
+                      asset: e.target.value,
+                    };
+                  }
+                })
+              }
+            >
+              <option value="">Nothing · stands still</option>
+              {missing && <option value={follow.asset}>{follow.asset} · not reporting</option>}
+              {reporting.map((asset) => (
+                <option key={asset.id} value={asset.id}>
+                  {asset.label ?? asset.id}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          {!follow && reporting.length === 0 && (
+            <p className="hint">
+              Nothing is reporting yet. Switch the feed on from the Live assets row in the table of
+              contents and the assets will appear here.
+            </p>
+          )}
+
+          {follow && (
+            <>
+              <Switch
+                label="Turn to face the way it is going"
+                on={follow.faceForward}
+                onChange={(on) => change((m) => void (m.follow!.faceForward = on))}
+              />
+              {/*
+                The same correction a track offers, for the same reason: a file
+                whose front is not its own +z drives sideways down the road, and
+                that is a fact about the file rather than about the feed.
+              */}
+              {follow.faceForward && (
+                <Field label="Turn by" value={`${Math.round(follow.headingOffset ?? 0)}°`}>
+                  <input
+                    type="range"
+                    min={0}
+                    max={359}
+                    value={((follow.headingOffset ?? 0) % 360 + 360) % 360}
+                    aria-label="Degrees added to the heading"
+                    onChange={(e) =>
+                      change((m) => void (m.follow!.headingOffset = Number(e.target.value)))
+                    }
+                  />
+                </Field>
+              )}
+              <Field label="Drawn from" value={`z ${follow.fromZoom ?? 14}`}>
+                <input
+                  type="range"
+                  min={GLOBE_IS_ROUND_BELOW}
+                  max={20}
+                  value={follow.fromZoom ?? 14}
+                  aria-label="The zoom the model appears at"
+                  onChange={(e) => change((m) => void (m.follow!.fromZoom = Number(e.target.value)))}
+                />
+              </Field>
+              <p className="hint">
+                The model stands in for the asset from this zoom in; further out the feed&rsquo;s own
+                dot is what is on the map. A 3D scene is not drawn at all below zoom{" "}
+                {GLOBE_IS_ROUND_BELOW}, where the map is still a sphere, so that is the floor.
+              </p>
+              {missing && (
+                <p className="hint">
+                  {follow.asset} is not in the feed at the moment, so the model is standing where it
+                  was last put.
+                </p>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </Section>
   );
 }

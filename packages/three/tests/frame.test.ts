@@ -127,4 +127,48 @@ describe("the built-in models", () => {
     expect(buildBuiltin("builtin:helicopter")).toBeNull();
     expect(isBuiltin("https://example.com/x.glb")).toBe(false);
   });
+
+  it("has a body for every kind of thing a feed reports moving", () => {
+    // The live layer needs something to put on a moving dot, and a catalogue of
+    // masts and turbines has nothing that drives.
+    for (const name of ["car", "van", "truck", "aircraft", "boat", "drone", "bird"]) {
+      expect(buildBuiltin(`builtin:${name}`), name).not.toBeNull();
+    }
+  });
+
+  it("points every vehicle the way its heading says", () => {
+    /*
+     * A placement's heading turns the model about Y, and glTF puts the front at
+     * +z, so a body modelled across its own axis drives sideways down the road
+     * at every heading. Longer than it is wide is the test for that.
+     *
+     * The bird is left out and the aircraft with it: both are genuinely wider
+     * than they are long, because a wing is. Widening the assertion to cover
+     * them would mean asserting nothing.
+     */
+    for (const name of ["car", "van", "truck", "boat"]) {
+      const box = new Box3().setFromObject(buildBuiltin(`builtin:${name}`)!);
+      const size = box.getSize(new Vector3());
+      expect(size.z, name).toBeGreaterThan(size.x);
+    }
+  });
+
+  /**
+   * A hover named an airliner that was nowhere near the pointer.
+   *
+   * The hover pick tested each model's `Box3`, which is axis aligned in world
+   * space: the box around a rotated model is bigger than the model, by half
+   * again on the diagonal. It was tolerable while models stood still and became
+   * obvious when they started following a live feed and rotating every frame.
+   * The pick now confirms against the triangles; this is the measurement that
+   * says why the box alone could not be trusted.
+   */
+  it("has a bounding box that overstates a rotated model", () => {
+    const built = buildBuiltin("builtin:truck")!;
+    const straight = new Box3().setFromObject(built).getSize(new Vector3());
+    built.rotation.y = Math.PI / 4;
+    built.updateMatrixWorld(true);
+    const turned = new Box3().setFromObject(built).getSize(new Vector3());
+    expect(turned.x).toBeGreaterThan(straight.x * 2);
+  });
 });

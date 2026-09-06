@@ -33,9 +33,90 @@ export interface Sample {
    * says. A starting scale that makes the thing life-sized, when it is known.
    */
   scale?: number;
+  /**
+   * A heading in the catalogue.
+   *
+   * Only two, and the split is the one that matters when choosing: a thing that
+   * goes somewhere can stand in for a live asset, and a thing that stands still
+   * cannot. Before this the catalogue was one undifferentiated list and the
+   * vehicles were the two entries nobody scrolled to.
+   */
+  group: "moving" | "fixed";
 }
 
+/**
+ * The ones that go somewhere, first.
+ *
+ * The live layer needs a body to put on a moving dot, and the answer to "what
+ * shall I drive with this feed" should be the top of the list rather than
+ * something to hunt for. Sizes are real: a van is 5.6 m because that is what a
+ * van is, so a scale of 1 is already right and a fleet drawn at scale looks
+ * like a fleet rather than like a diagram.
+ */
 export const SAMPLES: Sample[] = [
+  {
+    id: "car",
+    name: "Car",
+    url: "builtin:car",
+    size: "built in",
+    attribution: "Alidade · Apache-2.0",
+    hint: "4.4 m. The default body for a vehicle feed.",
+    group: "moving",
+  },
+  {
+    id: "van",
+    name: "Delivery van",
+    url: "builtin:van",
+    size: "built in",
+    attribution: "Alidade · Apache-2.0",
+    hint: "5.6 m. What most of a city fleet actually is.",
+    group: "moving",
+  },
+  {
+    id: "truck",
+    name: "Articulated lorry",
+    url: "builtin:truck",
+    size: "built in",
+    attribution: "Alidade · Apache-2.0",
+    hint: "18 m. Long enough that its heading is obvious from above.",
+    group: "moving",
+  },
+  {
+    id: "aircraft",
+    name: "Airliner",
+    url: "builtin:aircraft",
+    size: "built in",
+    attribution: "Alidade · Apache-2.0",
+    hint: "34 m long, 34 m span. For an ADS-B or flight feed.",
+    group: "moving",
+  },
+  {
+    id: "boat",
+    name: "Small vessel",
+    url: "builtin:boat",
+    size: "built in",
+    attribution: "Alidade · Apache-2.0",
+    hint: "11 m. Harbour traffic, a river patrol, an AIS feed.",
+    group: "moving",
+  },
+  {
+    id: "drone",
+    name: "Quadcopter",
+    url: "builtin:drone",
+    size: "built in",
+    attribution: "Alidade · Apache-2.0",
+    hint: "0.7 m across. Small enough to need a minimum pixel size.",
+    group: "moving",
+  },
+  {
+    id: "bird",
+    name: "Bird",
+    url: "builtin:bird",
+    size: "built in",
+    attribution: "Alidade · Apache-2.0",
+    hint: "1.4 m span. For a tracked-animal feed.",
+    group: "moving",
+  },
   {
     id: "turbine",
     name: "Wind turbine",
@@ -43,6 +124,7 @@ export const SAMPLES: Sample[] = [
     size: "built in",
     attribution: "Alidade · Apache-2.0",
     hint: "120 m to the blade tip. The one to place over a point layer.",
+    group: "fixed",
   },
   {
     id: "block",
@@ -51,6 +133,7 @@ export const SAMPLES: Sample[] = [
     size: "built in",
     attribution: "Alidade · Apache-2.0",
     hint: "10 × 10 × 20 m. A proposal that has a height and no design yet.",
+    group: "fixed",
   },
   {
     id: "mast",
@@ -59,6 +142,7 @@ export const SAMPLES: Sample[] = [
     size: "built in",
     attribution: "Alidade · Apache-2.0",
     hint: "40 m with a dish. For a telecoms or sensor site.",
+    group: "fixed",
   },
   {
     id: "marker",
@@ -67,6 +151,7 @@ export const SAMPLES: Sample[] = [
     size: "built in",
     attribution: "Alidade · Apache-2.0",
     hint: "3.5 m. Visible from a distance and obviously not a building.",
+    group: "fixed",
   },
   {
     id: "tree",
@@ -75,6 +160,7 @@ export const SAMPLES: Sample[] = [
     size: "built in",
     attribution: "Alidade · Apache-2.0",
     hint: "8 m. Mostly here for the shadow it throws.",
+    group: "fixed",
   },
   {
     id: "cone",
@@ -83,6 +169,7 @@ export const SAMPLES: Sample[] = [
     size: "built in",
     attribution: "Alidade · Apache-2.0",
     hint: "0.7 m. The one that shows whether your scale is honest.",
+    group: "fixed",
   },
   {
     id: "person",
@@ -91,6 +178,7 @@ export const SAMPLES: Sample[] = [
     size: "500 KB",
     attribution: "Cesium · CC BY 4.0",
     hint: "About 1.8 m. The reference every other height is read against.",
+    group: "fixed",
   },
   {
     id: "lantern",
@@ -99,6 +187,7 @@ export const SAMPLES: Sample[] = [
     size: "9.6 MB",
     attribution: "Microsoft · CC0",
     hint: "A real file with physically based materials, to check the sun against.",
+    group: "fixed",
   },
 ];
 

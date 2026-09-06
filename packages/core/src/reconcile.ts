@@ -36,8 +36,15 @@ export function reconcile(prev: MapProject | null, next: MapProject): Op[] {
      * A geojson source that only has new data is updated in place. Removing and
      * re-adding it would take every layer reading it down with it, which is what
      * made the graticule flicker and the grid rebuild on every drag.
+     *
+     * Only the data, though. A geojson source also carries how it is indexed —
+     * whether it clusters, and at what radius — and those are read once when the
+     * source is built. Sending `setData` after changing them updates the
+     * features and leaves the index as it was, so switching clustering on did
+     * nothing until something else happened to rebuild the source, and switching
+     * it off left the counts on the map. That is a new source, not new data.
      */
-    else if (before.type === "geojson" && source.type === "geojson") refreshed.push(id);
+    else if (onlyDataChanged(before, source)) refreshed.push(id);
     else changed.push(id);
   }
   const replaced = new Set(changed);
@@ -209,6 +216,22 @@ function moves(current: string[], desired: string[]): Op[] {
     order.splice(at, 0, id);
   }
   return ops;
+}
+
+/**
+ * Two geojson sources that differ in nothing but the features they hold.
+ *
+ * Compared by setting both `data` aside and asking whether the rest is equal,
+ * rather than by listing the keys that matter. A key added to the source type
+ * later is then handled by being different, which is the safe direction: the
+ * worst case is a source rebuilt when it need not have been, instead of a
+ * setting silently not applied.
+ */
+function onlyDataChanged(before: Source, after: Source): boolean {
+  if (before.type !== "geojson" || after.type !== "geojson") return false;
+  const { data: _before, ...restBefore } = before;
+  const { data: _after, ...restAfter } = after;
+  return same(restBefore, restAfter);
 }
 
 function same(a: unknown, b: unknown): boolean {

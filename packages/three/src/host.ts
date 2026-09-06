@@ -88,6 +88,16 @@ interface Loaded {
   info: LoadedInfo;
 }
 
+/**
+ * How many overlapping models a hover will test the triangles of.
+ *
+ * Nearest box first, so this is a cap on effort and not on correctness in the
+ * ordinary case: with one model under the pointer the first test answers. It
+ * only bites where several boxes overlap one ray, and there the nearest three
+ * are the ones a person could have been aiming at.
+ */
+const HOVER_TESTS = 3;
+
 interface Entry {
   model: Model3D;
   /** Carries the placement. Its matrix is written every frame, never composed. */
@@ -601,9 +611,19 @@ export class ThreeModelHost implements ModelHost {
   /**
    * Which model is under a point on the canvas, if any.
    *
-   * `precise` tests the triangles, which is what a click deserves. Without it
-   * only each model's box is tested, which is what a pointer passing over the
-   * map can afford at sixty frames a second on a mesh of a million triangles.
+   * Two passes. The box test is a cheap reject that runs over every placement;
+   * the triangle test runs only on the handful the ray actually crossed, and
+   * decides. `precise` no longer means "test the triangles" — that is now
+   * always done — but "test all of the candidates rather than the nearest few",
+   * which is what a click deserves and a pointer at frame rate does not.
+   *
+   * The box test used to *be* the answer for a hover, and it was the wrong one.
+   * A `Box3` is axis aligned in world space, so the box around a rotated model
+   * is bigger than the model — up to half again on the diagonal — and a model
+   * held at a minimum pixel size at low zoom is scaled up, taking its box with
+   * it. The symptom was a tooltip naming an airliner that was nowhere near the
+   * pointer, and it got much worse when models started following a live feed,
+   * because then they rotate on every frame.
    */
   pick(x: number, y: number, precise = false): string | null {
     const map = this.#map;
@@ -627,22 +647,35 @@ export class ThreeModelHost implements ModelHost {
     this.#raycaster.set(near, far.sub(near).normalize());
 
     this.#scene.updateMatrixWorld(true);
-    let best: { id: string; distance: number } | null = null;
+
+    /* Everything whose box the ray crosses, nearest first. */
+    const candidates: { entry: Entry; distance: number }[] = [];
     const box = new Box3();
     for (const entry of this.#entries.values()) {
       if (!entry.group.visible || !entry.mesh) continue;
       box.setFromObject(entry.group);
       const at = this.#raycaster.ray.intersectBox(box, new Vector3());
       if (!at) continue;
-      let distance = at.distanceTo(near);
-      if (precise) {
-        const hit = this.#raycaster.intersectObject(entry.mesh, true)[0];
-        if (!hit) continue;
-        distance = hit.distance;
-      }
-      if (!best || distance < best.distance) best = { id: entry.model.id, distance };
+      candidates.push({ entry, distance: at.distanceTo(near) });
     }
-    return best?.id ?? null;
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => a.distance - b.distance);
+
+    /*
+     * Then the triangles, nearest box first, stopping at the first real hit.
+     *
+     * Nearest first is what makes the cap safe: a box further away cannot
+     * contain a nearer surface, so testing them in order means the first hit is
+     * the right answer and the rest need not be tested at all. The cap only
+     * bites where many boxes overlap the same ray, and there the nearest few
+     * are the ones a person could plausibly have been aiming at.
+     */
+    const limit = precise ? candidates.length : Math.min(candidates.length, HOVER_TESTS);
+    for (let i = 0; i < limit; i++) {
+      const entry = candidates[i]!.entry;
+      if (this.#raycaster.intersectObject(entry.mesh!, true).length > 0) return entry.model.id;
+    }
+    return null;
   }
 
   /** Draw a box round one model, or round none. */

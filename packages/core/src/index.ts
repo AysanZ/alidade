@@ -40,6 +40,30 @@ export {
   findTrack,
 } from "./track";
 export type { TrackSample } from "./track";
+export {
+  ASSET_LAYER_IDS,
+  ago,
+  applyFrame,
+  drivenBy,
+  followers,
+  motionFor,
+  rememberFrames,
+  shortestTurn,
+  turnTowards,
+  tween,
+  assetCounts,
+  assetsGeoJSON,
+  assetsSourceId,
+  formatSpeed,
+  headingGeoJSON,
+  headingSourceId,
+  isStale,
+  lastHeard,
+  markStale,
+  parseFrame,
+  withoutLiveAssets,
+} from "./live";
+export type { FeedFrame, Motion, MotionFrames } from "./live";
 export { spreadModels } from "./spread";
 export type { Placeable, Spread, SpreadOptions } from "./spread";
 export { reconcile } from "./reconcile";

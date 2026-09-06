@@ -1,11 +1,12 @@
 import { useState } from "react";
 import type { MapProject, Slot, TreeNode } from "@alidade/core";
-import { hiddenBecause } from "@alidade/core";
+import { assetCounts, hiddenBecause } from "@alidade/core";
 
 import type { Extent } from "../layers";
 import { withNode } from "../tree";
 import { Catalogue } from "./Catalogue";
 import { LayerSymbol } from "./LayerSymbol";
+import { LIVE_ID, type FeedState } from "./LiveInspector";
 
 const SLOTS: { id: Slot; label: string; hint: string }[] = [
   { id: "overlay", label: "Overlay", hint: "Always on top" },
@@ -24,6 +25,8 @@ interface Props {
   onFlyTo: (extent: Extent) => void;
   /** The scale the map is at, so a layer that is not drawn at it can say so. */
   denominator: number;
+  /** Where the live feed's connection is, for the row's status light. */
+  feed: FeedState;
 }
 
 /**
@@ -43,6 +46,7 @@ export function LayerTree({
   onAdd,
   onFlyTo,
   denominator,
+  feed,
 }: Props) {
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -65,12 +69,26 @@ export function LayerTree({
     return "data";
   };
 
+  /*
+   * With no layers yet the panel is a heading and the catalogue, and the live
+   * row went underneath both — which put the one part of this panel that
+   * reports a live status below the fold on a fresh install, where it looked
+   * like the feature was missing rather than merely scrolled past. A row that
+   * says whether data is arriving has to be visible without scrolling to it.
+   */
   if (project.tree.length === 0) {
     return (
       <div className="tree">
         <div className="empty">
           <b>No layers yet</b>
         </div>
+        <LiveRow
+          project={project}
+          edit={edit}
+          feed={feed}
+          selected={selected}
+          onSelect={onSelect}
+        />
         <Catalogue
           project={project}
           edit={edit}
@@ -148,6 +166,8 @@ export function LayerTree({
         );
       })}
 
+      <LiveRow project={project} edit={edit} feed={feed} selected={selected} onSelect={onSelect} />
+
       <div className="slot">
         <span className="cap">Basemap</span>
         <i />
@@ -159,6 +179,112 @@ export function LayerTree({
       </div>
     </div>
   );
+}
+
+/**
+ * The live feed's row in the table of contents.
+ *
+ * A row and not a pane. Everything else that can be drawn on the map is in this
+ * list, and a layer that lives somewhere else is a layer people do not find and
+ * cannot reason about next to the rest: whether it is on, what draws over what.
+ * It behaves like its neighbours — the eye hides it, clicking it puts it in the
+ * inspector — and differs in the one way it has to, which is that it says
+ * whether the data is arriving.
+ *
+ * The dot is the only piece of chrome here that is not about the map. It has to
+ * be: a live layer that has quietly stopped receiving looks exactly like a live
+ * layer where nothing happens to be moving, and no amount of looking at the
+ * canvas tells the two apart.
+ */
+function LiveRow({
+  project,
+  edit,
+  feed,
+  selected,
+  onSelect,
+}: {
+  project: MapProject;
+  edit: Props["edit"];
+  feed: FeedState;
+  selected: string | null;
+  onSelect: (id: string) => void;
+}) {
+  const assets = project.assets;
+  if (!assets) return null;
+
+  const { total, stale } = assetCounts(assets);
+  const toggle = () =>
+    edit((draft) => {
+      if (draft.assets) draft.assets.visible = !draft.assets.visible;
+      return draft;
+    });
+
+  const classes = [
+    "node",
+    "live",
+    selected === LIVE_ID ? "on" : "",
+    assets.visible ? "" : "off",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <>
+      <div className="slot" title="Positions arriving from a feed">
+        <span className="cap">Live</span>
+        <i />
+        <span className={`dot ${feed}`} title={FEED_TITLES[feed]} aria-label={FEED_TITLES[feed]} />
+      </div>
+      <div
+        className={classes}
+        style={{ paddingInlineStart: 9 }}
+        onClick={() => onSelect(LIVE_ID)}
+      >
+        <span className="grip" aria-hidden="true" />
+        <span className="fold" aria-hidden="true" />
+        <button
+          className="eye"
+          aria-label={assets.visible ? "Hide live assets" : "Show live assets"}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggle();
+          }}
+        >
+          {assets.visible ? <EyeOpen /> : <EyeShut />}
+        </button>
+
+        <span className="swatch" style={{ background: assets.color, borderRadius: "50%" }} />
+
+        <span className="name" title={describeFeed(feed, total, stale)}>
+          Live assets
+        </span>
+
+        {/*
+          The count is the tag, and a count of what has gone quiet outranks it
+          when there is one: forty assets of which twelve are stale is a
+          different map from forty assets, and it is the fact you act on.
+        */}
+        <span className={stale > 0 ? "tag flag" : "tag"} title={describeFeed(feed, total, stale)}>
+          {feed === "off" ? "off" : stale > 0 ? `${stale} old` : String(total)}
+        </span>
+      </div>
+    </>
+  );
+}
+
+const FEED_TITLES: Record<FeedState, string> = {
+  off: "Not connected",
+  connecting: "Connecting",
+  live: "Receiving",
+  retrying: "Connection dropped, retrying",
+  failed: "Could not connect",
+};
+
+function describeFeed(feed: FeedState, total: number, stale: number): string {
+  if (feed === "off") return "The feed is switched off";
+  const counted = `${total} asset${total === 1 ? "" : "s"}`;
+  const quiet = stale > 0 ? `, ${stale} gone quiet` : "";
+  return `${FEED_TITLES[feed]} · ${counted}${quiet}`;
 }
 
 interface NodeProps {

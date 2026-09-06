@@ -13,7 +13,8 @@ Working now: a table of contents grouped by slot, a basemap gallery on open tile
 hillshade from open elevation tiles, glTF models placed on the map and standing on
 the terrain, a graticule, UTM and metric reference grids, an overview map, drawing
 and geodesic measurement with buffers, camera bookmarks, a scale bar in three unit
-systems, and a coordinate readout in decimal degrees, DMS or UTM.
+systems, a coordinate readout in decimal degrees, DMS or UTM, and a live asset
+layer fed over a WebSocket.
 
 Drawings and measurements are ordinary parts of the project document, so they
 survive a basemap swap, appear in the operation log, and export to GeoJSON, KML,
@@ -164,6 +165,98 @@ placements, never documents. The adapter sees the scene as one custom layer with
 a place in the draw order — over the data, under the labels — and the models in
 it as operations of their own.
 
+### Live assets
+
+Positions arrive over a WebSocket and are drawn as an ordinary row in the table
+of contents, beside every other layer: the eye hides it, clicking it opens an
+inspector, and it draws over your data and under your drawings. A layer that
+lives in a pane of its own is a layer nobody finds and nobody can reason about
+next to the rest.
+
+The whole fleet is one geojson source, so a position that moved is a single
+`source.data` operation and nothing else. The layers reading it are never taken
+down and put back, which is the difference between a fleet that moves and one
+that flickers once a second. Frames are folded together and applied five times a
+second rather than one per message, so a feed at ten hertz over two hundred
+vehicles costs what a feed at one hertz over ten does.
+
+An asset that has not reported for a while is drawn hollow and grey rather than
+removed. The map knows the reports stopped; it does not know the asset did. That
+judgement is remade on a timer of its own rather than when a message arrives —
+otherwise the one case that matters, the feed stopping, would be the one case
+nothing is drawn for, and the map would go on presenting the last known
+positions as current. The row carries a connection light for the same reason: a
+live layer that has quietly stopped receiving looks exactly like a live layer
+where nothing happens to be moving, and no amount of staring at the canvas tells
+the two apart.
+
+Where the fleet was is not saved and not exported. The address and the settings
+are the map; the positions are the weather, and reopening a project tomorrow
+with yesterday's lorries drawn as though they were current is the one thing a
+live layer must never do.
+
+A model can stand in for an asset. `Model3D.follow` names one, and from then on
+the feed places it: position from the reports, heading from the reports, and the
+same `headingOffset` correction a track offers for a file whose front is not its
+own +z. It is the counterpart of a track and the opposite of one — a track knows
+the whole route in advance and samples it against a clock; this knows nothing in
+advance and is told where to be a second at a time.
+
+Between reports the placement is interpolated, because positions arrive about
+once a second and the screen draws sixty times. What is drawn is therefore about
+one report behind the truth, which is the right way round: extrapolating means
+every guess is corrected when the real position lands, and a correction is a
+visible twitch. A vehicle a second behind that moves smoothly reads as a
+vehicle; one that is up to date and jerks reads as a bug. If the next report
+never comes the model stops where the last one put it rather than continuing in
+a straight line for ever.
+
+Turning goes the short way round. A bearing crossing north — 359 to 1 — is two
+degrees to the right, and subtracting the numbers says it is 358 to the left, so
+a lorry driving due north would spin almost all the way round on the spot once a
+lap. A feed that reports no heading still moves, and the direction it moved in
+is a heading; below a few metres that is noise rather than movement, so a parked
+vehicle keeps the heading it had instead of turning to face a new random
+direction every second.
+
+The catalogue splits into things that go somewhere and things that stand still,
+because that is the distinction that decides the choice. The moving half — car,
+delivery van, articulated lorry, airliner, small vessel, quadcopter, bird — is
+built from primitives at real sizes in metres, so a van is 5.6 m because that is
+what a van is and a scale of 1 is already right. A fleet drawn at scale looks
+like a fleet rather than like a diagram.
+
+A model does not replace its dot. The 3D scene is not drawn at all below zoom 12,
+where the map is still a sphere, and the feed clusters precisely at the zooms
+where a fleet is a crowd — so the model stands in from a stated zoom inwards and
+the dot is what is on the map further out. The handover is a number in the
+document rather than whichever subsystem happens to give up first.
+
+The message shape is three objects, and the endpoint is the contract:
+
+```json
+{"type": "snapshot", "assets": [...]}
+{"type": "update",   "assets": [{"id": "unit-004", "lon": 51.41, "lat": 35.72,
+                                 "heading": 118, "speed": 9.4,
+                                 "updated": 1767225600000}]}
+{"type": "remove",   "ids": ["unit-004"]}
+```
+
+A snapshot is everything, and anything absent from it has gone; an update is a
+patch, which is what most frames are, and says only what it knows — a frame
+carrying a position and no heading means "it is here", not "and it is now facing
+north". `updated` is the feed's own clock in epoch milliseconds, so a client can
+say how old a position is rather than only that a message arrived. A bare array
+is read as a snapshot, because several feeds send one and reading it as a patch
+means nothing is ever removed.
+
+The API ships a simulated fleet at `/api/live/assets` so there is something to
+connect to without one attached, seeded so the same settings give the same fleet
+every time. Some of it goes quiet now and then on purpose: a feed where
+everything reports forever exercises none of the behaviour that matters, and the
+grey state would exist in the code and never on the screen. Point the endpoint at
+an AVL feed, an MQTT bridge or a PostGIS table and the client does not change.
+
 ### The document
 
 Every edit goes through one reconciler, so undo is a stack of whole documents
@@ -246,6 +339,8 @@ psql postgresql://alidade:change_me@localhost:5433/alidade -c 'select id, title 
 
 - Studio: <http://localhost:5173>
 - API health: <http://localhost:8000/api/health>
+- Live feed: `ws://localhost:8000/api/live/assets` — switch it on from the
+  **Live assets** row at the bottom of the table of contents
 - A tile, once you have loaded something: <http://localhost:8000/api/tiles/{layer}/{z}/{x}/{y}.mvt>
 
 The database runs everything in `data/init/` on first start, which creates the
@@ -285,7 +380,7 @@ not a published package.
 
 ```bash
 pnpm install
-pnpm test        # 402 tests, Node only: no browser, no WebGL
+pnpm test        # 491 tests, Node only: no browser, no WebGL
 pnpm typecheck   # every package and the studio
 pnpm build
 ```

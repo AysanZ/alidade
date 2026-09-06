@@ -231,9 +231,175 @@ function car(): Group {
   return group;
 }
 
+/**
+ * A delivery van. The shape most of a city fleet actually is.
+ *
+ * Five and a half metres, box body, flat front. Told apart from the car at a
+ * hundred metres by height and by the fact that its roof runs the whole length,
+ * which is the only distinction that survives at map zoom.
+ */
+function van(): Group {
+  const group = new Group();
+  const shell = paint(0xe8e6df, 0.45);
+  const body = new Mesh(new BoxGeometry(2.1, 1.75, 4.2), shell);
+  body.position.set(0, 1.5, 0.5);
+  const bonnet = new Mesh(new BoxGeometry(2.05, 0.95, 1.4), shell);
+  bonnet.position.set(0, 1.1, -2);
+  const screen = new Mesh(new BoxGeometry(1.95, 0.85, 0.2), paint(0x2b3038, 0.2));
+  screen.position.set(0, 1.85, -1.35);
+  group.add(body, bonnet, screen);
+  for (const [x, z] of [
+    [1, -1.7],
+    [-1, -1.7],
+    [1, 1.7],
+    [-1, 1.7],
+  ]) {
+    const wheel = new Mesh(new CylinderGeometry(0.38, 0.38, 0.24, 14), paint(0x1d2126));
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(x!, 0.38, z!);
+    group.add(wheel);
+  }
+  return group;
+}
+
+/**
+ * An articulated lorry: a cab and a trailer, drawn as one rigid thing.
+ *
+ * The trailer does not hinge. A real one does, and following the hinge means
+ * knowing where the cab was a moment ago as well as where it is — a second
+ * history, for an articulation nobody can see from above at map zoom.
+ */
+function truck(): Group {
+  const group = new Group();
+  const cab = new Mesh(new BoxGeometry(2.5, 2.9, 5.5), paint(0x2f6fd0, 0.4));
+  cab.position.set(0, 1.9, -5.5);
+  const trailer = new Mesh(new BoxGeometry(2.55, 3.1, 13), paint(0xe8e6df, 0.55));
+  trailer.position.set(0, 2.6, 3);
+  group.add(cab, trailer);
+  for (const [x, z] of [
+    [1.2, -7.4],
+    [-1.2, -7.4],
+    [1.2, -3.9],
+    [-1.2, -3.9],
+    [1.2, 7],
+    [-1.2, 7],
+    [1.2, 5.4],
+    [-1.2, 5.4],
+  ]) {
+    const wheel = new Mesh(new CylinderGeometry(0.52, 0.52, 0.36, 14), paint(0x1d2126));
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(x!, 0.52, z!);
+    group.add(wheel);
+  }
+  return group;
+}
+
+/**
+ * A small vessel. For a feed of harbour traffic or a river patrol.
+ *
+ * The hull is a box with a raked bow rather than a curve: at the zoom a vessel
+ * is looked at on a map, the thing that reads is the long axis and the wake it
+ * is pointing along, and a hull form costs geometry to say something nobody can
+ * see.
+ */
+function boat(): Group {
+  const group = new Group();
+  const hull = new Mesh(new BoxGeometry(3.4, 1.5, 11), paint(WHITE, 0.4));
+  hull.position.y = 0.75;
+  const bow = new Mesh(new CylinderGeometry(0.1, 1.7, 3.4, 4), paint(WHITE, 0.4));
+  /*
+   * Laid along -Z and then squashed, so the taper is in plan and not in
+   * section. A cone of radius 1.7 lying on its side is 3.4 metres tall, which
+   * put the bow a metre under the waterline and the vessel's stated height a
+   * metre out — the size test caught it before anything was ever drawn.
+   */
+  bow.rotation.x = -Math.PI / 2;
+  bow.scale.set(1, 1, 0.42);
+  bow.position.set(0, 0.75, -6.4);
+  const house = new Mesh(new BoxGeometry(2.6, 1.9, 3.6), paint(0xdfe3e8, 0.5));
+  house.position.set(0, 2.45, -1);
+  const mast = new Mesh(new CylinderGeometry(0.07, 0.07, 2, 8), paint(GREY));
+  mast.position.set(0, 4.4, -1);
+  group.add(hull, bow, house, mast);
+  return group;
+}
+
+/**
+ * A quadcopter, at the size a survey drone actually is.
+ *
+ * Under a metre across, which makes it the one built-in that is genuinely too
+ * small to see at map zoom without `minPixels` doing its job — which is a
+ * useful thing to have in the catalogue, because that is the setting people do
+ * not believe they need until something is invisible.
+ */
+function drone(): Group {
+  const group = new Group();
+  const shell = paint(DARK, 0.4);
+  const body = new Mesh(new BoxGeometry(0.28, 0.12, 0.4), shell);
+  body.position.y = 0.12;
+  group.add(body);
+  for (const [x, z] of [
+    [0.34, -0.34],
+    [-0.34, -0.34],
+    [0.34, 0.34],
+    [-0.34, 0.34],
+  ]) {
+    const arm = new Mesh(new BoxGeometry(0.05, 0.04, 0.05), shell);
+    arm.position.set(x! / 2, 0.12, z! / 2);
+    arm.scale.set(Math.abs(x!) * 14, 1, Math.abs(z!) * 14);
+    const rotor = new Mesh(new CylinderGeometry(0.16, 0.16, 0.012, 16), paint(GREY, 0.3));
+    rotor.position.set(x!, 0.2, z!);
+    group.add(arm, rotor);
+  }
+  // Clear of the ground: a camera pod hanging through the tarmac is what the
+  // "stands on the ground rather than through it" test is there to catch.
+  const camera = new Mesh(new SphereGeometry(0.06, 12, 8), paint(0x1d2126, 0.2));
+  camera.position.set(0, 0.075, -0.1);
+  group.add(camera);
+  return group;
+}
+
+/**
+ * A bird, wings out, for a tracked-animal feed.
+ *
+ * A metre and a half across, which is a large gull or a small raptor. The wings
+ * are flat plates swept back rather than aerofoils: what a moving dot on a map
+ * needs is a silhouette with an obvious front, and this is the smallest amount
+ * of geometry that has one.
+ */
+function bird(): Group {
+  const group = new Group();
+  const feather = paint(0x6b7078, 0.85);
+  const body = new Mesh(new SphereGeometry(0.11, 14, 10), feather);
+  body.position.y = 0.2;
+  body.scale.set(1, 0.9, 3.1);
+  const head = new Mesh(new SphereGeometry(0.075, 12, 9), paint(0xe8e6df, 0.8));
+  head.position.set(0, 0.24, -0.36);
+  const beak = new Mesh(new CylinderGeometry(0.005, 0.03, 0.12, 6), paint(ORANGE, 0.5));
+  beak.rotation.x = -Math.PI / 2;
+  beak.position.set(0, 0.23, -0.48);
+  group.add(body, head, beak);
+  for (const side of [-1, 1]) {
+    const wing = new Mesh(new BoxGeometry(0.62, 0.02, 0.22), feather);
+    wing.position.set(side * 0.36, 0.22, 0.02);
+    // Swept back and lifted, which is what reads as a bird rather than a plank.
+    wing.rotation.set(0, side * 0.28, side * -0.16);
+    group.add(wing);
+  }
+  const tail = new Mesh(new BoxGeometry(0.16, 0.02, 0.26), feather);
+  tail.position.set(0, 0.21, 0.4);
+  group.add(tail);
+  return group;
+}
+
 const BUILT: Record<string, () => Group> = {
   aircraft,
   car,
+  van,
+  truck,
+  boat,
+  drone,
+  bird,
   marker: marker,
   turbine: turbine,
   mast: mast,
@@ -246,6 +412,11 @@ const BUILT: Record<string, () => Group> = {
 export const BUILTIN_HEIGHTS: Record<string, number> = {
   aircraft: 10.75,
   car: 1.7,
+  van: 2.38,
+  truck: 4.15,
+  boat: 5.4,
+  drone: 0.21,
+  bird: 0.32,
   marker: 3.55,
   turbine: 120.5,
   mast: 40,

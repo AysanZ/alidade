@@ -13,6 +13,24 @@ class Settings(BaseSettings):
     # Where uploaded 3D models are kept. A volume in the compose stack.
     models_dir: str = "./models"
 
+    # The built-in live feed. Simulated, so the studio has something to connect
+    # to without a fleet attached; replace the endpoint's source and the client
+    # does not change. Tehran by default because that is where the sample data
+    # in data/seed.sh is, and a demo feed on the other side of the world from
+    # the demo layers is a demo of nothing.
+    live_fleet_size: int = 60
+    live_centre_lon: float = 51.39
+    live_centre_lat: float = 35.69
+    # Seconds between frames. One is fast enough to look live and slow enough
+    # that a fleet of a few hundred is a few hundred messages a second, not
+    # tens of thousands.
+    live_interval_seconds: float = 1.0
+    # How often a reporting vehicle goes quiet, per vehicle per frame, and for
+    # how long. Without this nothing on the map is ever stale and the state
+    # exists in the code and never on the screen.
+    live_quiet_chance: float = 0.004
+    live_quiet_seconds: float = 45.0
+
     @property
     def dsn(self) -> str:
         return (

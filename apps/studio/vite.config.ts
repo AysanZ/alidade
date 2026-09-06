@@ -16,6 +16,12 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    proxy: { "/api": "http://localhost:8000" },
+    /*
+     * `ws: true` is not optional here. A proxy without it answers the live
+     * feed's upgrade request with a plain 200 and the socket closes
+     * immediately, which the studio reports as a connection that keeps
+     * dropping — a message about the dev server, phrased as a fault in the feed.
+     */
+    proxy: { "/api": { target: "http://localhost:8000", ws: true } },
   },
 });

@@ -1849,3 +1849,57 @@ input.doc:focus { border-color: var(--accent); color: var(--txt); outline: none;
 .drawlist.models .value.loading { color: var(--txt-3); }
 .drawlist.models .tag { flex: none; }
 .drawlist.models .name { unicode-bidi: plaintext; }
+
+/* live assets */
+
+/*
+ * The connection light.
+ *
+ * Four states, and colour is not the only thing that separates them: `retrying`
+ * pulses and `off` is hollow, so the row still reads on a monochrome display and
+ * for the eight percent of men who cannot tell the green from the amber.
+ */
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--txt-3);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
+}
+.dot.off { background: none; border: 1px solid var(--txt-3); box-shadow: none; }
+.dot.connecting { background: #d9a441; animation: breathe 1.4s ease-in-out infinite; }
+.dot.live { background: #3ddc97; }
+.dot.retrying { background: #d9a441; animation: breathe 0.9s ease-in-out infinite; }
+.dot.failed { background: #e0574a; }
+
+@keyframes breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+/*
+ * Held still for anyone who would rather it did not move. A pulsing dot in the
+ * corner of the eye is a small thing to most people and not a small thing to
+ * everyone, and the state is carried by colour and fill as well.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .dot.connecting, .dot.retrying { animation: none; }
+}
+
+.node.live .swatch { width: 11px; height: 11px; }
+
+.feedstate { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.feedstate .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.assets { margin: 0; padding: 0 11px 6px; list-style: none; }
+.assets li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  height: 20px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.assets li .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.assets li:last-child { border-bottom: 0; }
+.assets li.stale .name { color: var(--txt-3); }

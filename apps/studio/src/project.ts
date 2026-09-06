@@ -1,5 +1,6 @@
 import {
   defaultAnnotations,
+  defaultAssets,
   defaultBuildings,
   defaultChrome,
   defaultModels,
@@ -32,6 +33,7 @@ export const emptyProject: MapProject = {
   chrome: { ...defaultChrome(), overview: true },
   annotations: defaultAnnotations(),
   models: defaultModels(),
+  assets: defaultAssets(),
   bookmarks: [],
   sources: {
     dem: DEM_SOURCE,
@@ -98,7 +100,19 @@ export function migrate(project: MapProject): MapProject {
   const sources = project.sources[OSM_SOURCE_ID]
     ? project.sources
     : { ...project.sources, [OSM_SOURCE_ID]: OSM_SOURCE };
-  return { ...project, sources, basemap: refreshBasemap(project.basemap) };
+  return {
+    ...project,
+    sources,
+    /*
+     * A document written before the live layer existed has no `assets` block,
+     * and without one the row in the table of contents has nothing to switch
+     * on: the feature would be missing from every project anyone already had,
+     * with no way to tell that it was there at all. Switched off, so opening an
+     * old map does not start reaching for a socket nobody asked for.
+     */
+    assets: project.assets ?? defaultAssets(),
+    basemap: refreshBasemap(project.basemap),
+  };
 }
 
 /**

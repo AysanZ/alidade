@@ -39,6 +39,20 @@ export interface VectorSource {
 export interface GeoJSONSource {
   type: "geojson";
   data: unknown;
+  /**
+   * Collapse points that crowd each other into one circle carrying a count.
+   *
+   * A property of the source and not of the layer, because the clustering
+   * happens in the source's own index before any layer sees it: turning it on
+   * replaces the features, so a layer reading the source gets `point_count`
+   * instead of the attributes it was drawing with. That is why the reconciler
+   * treats a change here as a new source rather than as new data.
+   */
+  cluster?: boolean;
+  /** Pixels at which two points are near enough to merge. 50 is the engine default. */
+  clusterRadius?: number;
+  /** Past this zoom the points are drawn individually, however close they are. */
+  clusterMaxZoom?: number;
 }
 
 export interface RasterSource {
@@ -632,6 +646,47 @@ export interface Model3D {
   minPixels?: number;
   /** Where the file came from and who it belongs to. Kept for the interface, never rendered. */
   attribution?: string;
+  /**
+   * A live asset this model stands in for, instead of standing still.
+   *
+   * The other way a model moves is a `Track`, and the two are opposites. A track
+   * is a path and a duration: the whole route is known in advance and the
+   * position at any instant is arithmetic on a clock. Following an asset is the
+   * reverse — nothing is known in advance, each position arrives on its own, and
+   * the model goes where it is told a second at a time.
+   *
+   * Only the reference is in the document. Where the model is at this instant is
+   * not, for the same reason a track's position is not: it is a function of what
+   * has arrived, and sixty of those a second would be sixty history steps.
+   */
+  follow?: Follow;
+}
+
+/**
+ * How a model is driven by an asset.
+ *
+ * The shape deliberately mirrors the movement fields of `Track` — face the way
+ * it is going, and an offset for a file whose front is not its own +z. A model
+ * that drives sideways down the road is not a bug in the feed, and it is the
+ * same correction whichever thing is moving it.
+ */
+export interface Follow {
+  /** The `LiveAsset` id this model stands in for. */
+  asset: string;
+  /** Turn the model to face the way the asset is going. */
+  faceForward: boolean;
+  /** Degrees added to the heading, for a file whose front is not its own +z. */
+  headingOffset?: number;
+  /**
+   * Draw the model only from this zoom in.
+   *
+   * A 3D scene is not drawn at all while the map is a sphere, and the feed's
+   * clustering exists precisely for the zooms where a fleet is a crowd. So a
+   * model does not replace its dot: above this zoom the model stands there,
+   * below it the dot does, and the handover is stated rather than left to
+   * whichever subsystem happens to give up first.
+   */
+  fromZoom?: number;
 }
 
 /**
@@ -674,6 +729,89 @@ export interface Models {
   tracks?: Track[];
 }
 
+/* ---------------------------------------------------------------- live */
+
+/**
+ * Something that reports where it is, as of the last time it said so.
+ *
+ * This is not a `Track`. A track is a path and a duration — the whole route is
+ * known in advance and the position is arithmetic on a clock. An asset is the
+ * opposite: nothing is known in advance, each position arrives on its own, and
+ * the only thing the map can say about the future is nothing.
+ *
+ * `updated` is the feed's own clock, in epoch milliseconds, and is kept rather
+ * than converted to an age. An age is only true at the instant it is computed,
+ * so storing one means storing something that is wrong by the time it is read;
+ * the instant it was true is a fact that stays a fact.
+ */
+export interface LiveAsset {
+  id: string;
+  /** lon, lat. */
+  position: [number, number];
+  /** Degrees clockwise from north. Absent when the feed does not report one. */
+  heading?: number;
+  /** Metres per second. Absent when the feed does not report one. */
+  speed?: number;
+  /** Epoch milliseconds, from the feed. */
+  updated: number;
+  /** What to call it on the map. Falls back to the id. */
+  label?: string;
+  /**
+   * Whether this asset has gone quiet, as of the last sweep.
+   *
+   * Derived from `updated` and `Assets.staleAfter`, and written down for the
+   * same reason `Annotation.value` is: the renderer has no clock and cannot
+   * work it out for itself. An expression can read a property; it cannot read
+   * the time. The application recomputes it on a timer and stores the answer,
+   * so a feed that stops does not leave forty confident dots on the map.
+   */
+  stale?: boolean;
+  /** Whatever else the feed sent. Shown in the inspector, never styled. */
+  properties?: Record<string, string | number | boolean | null>;
+}
+
+/**
+ * A layer of things that move, and the feed they move according to.
+ *
+ * It lives beside the tree rather than in it for the reason drawings and models
+ * do: it is one layer however many assets there are, and there is nothing to
+ * reorder inside it. What is in the tree is the row in the table of contents,
+ * which is a view of this.
+ *
+ * The connection *state* is deliberately not here. Whether the socket happens to
+ * be open at this instant is not part of the map any more than the mouse
+ * position is: it belongs to the application, it changes without anyone editing
+ * anything, and writing it into the document would put "reconnecting" in the
+ * undo history and in the exported file. What is here is the address and whether
+ * the user wants to be connected to it, both of which are choices worth keeping.
+ */
+export interface Assets {
+  visible: boolean;
+  opacity: number;
+  /**
+   * Where the feed is.
+   *
+   * Relative by default, so the same document works against a development
+   * server on port 5173 and behind Nginx in the compose stack without being
+   * edited. Resolved against the page, `ws:` for `http:` and `wss:` for
+   * `https:`, by the client that opens it.
+   */
+  url: string;
+  /** Whether the studio should be connected. The user's switch, not the socket's. */
+  enabled: boolean;
+  color: string;
+  /** Assets quiet for longer than this many seconds are drawn as stale. */
+  staleAfter: number;
+  /** Collapse into counts where they crowd. */
+  cluster: boolean;
+  /** A name beside each one. Off by default: forty labels is not a map. */
+  labels: boolean;
+  /** A short line out of each asset showing which way it is going. */
+  heading: boolean;
+  /** Where everything is, as of the last frame that arrived. */
+  items: LiveAsset[];
+}
+
 export interface MapProject {
   schema: 3;
   id: string;
@@ -690,6 +828,8 @@ export interface MapProject {
   selection?: Selection;
   /** Optional so a project written before models existed still loads. */
   models?: Models;
+  /** Optional so a project written before the live layer existed still loads. */
+  assets?: Assets;
 }
 
 export const defaultGrids = (): Grids => ({
@@ -716,5 +856,30 @@ export const defaultAnnotations = (): Annotations => ({
 
 export const defaultModels = (): Models => ({
   visible: true,
+  items: [],
+});
+
+/**
+ * The live layer, present and switched off.
+ *
+ * Present rather than absent so the row exists in the table of contents before
+ * anything has connected: a feature that only appears once it is working cannot
+ * be found by anyone trying to make it work.
+ *
+ * Thirty seconds of silence is stale. It is long enough that a feed reporting
+ * every few seconds never flickers on a dropped frame, and short enough that a
+ * vehicle which has actually stopped reporting is not still being drawn as a
+ * confident dot a minute later.
+ */
+export const defaultAssets = (): Assets => ({
+  visible: true,
+  opacity: 1,
+  url: "/api/live/assets",
+  enabled: false,
+  color: "#3ddc97",
+  staleAfter: 30,
+  cluster: true,
+  labels: false,
+  heading: true,
   items: [],
 });

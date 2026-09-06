@@ -1,4 +1,5 @@
 import type { MapProject } from "@alidade/core";
+import { withoutLiveAssets } from "@alidade/core";
 
 /**
  * Keeping the map between visits.
@@ -47,7 +48,14 @@ export function makeAutosave(onProblem?: (message: string) => void) {
 
 export function save(project: MapProject, onProblem?: (message: string) => void): boolean {
   try {
-    localStorage.setItem(KEY, JSON.stringify(project));
+    /*
+     * The feed's positions are not saved. They would be written several times a
+     * minute for as long as the map is open, they would be wrong by tomorrow,
+     * and restoring them would draw yesterday's fleet as though it were
+     * current — which is the one thing a live layer must never do. The address
+     * and the settings are kept; where the lorries were is not.
+     */
+    localStorage.setItem(KEY, JSON.stringify(withoutLiveAssets(project)));
     localStorage.setItem(VERSION_KEY, String(project.schema));
     return true;
   } catch (error) {

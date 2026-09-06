@@ -206,17 +206,32 @@ export function ModelsPanel({
           anything. It is an ordinary placement on an ordinary drawing: take it apart,
           retime it, or send it somewhere else.
         </p>
-        <ul className="picker samples">
-          {SAMPLES.map((sample) => (
-            <li key={sample.id} onClick={() => addSample(sample)} title={sample.hint}>
-              <b>{sample.name}</b>
-              <span>
-                {sample.size} · {sample.attribution}
-              </span>
-              <em>Add</em>
-            </li>
-          ))}
-        </ul>
+        {/*
+          Split into things that go somewhere and things that stand still,
+          because that is the distinction that decides the choice: only a moving
+          body can stand in for a live asset, and the vehicles used to be two
+          entries at the bottom of one undifferentiated list that nobody
+          scrolled to.
+        */}
+        {(["moving", "fixed"] as const).map((group) => (
+          <div key={group}>
+            <div className="slot">
+              <span className="cap">{group === "moving" ? "Moves" : "Stands still"}</span>
+              <i />
+            </div>
+            <ul className="picker samples">
+              {SAMPLES.filter((sample) => sample.group === group).map((sample) => (
+                <li key={sample.id} onClick={() => addSample(sample)} title={sample.hint}>
+                  <b>{sample.name}</b>
+                  <span>
+                    {sample.size} · {sample.attribution}
+                  </span>
+                  <em>Add</em>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
         <div className="row">
           <input
             className="text"
