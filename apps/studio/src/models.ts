@@ -87,7 +87,7 @@ export const SAMPLES: Sample[] = [
     url: "builtin:aircraft",
     size: "built in",
     attribution: "Alidade · Apache-2.0",
-    hint: "34 m long, 34 m span. For an ADS-B or flight feed.",
+    hint: "38 m long, 36 m span. Swept wings, gear down. For a flight feed.",
     group: "moving",
   },
   {

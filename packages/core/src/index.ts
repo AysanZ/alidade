@@ -44,6 +44,8 @@ export {
   ASSET_LAYER_IDS,
   ago,
   applyFrame,
+  bankFor,
+  pathAngle,
   drivenBy,
   followers,
   motionFor,
@@ -66,6 +68,15 @@ export {
 export type { FeedFrame, Motion, MotionFrames } from "./live";
 export { spreadModels } from "./spread";
 export type { Placeable, Spread, SpreadOptions } from "./spread";
+export {
+  APPROACH_SECONDS,
+  MEHRABAD_29L,
+  PHASES,
+  approachAt,
+  approachExtent,
+  approachFrame,
+} from "./approach";
+export type { ApproachSample, Runway } from "./approach";
 export { reconcile } from "./reconcile";
 export { toExpression, toSql } from "./filter";
 export type { SqlFilter } from "./filter";

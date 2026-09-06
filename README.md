@@ -226,6 +226,26 @@ built from primitives at real sizes in metres, so a van is 5.6 m because that is
 what a van is and a scale of 1 is already right. A fleet drawn at scale looks
 like a fleet rather than like a diagram.
 
+A followed model can take its height from the feed as well as its position, and
+can lean into what it is doing. Neither is reported by an ordinary feed — a
+position stream says where, not how — so both come out of consecutive reports:
+the nose follows the flight path angle, and the bank is the one a coordinated
+turn at that speed and rate of turn implies, `tan φ = ω v / g`. Both are opted
+into separately, because a car does not bank and a lorry that rolls into a
+roundabout has crashed.
+
+**Fly a landing** in the models pane is the demonstration and also the test. It
+takes about a hundred seconds. It
+flies a full arrival into Mehrabad — base leg, the turn onto final, a three
+degree glideslope, the flare, the rollout — by writing ordinary `LiveAsset`
+reports into the live layer once a second, exactly as a transponder would.
+Nothing about the attitude is scripted: the aircraft banks because it is turning
+and lowers its nose because it is descending, and the twenty-five degrees it
+banks at is the bank the turn radius was derived from, read back out of the
+geometry by the renderer. The one stated attitude is the flare, because a flare
+is something a pilot does rather than something the path implies. If the landing
+looks right, the pipeline is right.
+
 A model does not replace its dot. The 3D scene is not drawn at all below zoom 12,
 where the map is still a sphere, and the feed clusters precisely at the zooms
 where a fleet is a crowd — so the model stands in from a stated zoom inwards and
@@ -380,7 +400,7 @@ not a published package.
 
 ```bash
 pnpm install
-pnpm test        # 491 tests, Node only: no browser, no WebGL
+pnpm test        # 519 tests, Node only: no browser, no WebGL
 pnpm typecheck   # every package and the studio
 pnpm build
 ```

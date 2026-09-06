@@ -36,6 +36,9 @@ interface Props {
   onSpread: (layerId: string, options: SpreadOptions) => void;
   playing: boolean;
   onPlay: (on: boolean) => void;
+  /** Where the landing demonstration has got to, and how to stop it. */
+  approach: { flying: boolean; at: number; stop: () => void };
+  onFlyApproach: () => void;
   /** Where each moving model is right now. Not in the document; a few times a second. */
   live: Record<string, { position: [number, number]; heading: number; covered: number }>;
 }
@@ -62,6 +65,8 @@ export function ModelsPanel({
   onSpread,
   playing,
   onPlay,
+  approach,
+  onFlyApproach,
   live,
 }: Props) {
   const [overLayer, setOverLayer] = useState("");
@@ -199,12 +204,25 @@ export function ModelsPanel({
           >
             Fly a demo
           </button>
+          <button
+            className={approach.flying ? "on" : ""}
+            onClick={() => (approach.flying ? approach.stop() : onFlyApproach())}
+          >
+            {approach.flying ? `Landing · ${Math.round(approach.at)}s` : "Fly a landing"}
+          </button>
         </div>
         <p className="hint">
           Puts an airliner on a fifteen kilometre circuit around the middle of the view
           and starts it, so there is something moving to look at before you have placed
           anything. It is an ordinary placement on an ordinary drawing: take it apart,
           retime it, or send it somewhere else.
+        </p>
+        <p className="hint">
+          The landing flies a full arrival into Mehrabad — base leg, the turn onto final,
+          a three degree glideslope, the flare and the rollout. Nothing about it is
+          animated: it writes positions into the live layer once a second the way a
+          transponder would, and the aircraft banks because it is turning and drops its
+          nose because it is descending. Watch it from the side, with the camera tilted.
         </p>
         {/*
           Split into things that go somewhere and things that stand still,

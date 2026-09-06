@@ -16,6 +16,9 @@ import {
   toleranceInMetres,
   utmCell,
   viewForExtent,
+  MEHRABAD_29L,
+  approachExtent,
+  defaultAssets,
   withMinimumSize,
   withModel,
   withoutLiveAssets,
@@ -60,6 +63,7 @@ import type { ModelStatus } from "./models";
 import { useDrawing } from "./useDrawing";
 import { useLiveFeed } from "./useLiveFeed";
 import { useLiveModels } from "./useLiveModels";
+import { useApproachDemo } from "./useApproachDemo";
 import { useProject } from "./useProject";
 import { stampedPng } from "./export";
 import { forget, makeAutosave, parseProject, restore, save } from "./storage";
@@ -200,6 +204,14 @@ export default function App() {
    * advance and interpolates between the last two things that arrived.
    */
   useLiveModels(project, host, mapRef);
+
+  /*
+   * The landing demonstration, which is a feed and nothing more: it writes
+   * reports into the live layer once a second and the rest of the application
+   * cannot tell them from a transponder's.
+   */
+  const approach = useApproachDemo(transient);
+
 
   /*
    * The map survives a refresh.
@@ -946,6 +958,53 @@ export default function App() {
   }, [project.assets, flyTo]);
 
   /**
+   * Set the arrival up and start it.
+   *
+   * It makes the conditions it needs rather than reporting that they are
+   * missing — the projection, the aeroplane, the following, the camera — for
+   * the same reason the circuit demo does. A button whose answer is "turn four
+   * things on first" is a button that does not work.
+   */
+  const flyApproach = useCallback(() => {
+    const plane = newModel({
+      url: "builtin:aircraft",
+      name: "Arrival",
+      position: MEHRABAD_29L.threshold,
+      altitude: 0,
+      // An aircraft's height is above the ground and not a property of the
+      // hill under it, so it is not clamped to the terrain.
+      clamp: false,
+      minPixels: 30,
+      attribution: "Alidade · Apache-2.0",
+    });
+    plane.follow = {
+      asset: "arrival",
+      faceForward: true,
+      // The two that make it an aeroplane rather than a shape sliding downhill.
+      attitude: true,
+      altitude: true,
+      fromZoom: GLOBE_IS_ROUND_BELOW,
+    };
+
+    edit((d) => {
+      if (d.environment.projection && d.environment.projection !== "mercator") {
+        d.environment.projection = "mercator";
+      }
+      d.assets ??= defaultAssets();
+      // The demo is its own feed, so the socket is left alone: connecting to
+      // one as well would put sixty lorries on the runway.
+      d.assets.visible = true;
+      d.models ??= { visible: true, items: [] };
+      d.models.items = [...d.models.items.filter((m) => m.id !== plane.id), plane];
+      return d;
+    });
+
+    setSelectedModel(plane.id);
+    flyTo(approachExtent());
+    approach.start();
+  }, [edit, flyTo, approach]);
+
+  /**
    * Selecting from the table.
    *
    * Transient either way. Pointing at a row is not an edit to the map, and a
@@ -1173,6 +1232,8 @@ export default function App() {
               live={live}
               playing={playingSince !== null}
               onPlay={(on) => setPlayingSince(on ? performance.now() : null)}
+              approach={approach}
+              onFlyApproach={flyApproach}
             />
           )}
           {pane === "draw" && (

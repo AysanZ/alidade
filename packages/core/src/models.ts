@@ -65,6 +65,10 @@ export interface Frame {
   offset: [number, number, number];
   /** Radians about the vertical, applied to the mesh in its own frame. */
   yaw: number;
+  /** Radians about the mesh's own lateral axis. Nose up is positive. */
+  pitch: number;
+  /** Radians about the mesh's own longitudinal axis. Right wing down is positive. */
+  roll: number;
   /** Multiplies the mesh's own units. */
   scale: number;
 }
@@ -90,6 +94,13 @@ export function frameOf(
   return {
     offset: [(m.x - o.x) / k, m.z / k, (m.y - o.y) / k],
     yaw: yawOf(model.heading),
+    /*
+     * Absent means level. Almost nothing on a map has an attitude, so the two
+     * angles are optional in the document and zero here, which keeps every
+     * placement written before they existed drawing exactly as it did.
+     */
+    pitch: ((model.pitch ?? 0) * Math.PI) / 180,
+    roll: ((model.roll ?? 0) * Math.PI) / 180,
     scale: (model.scale * unitsPerMetre(lat)) / k,
   };
 }

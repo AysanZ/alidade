@@ -36,6 +36,33 @@ export function isBuiltin(url: string): boolean {
 const paint = (color: number, rough = 0.75) =>
   new MeshStandardMaterial({ color, roughness: rough, metalness: 0.05 });
 
+/**
+ * Turn a body that was modelled nose-first along −z to face +z.
+ *
+ * glTF puts a model's front on +z, and `yawOf` in the core is written to that
+ * convention: a heading of zero turns the mesh's +z to north. Every body in
+ * this file was drawn the other way round — nose at −z, which is what you get
+ * if you sketch a side elevation with the nose on the left — so every one of
+ * them flew, drove and sailed backwards. It was invisible on a circuit, where
+ * a shape going round a ring reads as going round a ring whichever end leads,
+ * and unmissable the moment an aeroplane was pointed at a runway.
+ *
+ * They are turned once, here, rather than by renumbering every coordinate.
+ * Renumbering means negating a z on every part and then negating the rotations
+ * that go with them — six models, forty parts, and one sign wrong is a wing
+ * mounted backwards that nobody notices for a month. This is one rotation with
+ * one test on it.
+ *
+ * The turn is a half turn about the vertical, which also negates x. Every body
+ * here is symmetric about its own centreline, so that is free.
+ */
+function facingForward(built: Group): Group {
+  const outer = new Group();
+  built.rotation.y = Math.PI;
+  outer.add(built);
+  return outer;
+}
+
 const WHITE = 0xe8eaed;
 const GREY = 0x9aa0a8;
 const DARK = 0x3b4048;
@@ -177,35 +204,108 @@ function tree(): Group {
  * is what the on-screen size floor is for: a plane you have to zoom to street
  * level to see is not a plane on a map.
  */
+/**
+ * A narrowbody airliner, about the size of an A320.
+ *
+ * The first one was a tube with a plank through it, and it read as a tube with
+ * a plank through it. What makes an aeroplane recognisable from above at map
+ * zoom, in order: the sweep of the wing, the wing being further back than the
+ * middle, the two engines slung under and ahead of it, and the fin. The
+ * fuselage is the least of it — nobody identifies an aircraft by its tube.
+ *
+ * So the wings are swept, tapered and given winglets, the engines hang on
+ * pylons ahead of the leading edge where they actually are, and the tailplane
+ * is swept too. Thirty-seven metres long, thirty-five across, which is an A320
+ * to within a metre.
+ *
+ * Everything is still primitives. A swept wing is a box turned about the
+ * vertical and squeezed along its span; a taper is a second, smaller box
+ * further out. At the size an aircraft is drawn on a map, an aerofoil section
+ * is geometry spent on something no camera will ever resolve.
+ */
 function aircraft(): Group {
   const group = new Group();
   const skin = paint(WHITE, 0.35);
+  const trim = paint(0x2f6fd0, 0.4);
+  const metal = paint(GREY, 0.35);
 
-  const fuselage = new Mesh(new CylinderGeometry(1.9, 1.9, 34, 20), skin);
+  /* Fuselage: a tube, a rounded nose, and a tail that lifts as it tapers. */
+  const fuselage = new Mesh(new CylinderGeometry(1.85, 1.85, 27, 22), skin);
   fuselage.rotation.x = Math.PI / 2;
-  fuselage.position.y = 4;
-  const nose = new Mesh(new SphereGeometry(1.9, 18, 12), skin);
-  nose.position.set(0, 4, -17);
-  const tailCone = new Mesh(new CylinderGeometry(0.4, 1.9, 5, 16), skin);
-  tailCone.rotation.x = -Math.PI / 2;
-  tailCone.position.set(0, 4.6, 19);
+  fuselage.position.set(0, 3.9, -1.5);
+  const nose = new Mesh(new SphereGeometry(1.85, 20, 14), skin);
+  nose.scale.set(1, 0.95, 1.5);
+  nose.position.set(0, 3.85, -15);
+  const tailCone = new Mesh(new CylinderGeometry(0.45, 1.85, 8.5, 20), skin);
+  tailCone.rotation.x = -Math.PI / 2 - 0.09;
+  tailCone.position.set(0, 4.35, 16.2);
   group.add(fuselage, nose, tailCone);
 
-  const wing = new Mesh(new BoxGeometry(34, 0.55, 5.5), skin);
-  wing.position.set(0, 3.2, 1);
-  const stabiliser = new Mesh(new BoxGeometry(12, 0.4, 2.6), skin);
-  stabiliser.position.set(0, 5.4, 18);
-  const fin = new Mesh(new BoxGeometry(0.5, 5.5, 4), paint(0x2f6fd0, 0.4));
-  fin.position.set(0, 8, 18.5);
-  group.add(wing, stabiliser, fin);
+  /*
+   * Flight deck windows and a cabin band. Two thin dark boxes, and the only
+   * reason they are here: without something breaking the white, a fuselage at
+   * a distance is a chalk mark rather than an aircraft.
+   */
+  const windscreen = new Mesh(new BoxGeometry(2.1, 0.7, 1.5), paint(0x22262c, 0.15));
+  windscreen.position.set(0, 4.55, -13.2);
+  const band = new Mesh(new BoxGeometry(3.75, 0.42, 21), paint(0x39404a, 0.3));
+  band.position.set(0, 4.5, -2);
+  group.add(windscreen, band);
 
-  for (const x of [-7, 7]) {
-    const engine = new Mesh(new CylinderGeometry(1.5, 1.4, 4.4, 16), paint(GREY, 0.4));
-    engine.rotation.x = Math.PI / 2;
-    engine.position.set(x, 2.2, 0);
-    group.add(engine);
+  /* Wings: swept back, tapered, with winglets. Root at the belly, aft of centre. */
+  for (const side of [-1, 1]) {
+    const inner = new Mesh(new BoxGeometry(9, 0.42, 6.2), skin);
+    inner.position.set(side * 5.4, 2.9, 3.4);
+    inner.rotation.y = side * -0.42;
+    const outer = new Mesh(new BoxGeometry(8.6, 0.34, 3.4), skin);
+    outer.position.set(side * 13.4, 3.15, 7.1);
+    outer.rotation.y = side * -0.42;
+    const winglet = new Mesh(new BoxGeometry(0.3, 2.4, 1.7), trim);
+    winglet.position.set(side * 17.4, 4.2, 8.6);
+    winglet.rotation.y = side * -0.42;
+    group.add(inner, outer, winglet);
+
+    /* Engine on a pylon, ahead of and below the leading edge, as it hangs. */
+    const pylon = new Mesh(new BoxGeometry(0.5, 1.5, 2.6), skin);
+    pylon.position.set(side * 6.2, 2.2, 1.1);
+    const nacelle = new Mesh(new CylinderGeometry(1.35, 1.2, 4.6, 18), metal);
+    nacelle.rotation.x = Math.PI / 2;
+    // Clear of the ground by a few centimetres, which is about the clearance a
+    // narrowbody actually has and is what keeps the size test honest.
+    nacelle.position.set(side * 6.2, 1.42, 0.4);
+    const intake = new Mesh(new CylinderGeometry(1.38, 1.38, 0.35, 18), paint(0x22262c, 0.2));
+    intake.rotation.x = Math.PI / 2;
+    intake.position.set(side * 6.2, 1.42, -1.85);
+    group.add(pylon, nacelle, intake);
+
+    /* Main gear, down. An aircraft on approach has its wheels out. */
+    const leg = new Mesh(new CylinderGeometry(0.13, 0.13, 2.2, 8), metal);
+    leg.position.set(side * 3.7, 1.1, 3);
+    const wheel = new Mesh(new CylinderGeometry(0.55, 0.55, 0.35, 14), paint(0x1d2126));
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(side * 3.7, 0.55, 3);
+    group.add(leg, wheel);
+
+    /* Tailplane, swept like the wing and a good deal smaller. */
+    const stabiliser = new Mesh(new BoxGeometry(6.2, 0.3, 2.5), skin);
+    stabiliser.position.set(side * 3.4, 5.6, 16.6);
+    stabiliser.rotation.y = side * -0.38;
+    group.add(stabiliser);
   }
-  return group;
+
+  /* Nose gear, and the fin. */
+  const noseLeg = new Mesh(new CylinderGeometry(0.11, 0.11, 2.4, 8), metal);
+  noseLeg.position.set(0, 1.2, -11.5);
+  const noseWheel = new Mesh(new CylinderGeometry(0.42, 0.42, 0.3, 14), paint(0x1d2126));
+  noseWheel.rotation.z = Math.PI / 2;
+  noseWheel.position.set(0, 0.42, -11.5);
+  const fin = new Mesh(new BoxGeometry(0.42, 6.4, 5.2), trim);
+  fin.position.set(0, 8, 16.4);
+  // Swept: the fin leans back from its root, which is most of its silhouette.
+  fin.rotation.x = -0.34;
+  group.add(noseLeg, noseWheel, fin);
+
+  return facingForward(group);
 }
 
 /** A car, nose along -z. Four and a half metres, which is the width of a lane. */
@@ -215,7 +315,10 @@ function car(): Group {
   const body = new Mesh(new BoxGeometry(1.8, 0.75, 4.4), shell);
   body.position.y = 0.75;
   const cabin = new Mesh(new BoxGeometry(1.65, 0.6, 2.1), paint(0x2b3038, 0.2));
-  cabin.position.set(0, 1.4, 0.15);
+  // Behind the middle, which is where a cabin sits and which is what gives the
+  // car a front at all. It was ahead of it, and a car with the cabin forward of
+  // centre reads as a car going the other way.
+  cabin.position.set(0, 1.4, -0.35);
   group.add(body, cabin);
   for (const [x, z] of [
     [0.9, -1.4],
@@ -259,7 +362,7 @@ function van(): Group {
     wheel.position.set(x!, 0.38, z!);
     group.add(wheel);
   }
-  return group;
+  return facingForward(group);
 }
 
 /**
@@ -291,7 +394,7 @@ function truck(): Group {
     wheel.position.set(x!, 0.52, z!);
     group.add(wheel);
   }
-  return group;
+  return facingForward(group);
 }
 
 /**
@@ -321,7 +424,7 @@ function boat(): Group {
   const mast = new Mesh(new CylinderGeometry(0.07, 0.07, 2, 8), paint(GREY));
   mast.position.set(0, 4.4, -1);
   group.add(hull, bow, house, mast);
-  return group;
+  return facingForward(group);
 }
 
 /**
@@ -354,7 +457,7 @@ function drone(): Group {
   // Clear of the ground: a camera pod hanging through the tarmac is what the
   // "stands on the ground rather than through it" test is there to catch.
   const camera = new Mesh(new SphereGeometry(0.06, 12, 8), paint(0x1d2126, 0.2));
-  camera.position.set(0, 0.075, -0.1);
+  camera.position.set(0, 0.075, 0.1);
   group.add(camera);
   return group;
 }
@@ -389,7 +492,7 @@ function bird(): Group {
   const tail = new Mesh(new BoxGeometry(0.16, 0.02, 0.26), feather);
   tail.position.set(0, 0.21, 0.4);
   group.add(tail);
-  return group;
+  return facingForward(group);
 }
 
 const BUILT: Record<string, () => Group> = {
@@ -410,7 +513,7 @@ const BUILT: Record<string, () => Group> = {
 
 /** What each built-in is, for the catalogue to describe without loading it. */
 export const BUILTIN_HEIGHTS: Record<string, number> = {
-  aircraft: 10.75,
+  aircraft: 11.88,
   car: 1.7,
   van: 2.38,
   truck: 4.15,

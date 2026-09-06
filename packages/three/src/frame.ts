@@ -1,4 +1,4 @@
-import { Matrix4, Quaternion, Vector3 } from "three";
+import { Euler, Matrix4, Quaternion, Vector3 } from "three";
 import { toMercator, unitsPerMetre, type Frame } from "@alidade/core";
 
 /**
@@ -43,12 +43,30 @@ export function cameraMatrix(
   return target.fromArray(mapMatrix).multiply(local);
 }
 
-/** A frame as an object's matrix: translate, then turn, then scale the mesh. */
+/**
+ * A frame as an object's matrix: translate, then turn, then scale the mesh.
+ *
+ * The three angles are applied in the order an aeroplane's are — bank inside
+ * pitch inside heading — which is what `YXZ` means to three.js: the Z rotation
+ * is innermost and the Y outermost. Any other order makes bank and pitch
+ * interfere, so an aircraft that banks while descending ends up yawed as well,
+ * and the nose wanders off the runway centreline as it rolls.
+ *
+ * The signs are the ones that put the nose up for a positive pitch and the
+ * right wing down for a positive roll, in a frame where the mesh faces +z with
+ * +y up. They are not obvious — the scene frame reaches the map through a
+ * mirror in y — and they are pinned by tests that push a nose vector and a
+ * wingtip vector through this matrix and read off which way they went.
+ */
 export function placementMatrix(frame: Frame, target = new Matrix4()): Matrix4 {
   const [x, y, z] = frame.offset;
+  const turn =
+    frame.pitch === 0 && frame.roll === 0
+      ? new Quaternion().setFromAxisAngle(UP, frame.yaw)
+      : new Quaternion().setFromEuler(new Euler(-frame.pitch, frame.yaw, frame.roll, "YXZ"));
   return target.compose(
     new Vector3(x, y, z),
-    new Quaternion().setFromAxisAngle(UP, frame.yaw),
+    turn,
     new Vector3(frame.scale, frame.scale, frame.scale),
   );
 }

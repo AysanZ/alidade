@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  bankFor,
   drivenBy,
   followers,
   motionFor,
+  pathAngle,
   rememberFrames,
   shortestTurn,
   turnTowards,
@@ -240,7 +242,14 @@ describe("motionFor", () => {
 
   it("sits on the single report it has", () => {
     const frames = rememberFrames(new Map(), [asset("a", 7, 8, { heading: 45 })], 1000);
-    expect(motionFor(following, frames, 1500)).toEqual({ position: [7, 8], heading: 45 });
+    // Level, because one report is a place and not a movement: nothing can be
+    // said about attitude from it.
+    expect(motionFor(following, frames, 1500)).toMatchObject({
+      position: [7, 8],
+      heading: 45,
+      pitch: 0,
+      roll: 0,
+    });
   });
 
   it("is one report behind, and arrives just as the next one does", () => {
@@ -281,5 +290,121 @@ describe("followers", () => {
   it("picks out only the models that name an asset", () => {
     const driven = model({ id: "m2", follow: { asset: "a", faceForward: true } });
     expect(followers([model(), driven]).map((m) => m.id)).toEqual(["m2"]);
+  });
+});
+
+describe("attitude", () => {
+  const flying = model({
+    follow: { asset: "a", faceForward: true, attitude: true, altitude: true },
+  });
+  const at = (
+    lon: number,
+    lat: number,
+    updated: number,
+    extra: Partial<LiveAsset> = {},
+  ): LiveAsset => ({ id: "a", position: [lon, lat], updated, ...extra });
+
+  it("is a flight path angle, not an invented number", () => {
+    // Three degrees down is the standard glideslope, and the only reason the
+    // number is checkable at all is that it comes out of the geometry.
+    expect(pathAngle(-150, 2862)).toBeCloseTo(-3, 0);
+    expect(pathAngle(150, 2862)).toBeCloseTo(3, 0);
+    expect(pathAngle(100, 0)).toBe(0);
+  });
+
+  it("puts the nose down on a descent and up on a climb", () => {
+    const down = tween(
+      at(51.4, 35.7, 0, { altitude: 300 }),
+      at(51.4, 35.71, 1000, { altitude: 200 }),
+      1,
+    );
+    expect(down.pitch!).toBeLessThan(0);
+    const up = tween(
+      at(51.4, 35.7, 0, { altitude: 200 }),
+      at(51.4, 35.71, 1000, { altitude: 300 }),
+      1,
+    );
+    expect(up.pitch!).toBeGreaterThan(0);
+  });
+
+  it("banks into a turn and rolls level out of it", () => {
+    const turning = tween(
+      at(51.4, 35.7, 0, { heading: 200, speed: 70 }),
+      at(51.401, 35.7, 1000, { heading: 204, speed: 70 }),
+      1,
+    );
+    expect(turning.roll!).toBeGreaterThan(10);
+    const straight = tween(
+      at(51.4, 35.7, 0, { heading: 200, speed: 70 }),
+      at(51.401, 35.7, 1000, { heading: 200, speed: 70 }),
+      1,
+    );
+    expect(straight.roll).toBe(0);
+  });
+
+  it("banks the other way for the other turn", () => {
+    const left = tween(
+      at(51.4, 35.7, 0, { heading: 204, speed: 70 }),
+      at(51.401, 35.7, 1000, { heading: 200, speed: 70 }),
+      1,
+    );
+    expect(left.roll!).toBeLessThan(-10);
+  });
+
+  it("banks further for the same turn at a higher speed", () => {
+    // tan(bank) = ω v / g, so it must. An aircraft that banks the same at every
+    // speed is an aircraft drawn rather than flown.
+    const slow = bankFor(4, 60);
+    const fast = bankFor(4, 120);
+    expect(fast).toBeGreaterThan(slow);
+  });
+
+  it("never rolls an airliner past a bank an airliner uses", () => {
+    // Two reports either side of a sharp corner imply a rate of turn no
+    // aeroplane could fly, and an airliner drawn inverted over a runway is a
+    // worse answer than one that under-banks.
+    expect(bankFor(400, 250)).toBeLessThanOrEqual(30);
+    expect(bankFor(-400, 250)).toBeGreaterThanOrEqual(-30);
+    expect(bankFor(10, 0)).toBe(0);
+  });
+
+  it("flies wings level when the feed reports no heading", () => {
+    // Two positions give one bearing and say nothing about whether it is
+    // changing. The data does not contain the turn, so there is no bank in it.
+    const motion = tween(at(51.4, 35.7, 0), at(51.41, 35.7, 1000), 1);
+    expect(motion.roll).toBe(0);
+  });
+
+  it("carries the altitude across and interpolates it", () => {
+    const motion = tween(
+      at(51.4, 35.7, 0, { altitude: 300 }),
+      at(51.4, 35.71, 1000, { altitude: 100 }),
+      0.5,
+    );
+    expect(motion.altitude).toBeCloseTo(200);
+  });
+
+  it("leaves a ground vehicle level however hard it corners", () => {
+    /*
+     * A lorry that rolls fifteen degrees into a roundabout has crashed. Both
+     * attitude and altitude are opted into, separately, because a feed
+     * reporting height does not mean the user wants the model flying.
+     */
+    const ground = model({ follow: { asset: "a", faceForward: true } });
+    const driven = drivenBy(ground, { position: [1, 2], heading: 90, pitch: -8, roll: 22 });
+    expect(driven.pitch).toBeUndefined();
+    expect(driven.roll).toBeUndefined();
+    expect(driven.altitude).toBe(0);
+  });
+
+  it("applies both to something that is flying", () => {
+    const driven = drivenBy(flying, {
+      position: [1, 2],
+      heading: 90,
+      pitch: -3,
+      roll: 22,
+      altitude: 240,
+    });
+    expect(driven).toMatchObject({ pitch: -3, roll: 22, altitude: 240 });
   });
 });

@@ -320,6 +320,54 @@ export interface Motion {
   position: [number, number];
   /** Degrees clockwise from north. */
   heading: number;
+  /** Metres above the ground. Absent when the feed reports no height. */
+  altitude?: number;
+  /** Degrees the nose is above the horizontal. Negative is nose down. */
+  pitch?: number;
+  /** Degrees banked, right wing down positive. */
+  roll?: number;
+}
+
+/**
+ * How steeply the flight path is climbing or descending, in degrees.
+ *
+ * The angle of the path over the ground, not the angle of the aeroplane: a real
+ * airliner on a three degree approach holds its nose a couple of degrees *above*
+ * the horizon while descending, because a wing needs an angle of attack. That
+ * distinction is invisible at map zoom and expensive to model, and the thing
+ * that reads wrong on a screen is an aircraft descending while pointing dead
+ * level. The path angle is the honest approximation of what a person expects to
+ * see.
+ */
+export function pathAngle(climbMetres: number, overGroundMetres: number): number {
+  if (!(overGroundMetres > 0)) return 0;
+  return (Math.atan2(climbMetres, overGroundMetres) * 180) / Math.PI;
+}
+
+/** Metres per second squared. Only used to turn a rate of turn into a bank. */
+const GRAVITY = 9.80665;
+
+/** Airliners bank to about this and no further, and neither does this. */
+const BANK_LIMIT = 30;
+
+/**
+ * The bank a coordinated turn at this speed and rate of turn implies.
+ *
+ * `tan(bank) = ω v / g` — the standard result, and the reason an aircraft
+ * banks further for the same turn the faster it goes. Deriving it rather than
+ * inventing an angle is what makes the turn look flown rather than animated:
+ * the bank steepens as the turn tightens and rolls level as it finishes,
+ * without any of that being scripted.
+ *
+ * Capped, because two reports either side of a sharp corner imply a rate of
+ * turn no aeroplane could fly, and an airliner drawn inverted over a runway is
+ * a worse answer than one that under-banks.
+ */
+export function bankFor(degreesPerSecond: number, metresPerSecond: number): number {
+  if (!(metresPerSecond > 0)) return 0;
+  const omega = (degreesPerSecond * Math.PI) / 180;
+  const bank = (Math.atan((omega * metresPerSecond) / GRAVITY) * 180) / Math.PI;
+  return Math.max(-BANK_LIMIT, Math.min(BANK_LIMIT, bank));
 }
 
 /**
@@ -372,7 +420,37 @@ export function tween(from: LiveAsset, to: LiveAsset, fraction: number): Motion 
     from.position[0] + (to.position[0] - from.position[0]) * t,
     from.position[1] + (to.position[1] - from.position[1]) * t,
   ];
-  return { position, heading: headingBetween(from, to, t) };
+  const motion: Motion = { position, heading: headingBetween(from, to, t) };
+
+  if (from.altitude !== undefined || to.altitude !== undefined) {
+    const a = from.altitude ?? to.altitude!;
+    const b = to.altitude ?? a;
+    motion.altitude = a + (b - a) * t;
+  }
+
+  /*
+   * Attitude comes from the two reports rather than from either one, because
+   * neither of them contains it: a position stream says where, not how. The
+   * span between them is where the climb and the turn are.
+   */
+  const seconds = Math.max(0, (to.updated - from.updated) / 1000);
+  const overGround = distance(from.position, to.position);
+  const climb = (to.altitude ?? 0) - (from.altitude ?? 0);
+  motion.pitch = pathAngle(climb, overGround);
+
+  /*
+   * Bank needs a *rate* of turn, which needs two headings. Two positions give
+   * one bearing between them and say nothing about whether it is changing, so a
+   * feed that reports position only flies wings level. That is the correct
+   * answer rather than a missing feature: the data does not contain the turn.
+   */
+  const turning =
+    from.heading !== undefined && to.heading !== undefined && seconds > 0
+      ? shortestTurn(from.heading, to.heading) / seconds
+      : 0;
+  motion.roll = bankFor(turning, to.speed ?? (seconds > 0 ? overGround / seconds : 0));
+
+  return motion;
 }
 
 function headingBetween(from: LiveAsset, to: LiveAsset, t: number): number {
@@ -407,13 +485,24 @@ function headingBetween(from: LiveAsset, to: LiveAsset, t: number): number {
 export function drivenBy(model: Model3D, motion: Motion): Model3D {
   const follow = model.follow;
   if (!follow) return model;
-  return {
+  const driven: Model3D = {
     ...model,
     position: motion.position,
     heading: follow.faceForward
       ? (((motion.heading + (follow.headingOffset ?? 0)) % 360) + 360) % 360
       : model.heading,
   };
+  /*
+   * Both are opted into, and separately. A feed that reports height does not
+   * mean the user wants the model flying, and a fleet of vans banking into
+   * roundabouts is not a fleet of vans.
+   */
+  if (follow.altitude && motion.altitude !== undefined) driven.altitude = motion.altitude;
+  if (follow.attitude) {
+    driven.pitch = motion.pitch ?? 0;
+    driven.roll = motion.roll ?? 0;
+  }
+  return driven;
 }
 
 /**
@@ -434,7 +523,15 @@ export function motionFor(
   const seen = frames.get(follow.asset);
   if (!seen) return null;
   if (!seen.from) {
-    return { position: seen.to.position, heading: seen.to.heading ?? model.heading };
+    return {
+      position: seen.to.position,
+      heading: seen.to.heading ?? model.heading,
+      altitude: seen.to.altitude,
+      // One report is a place, not a movement. Nothing can be said about
+      // attitude from it, and level is the only honest guess.
+      pitch: 0,
+      roll: 0,
+    };
   }
   const span = seen.atTo - seen.atFrom;
   /*

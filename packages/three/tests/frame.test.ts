@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Box3, Matrix4, Vector3 } from "three";
 
 import { frameOf, newModel, toMercator } from "@alidade/core";
+import type { Model3D } from "@alidade/core";
 
 import { cameraMatrix, placementMatrix, visibilityBoost } from "../src/frame";
 import { BUILTIN_HEIGHTS, buildBuiltin, isBuiltin } from "../src/builtin";
@@ -97,6 +98,65 @@ describe("the size floor", () => {
   });
 });
 
+describe("attitude in the placement matrix", () => {
+  /*
+   * The signs are not obvious — the scene frame reaches the map through a
+   * mirror in y, and the mesh's own +z is its nose — so they are pinned here by
+   * pushing a nose vector and a wingtip through the matrix and reading off
+   * which way each went. Getting one wrong draws an aeroplane climbing towards
+   * a runway, or banking out of its own turn, and neither is something the type
+   * checker has an opinion about.
+   */
+  const at = (extra: Partial<Model3D>): Model3D => ({
+    ...newModel({ url: "builtin:aircraft", name: "x", position: [origin.lon, origin.lat] }),
+    altitude: 0,
+    heading: 0,
+    clamp: false,
+    ...extra,
+  });
+  /** In the mesh's own frame the nose is +z and the right wing is −x. */
+  const nose = new Vector3(0, 0, 10);
+  const rightWing = new Vector3(-10, 0, 0);
+  const put = (model: Model3D, v: Vector3) =>
+    v.clone().applyMatrix4(placementMatrix(frameOf(model, origin)));
+
+  it("points a level model along its heading", () => {
+    // Heading 0 is north, and north is −z in a frame whose +z is south.
+    expect(put(at({}), nose).z).toBeLessThan(-9);
+    expect(put(at({}), nose).y).toBeCloseTo(0, 6);
+  });
+
+  it("lifts the nose for a positive pitch and drops it for a negative one", () => {
+    expect(put(at({ pitch: 10 }), nose).y).toBeGreaterThan(1);
+    expect(put(at({ pitch: -10 }), nose).y).toBeLessThan(-1);
+  });
+
+  it("drops the right wing for a positive roll", () => {
+    const right = put(at({ roll: 20 }), rightWing);
+    expect(right.y).toBeLessThan(-3);
+    // Facing north, the right wing is to the east, which is +x here.
+    expect(right.x).toBeGreaterThan(9);
+  });
+
+  it("leaves a placement with no attitude exactly as it was", () => {
+    // Every model written before the two angles existed has to draw identically.
+    const level = placementMatrix(frameOf(at({}), origin)).elements;
+    const stated = placementMatrix(frameOf(at({ pitch: 0, roll: 0 }), origin)).elements;
+    for (let i = 0; i < 16; i++) expect(stated[i]).toBeCloseTo(level[i]!, 12);
+  });
+
+  it("keeps bank and pitch out of each other's way", () => {
+    /*
+     * Applied in the wrong order the two interfere, and an aircraft banking
+     * while descending ends up yawed as well — the nose wanders off the
+     * centreline as it rolls, which is exactly what an approach must not do.
+     */
+    const banked = put(at({ pitch: -3, roll: 25 }), nose);
+    const level = put(at({ pitch: -3 }), nose);
+    expect(banked.x).toBeCloseTo(level.x, 6);
+  });
+});
+
 describe("the built-in models", () => {
   it("builds a fresh object each time, so two placements are not one mesh", () => {
     const a = buildBuiltin("builtin:turbine");
@@ -134,6 +194,56 @@ describe("the built-in models", () => {
     for (const name of ["car", "van", "truck", "aircraft", "boat", "drone", "bird"]) {
       expect(buildBuiltin(`builtin:${name}`), name).not.toBeNull();
     }
+  });
+
+  /**
+   * Every body drove, flew and sailed backwards.
+   *
+   * glTF puts a model's front on +z and `yawOf` is written to that convention,
+   * and every body in the catalogue was drawn nose-at-−z. On a circuit it was
+   * invisible — a shape going round a ring reads as going round a ring
+   * whichever end leads — and it was unmissable the first time an aeroplane was
+   * pointed at a runway.
+   *
+   * A proportion test cannot catch this, which is why the one below did not.
+   * Each body is checked against a landmark instead: something whose position
+   * along the body is known, so its sign says which way the model faces.
+   */
+  it("faces the way glTF says a model faces", () => {
+    const along = (name: string, pick: "highest" | "furthest") => {
+      const built = buildBuiltin(`builtin:${name}`)!;
+      built.updateMatrixWorld(true);
+      let best: Vector3 | null = null;
+      built.traverse((node) => {
+        // Meshes only. A container group's box is the whole model's, so the
+        // "highest part" of every model came out as the model itself.
+        if (!(node as { isMesh?: boolean }).isMesh) return;
+        const box = new Box3().setFromObject(node);
+        if (!Number.isFinite(box.max.y)) return;
+        const at = new Vector3((box.min.x + box.max.x) / 2, box.max.y, (box.min.z + box.max.z) / 2);
+        if (pick === "highest" ? !best || at.y > best.y : !best || at.z > best.z) best = at;
+      });
+      return best!;
+    };
+
+    // The fin is the highest thing on an airliner and it is at the back.
+    expect(along("aircraft", "highest").z, "airliner fin").toBeLessThan(-8);
+    // A lorry's trailer is taller than its cab, and behind it.
+    expect(along("truck", "highest").z, "lorry trailer").toBeLessThan(0);
+    // A van's box body is taller than its bonnet, and behind it.
+    expect(along("van", "highest").z, "van body").toBeLessThan(0);
+    // A car's cabin sits behind the middle.
+    expect(along("car", "highest").z, "car cabin").toBeLessThan(0);
+    /*
+     * A small vessel's wheelhouse is forward of amidships and well aft of the
+     * stem — not behind the middle, which is what this first asserted and what
+     * a workboat does not do.
+     */
+    const mast = along("boat", "highest").z;
+    expect(mast, "boat mast").toBeGreaterThan(0);
+    expect(mast, "boat mast").toBeLessThan(4);
+    // A bird's head is the exception: it is the highest point and it is in front.
+    expect(along("bird", "highest").z, "bird head").toBeGreaterThan(0);
   });
 
   it("points every vehicle the way its heading says", () => {

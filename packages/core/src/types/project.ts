@@ -624,6 +624,23 @@ export interface Model3D {
   altitude: number;
   /** Degrees clockwise from north, the way a bearing is stated. */
   heading: number;
+  /**
+   * Degrees the nose is lifted above the horizontal. Negative is nose down.
+   *
+   * Optional, and absent means level, because almost nothing on a map has an
+   * attitude: a building does not pitch and a lorry pitches only over a hill
+   * nobody is modelling. An aircraft does, and an aircraft that descends
+   * towards a runway while sitting perfectly level does not look like it is
+   * landing — it looks like it is sinking.
+   */
+  pitch?: number;
+  /**
+   * Degrees banked, right wing down positive.
+   *
+   * The other half of the same observation. An airliner turns by banking; one
+   * that changes heading while staying level is not turning, it is sliding.
+   */
+  roll?: number;
   /** Uniform. 1 draws the file's own units as metres, which is what glTF specifies. */
   scale: number;
   anchor: ModelAnchor;
@@ -675,6 +692,27 @@ export interface Follow {
   asset: string;
   /** Turn the model to face the way the asset is going. */
   faceForward: boolean;
+  /**
+   * Lean into turns and climbs.
+   *
+   * Off by default, and rightly: a car does not bank, and a lorry that rolls
+   * fifteen degrees into a roundabout has crashed. It is on for the things that
+   * fly, where the attitude is most of what makes the movement read as flight.
+   *
+   * Nothing about attitude is reported by an ordinary feed — a position stream
+   * says where, not how — so both angles are worked out from consecutive
+   * reports: pitch from the climb against the ground covered, bank from how
+   * fast the heading is changing at the speed it is going.
+   */
+  attitude?: boolean;
+  /**
+   * Take the altitude from the feed as well as the position.
+   *
+   * Separate from `attitude` because they are separate questions and a feed may
+   * answer one and not the other. A tracker on a bird reports height and
+   * nothing else; a road fleet reports neither.
+   */
+  altitude?: boolean;
   /** Degrees added to the heading, for a file whose front is not its own +z. */
   headingOffset?: number;
   /**
@@ -752,6 +790,16 @@ export interface LiveAsset {
   heading?: number;
   /** Metres per second. Absent when the feed does not report one. */
   speed?: number;
+  /**
+   * Metres above the ground. Absent for a feed of things on it.
+   *
+   * Above the ground rather than above the sea, because that is the question a
+   * map is asked — an aircraft on final approach is two hundred metres up, not
+   * two hundred metres up plus whatever the plateau under it happens to be.
+   * A feed reporting altitude above the ellipsoid has to subtract before it
+   * gets here, and most already do.
+   */
+  altitude?: number;
   /** Epoch milliseconds, from the feed. */
   updated: number;
   /** What to call it on the map. Falls back to the id. */
