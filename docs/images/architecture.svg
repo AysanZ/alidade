@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 620" width="1000" height="620" font-family="'IBM Plex Sans', system-ui, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#4C8DFF"/>
+    </marker>
+    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#66666D"/>
+    </marker>
+  </defs>
+
+  <rect width="1000" height="620" fill="#0A0A0B"/>
+
+  <text x="34" y="46" fill="#E4E4E6" font-size="19" font-weight="600">Alidade</text>
+  <text x="112" y="46" fill="#66666D" font-size="13">the map is one JSON document; everything else is a function of it</text>
+
+  <!-- ================= studio ================= -->
+  <rect x="34" y="80" width="236" height="300" rx="3" fill="#0E0E10" stroke="#252528"/>
+  <text x="52" y="106" fill="#9A9AA0" font-size="11" font-weight="600" letter-spacing="1.1">APPS/STUDIO</text>
+
+  <rect x="52" y="122" width="200" height="52" rx="3" fill="#161618" stroke="#1A1A1C"/>
+  <text x="68" y="145" fill="#E4E4E6" font-size="13" font-weight="500">React interface</text>
+  <text x="68" y="163" fill="#66666D" font-size="11">panels, inspector, drawing tools</text>
+
+  <rect x="52" y="186" width="200" height="60" rx="3" fill="#161618" stroke="#1A1A1C"/>
+  <text x="68" y="209" fill="#E4E4E6" font-size="13" font-weight="500">useProject</text>
+  <text x="68" y="227" fill="#66666D" font-size="11">60 whole documents deep,</text>
+  <text x="68" y="241" fill="#66666D" font-size="11">not a stack of inverses</text>
+
+  <rect x="52" y="258" width="200" height="46" rx="3" fill="#161618" stroke="#1A1A1C"/>
+  <text x="68" y="280" fill="#E4E4E6" font-size="13" font-weight="500">Export · Open</text>
+  <text x="68" y="296" fill="#66666D" font-size="11">GeoJSON · KML · GPX · CSV · WKT</text>
+
+  <rect x="52" y="316" width="200" height="44" rx="3" fill="#161618" stroke="#1A1A1C"/>
+  <text x="68" y="338" fill="#E4E4E6" font-size="13" font-weight="500">localStorage</text>
+  <text x="68" y="353" fill="#66666D" font-size="11">~40 kB, no geometry in it</text>
+
+  <!-- ================= core ================= -->
+  <rect x="322" y="80" width="266" height="300" rx="3" fill="#0E0E10" stroke="#4C8DFF" stroke-opacity=".45"/>
+  <text x="340" y="106" fill="#4C8DFF" font-size="11" font-weight="600" letter-spacing="1.1">PACKAGES/CORE</text>
+  <text x="340" y="122" fill="#66666D" font-size="11">knows about no renderer at all</text>
+
+  <rect x="340" y="136" width="230" height="56" rx="3" fill="#161618" stroke="#1A1A1C"/>
+  <text x="356" y="159" fill="#E4E4E6" font-size="13" font-weight="500">MapProject</text>
+  <text x="356" y="177" fill="#66666D" font-size="11">view · basemap · sources · tree</text>
+
+  <text x="455" y="212" fill="#66666D" font-size="11" text-anchor="middle">before, after</text>
+  <path d="M455 218 L455 236" stroke="#4C8DFF" stroke-width="1.4" marker-end="url(#a)"/>
+
+  <rect x="340" y="242" width="230" height="52" rx="3" fill="#161618" stroke="#4C8DFF" stroke-opacity=".4"/>
+  <text x="356" y="265" fill="#E4E4E6" font-size="13" font-weight="500">reconcile(a, b)</text>
+  <text x="356" y="283" fill="#66666D" font-size="11">symbology · filters · geodesy · sun</text>
+
+  <path d="M455 300 L455 318" stroke="#4C8DFF" stroke-width="1.4" marker-end="url(#a)"/>
+
+  <rect x="340" y="324" width="230" height="40" rx="3" fill="#0A0A0B" stroke="#4C8DFF" stroke-opacity=".4"/>
+  <text x="356" y="349" fill="#4C8DFF" font-size="12.5" font-family="'IBM Plex Mono', ui-monospace, monospace">Op[]  — data, not calls</text>
+
+  <path d="M270 230 L316 230" stroke="#4C8DFF" stroke-width="1.4" marker-end="url(#a)"/>
+
+  <!-- ================= adapters ================= -->
+  <rect x="640" y="80" width="326" height="300" rx="3" fill="#0E0E10" stroke="#252528"/>
+  <text x="658" y="106" fill="#9A9AA0" font-size="11" font-weight="600" letter-spacing="1.1">ADAPTERS</text>
+  <text x="658" y="122" fill="#66666D" font-size="11">the only folders that import a renderer</text>
+
+  <rect x="658" y="136" width="290" height="88" rx="3" fill="#161618" stroke="#1A1A1C"/>
+  <text x="674" y="159" fill="#E4E4E6" font-size="13" font-weight="500">packages/maplibre</text>
+  <text x="674" y="177" fill="#66666D" font-size="11">applies each op to MapLibre GL</text>
+  <text x="674" y="195" fill="#66666D" font-size="11">refuses a layer before its source,</text>
+  <text x="674" y="211" fill="#66666D" font-size="11">and a source something still reads</text>
+
+  <rect x="658" y="236" width="290" height="82" rx="3" fill="#161618" stroke="#1A1A1C"/>
+  <text x="674" y="259" fill="#E4E4E6" font-size="13" font-weight="500">packages/three</text>
+  <text x="674" y="277" fill="#66666D" font-size="11">glTF in one custom layer, sharing</text>
+  <text x="674" y="293" fill="#66666D" font-size="11">the map's camera and depth buffer</text>
+  <text x="674" y="309" fill="#66666D" font-size="11">given placements, never documents</text>
+
+  <rect x="658" y="330" width="290" height="34" rx="3" fill="#0A0A0B" stroke="#38D6C0" stroke-opacity=".35"/>
+  <text x="674" y="352" fill="#38D6C0" font-size="12">one canvas · shared depth · one sun</text>
+
+  <path d="M576 344 L634 344" stroke="#4C8DFF" stroke-width="1.4" marker-end="url(#a)"/>
+
+  <!-- ================= api ================= -->
+  <rect x="34" y="416" width="932" height="168" rx="3" fill="#0E0E10" stroke="#252528"/>
+  <text x="52" y="442" fill="#9A9AA0" font-size="11" font-weight="600" letter-spacing="1.1">SERVICES/API — FASTAPI</text>
+
+  <rect x="52" y="458" width="212" height="102" rx="3" fill="#161618" stroke="#1A1A1C"/>
+  <text x="68" y="481" fill="#E4E4E6" font-size="13" font-weight="500">Ingest</text>
+  <text x="68" y="499" fill="#66666D" font-size="11">ogr2ogr, file or link</text>
+  <text x="68" y="515" fill="#66666D" font-size="11">reprojected to EPSG:4326</text>
+  <text x="68" y="531" fill="#66666D" font-size="11">GeoJSON · SHP · GPKG</text>
+  <text x="68" y="547" fill="#66666D" font-size="11">KML · GPX</text>
+
+  <rect x="282" y="458" width="212" height="102" rx="3" fill="#161618" stroke="#1A1A1C"/>
+  <text x="298" y="481" fill="#E4E4E6" font-size="13" font-weight="500">Vector tiles</text>
+  <text x="298" y="499" fill="#66666D" font-size="11">ST_AsMVT inside PostGIS</text>
+  <text x="298" y="515" fill="#66666D" font-size="11">nothing but the encoded</text>
+  <text x="298" y="531" fill="#66666D" font-size="11">tile crosses the wire</text>
+
+  <rect x="512" y="458" width="212" height="102" rx="3" fill="#161618" stroke="#1A1A1C"/>
+  <text x="528" y="481" fill="#E4E4E6" font-size="13" font-weight="500">OGC services</text>
+  <text x="528" y="499" fill="#66666D" font-size="11">WMS GetCapabilities,</text>
+  <text x="528" y="515" fill="#66666D" font-size="11">so a layer, style and format</text>
+  <text x="528" y="531" fill="#66666D" font-size="11">are picked, not typed</text>
+
+  <rect x="742" y="458" width="206" height="102" rx="3" fill="#161618" stroke="#38D6C0" stroke-opacity=".3"/>
+  <text x="758" y="481" fill="#E4E4E6" font-size="13" font-weight="500">Live feed</text>
+  <text x="758" y="499" fill="#66666D" font-size="11">WebSocket, snapshot</text>
+  <text x="758" y="515" fill="#66666D" font-size="11">update, remove</text>
+  <text x="758" y="531" fill="#66666D" font-size="11">folded, applied 5× a second</text>
+
+  <path d="M152 410 L152 384" stroke="#66666D" stroke-width="1.3" marker-end="url(#g)"/>
+  <path d="M803 410 L803 384" stroke="#66666D" stroke-width="1.3" marker-end="url(#g)"/>
+
+  <text x="966" y="604" fill="#252528" font-size="10.5" text-anchor="end">No API keys anywhere in this diagram.</text>
+</svg>
