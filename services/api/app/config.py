@@ -8,6 +8,11 @@ class Settings(BaseSettings):
     postgres_host: str = "localhost"
     postgres_port: int = 5432
     tile_cache_seconds: int = 300
+    # Connections held against Postgres. Ten of them competing for two
+    # cores is slower than five that are not, and `max_connections` on the
+    # server is 20, shared with psql and anything else that attaches.
+    db_pool_min: int = 1
+    db_pool_max: int = 10
     cors_origins: str = "http://localhost:5173"
     max_upload_mb: int = 200
     # Where uploaded 3D models are kept. A volume in the compose stack.

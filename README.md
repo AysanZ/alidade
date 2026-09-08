@@ -90,6 +90,10 @@ straight into PostGIS:
 ./data/seed.sh wards.gpkg
 ```
 
+For a server rather than a laptop, `deploy/docker-compose.prod.yml` runs images
+built in CI instead of building anything locally, and publishes nothing but
+Caddy. See [deployment](docs/deployment.md).
+
 <a name="no-keys"></a>
 ## No API keys
 
@@ -120,6 +124,8 @@ fixed, named after the symptom rather than the cause.
   at length: the document model, geodesic drawing, the sun, the live feed's contract.
 - **[Raster time series](docs/rasters.md)** — GeoTIFF scenes, and picking between
   captures of the same place at different dates.
+- **[Deployment](docs/deployment.md)** — production on a small VPS: images built in
+  CI, Caddy for TLS, tile caching, and the parts that only fail once you are live.
 - **[Contributing](CONTRIBUTING.md)**
 
 ## Licence

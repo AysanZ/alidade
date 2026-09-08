@@ -1,0 +1,73 @@
+# deploy/Caddyfile
+#
+# Caddy gets a certificate per hostname from Let's Encrypt on first request and
+# renews without being asked. `.dev` is on the HSTS preload list, so browsers
+# refuse plain HTTP for aysan.dev whatever we do — there is no working
+# http-only fallback to keep as a safety net, which is worth knowing before the
+# first deploy rather than after it.
+
+{
+	email {$ACME_EMAIL}
+
+	# Uncomment while testing DNS or firewall rules. Staging certificates are
+	# not trusted by browsers, but they do not burn the 5-per-week rate limit
+	# on the real one, and hitting that limit costs you a week.
+	# acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+(common) {
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "SAMEORIGIN"
+	}
+	encode zstd gzip
+}
+
+# ------------------------------------------------------------- the portfolio
+aysan.dev {
+	import common
+	root * /srv/portfolio
+	try_files {path} {path}/ /index.html
+	file_server
+
+	@hashed path /assets/* /_next/static/* /static/*
+	header @hashed Cache-Control "public, max-age=31536000, immutable"
+	header /index.html Cache-Control "no-cache"
+}
+
+www.aysan.dev {
+	redir https://aysan.dev{uri} permanent
+}
+
+# ------------------------------------------------------------------ alidade
+alidade.aysan.dev {
+	import common
+	# Caddy proxies a WebSocket upgrade without being told to, so the live feed
+	# needs no special case here the way it does in nginx.
+	reverse_proxy web:80 {
+		header_up X-Forwarded-Proto {scheme}
+	}
+}
+
+# ------------------------------------------------ template for the next one
+#
+# Every further project is one block. Put its container on the `edge` network
+# in docker-compose.prod.yml and add:
+#
+# thing.aysan.dev {
+# 	import common
+# 	reverse_proxy thing-web:80
+# }
+#
+# A static project needs no container at all — drop the build into
+# ./portfolio/thing/ and serve it from a path, or give it its own root:
+#
+# thing.aysan.dev {
+# 	import common
+# 	root * /srv/portfolio/thing
+# 	try_files {path} {path}/ /index.html
+# 	file_server
+# }
