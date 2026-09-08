@@ -9,8 +9,9 @@ import { place, type Extent } from "../layers";
 import { uniqueId } from "../tree";
 import { SAMPLES, SAMPLE_GROUPS } from "../samples";
 import { Catalogue } from "./Catalogue";
+import { ImageryTab } from "./ImageryTab";
 
-type Tab = "catalogue" | "samples" | "file" | "url" | "wms";
+type Tab = "catalogue" | "samples" | "file" | "url" | "wms" | "imagery";
 
 export type { Extent };
 
@@ -36,7 +37,7 @@ export function AddData(props: Props) {
           </button>
         </div>
         <div className="mtabs">
-          {(["catalogue", "samples", "file", "url", "wms"] as Tab[]).map((id) => (
+          {(["catalogue", "samples", "file", "url", "wms", "imagery"] as Tab[]).map((id) => (
             <button key={id} className={tab === id ? "on" : ""} onClick={() => setTab(id)}>
               {id === "catalogue"
                 ? "In the database"
@@ -46,7 +47,9 @@ export function AddData(props: Props) {
                     ? "File"
                     : id === "url"
                       ? "Link"
-                      : "WMS"}
+                      : id === "wms"
+                        ? "WMS"
+                        : "Imagery"}
             </button>
           ))}
         </div>
@@ -66,6 +69,7 @@ export function AddData(props: Props) {
           {tab === "file" && <FileTab {...props} />}
           {tab === "url" && <UrlTab {...props} />}
           {tab === "wms" && <WmsTab {...props} />}
+          {tab === "imagery" && <ImageryTab {...props} />}
         </div>
       </div>
     </div>
@@ -376,3 +380,4 @@ function WmsTab({ edit, onClose, onAdded }: Props) {
     </>
   );
 }
+

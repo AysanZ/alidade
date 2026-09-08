@@ -14,6 +14,11 @@ services:
   web:
     image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER in .env}/alidade-web:${TAG:-latest}
     restart: unless-stopped
+    environment:
+      # Writes need this in an X-Alidade-Write header. Reads are open.
+      ALIDADE_WRITE_TOKEN: ${WRITE_TOKEN:?set WRITE_TOKEN in .env}
+      # Without the filter, envsubst would eat $host and every other nginx var.
+      NGINX_ENVSUBST_FILTER: "^ALIDADE_"
     depends_on:
       api:
         condition: service_healthy
@@ -37,6 +42,8 @@ services:
       TILE_CACHE_SECONDS: ${TILE_CACHE_SECONDS:-604800}
       CORS_ORIGINS: ${CORS_ORIGINS:?set CORS_ORIGINS in .env}
       MODELS_DIR: /srv/models
+      RASTERS_DIR: /srv/rasters
+      MAX_RASTER_MB: ${MAX_RASTER_MB:-4096}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
       LIVE_FLEET_SIZE: ${LIVE_FLEET_SIZE:-60}
       LIVE_CENTRE_LON: ${LIVE_CENTRE_LON:-51.39}
@@ -44,6 +51,8 @@ services:
       LIVE_INTERVAL_SECONDS: ${LIVE_INTERVAL_SECONDS:-1.0}
     volumes:
       - models:/srv/models
+      # Converted imagery. Files, not rows, and much larger than a .glb.
+      - rasters:/srv/rasters
     depends_on:
       postgis:
         condition: service_healthy
@@ -112,4 +121,5 @@ networks:
 volumes:
   pgdata:
   models:
+  rasters:
   tile_cache:

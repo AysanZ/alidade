@@ -265,7 +265,15 @@ export interface LayerNode {
   marker?: MarkerStyle;
   labels?: LabelStyle;
   filter?: FilterNode;
-  /** Raster layers only. Not read by compile or reconcile yet. */
+  /**
+   * Imagery settings, for a raster layer backed by the GeoTIFF catalogue.
+   *
+   * The mosaic rule and the rendering, not the images. The tile template in
+   * `sources[source]` is derived from this by the compiler and never authored:
+   * this is the question, that is the answer, the same arrangement as
+   * `environment.sun` beside the `light` it produces. Absent for every other
+   * kind of raster layer, including WMS.
+   */
   imagery?: ImagerySettings;
   /** Kept for the interface, never used for rendering. */
   metadata?: {

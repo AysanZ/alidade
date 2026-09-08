@@ -5,6 +5,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import type { Bookmark, Extent, LayerNode, Model3D, Projection, Selection } from "@alidade/core";
 import {
   GLOBE_IS_ROUND_BELOW,
+  contributing,
   denominatorAt,
   findModel,
   formatCoordinate,
@@ -35,16 +36,23 @@ import {
 } from "@alidade/core";
 
 import { AddData } from "./components/AddData";
+import { useQueryClient } from "@tanstack/react-query";
+
+import { editImage, editImagery, removeImage, useImagery } from "./imagery";
 import { AttributeTable } from "./components/AttributeTable";
 import { LayerMenu, moveWithinSlot } from "./components/LayerMenu";
 import { BasemapGallery } from "./components/BasemapGallery";
 import { DrawOverlay } from "./components/DrawOverlay";
+import { FootprintOverlay } from "./components/FootprintOverlay";
+import { ImageryDock } from "./components/ImageryDock";
+import { ImageryPanel } from "./components/ImageryPanel";
 import { DrawPanel } from "./components/DrawPanel";
 import { FeatureTip, type Tip } from "./components/FeatureTip";
 import { Identify, type Identified } from "./components/Identify";
 import { Inspector } from "./components/Inspector";
 import { Legend } from "./components/Legend";
 import { LayerTree } from "./components/LayerTree";
+import { Showcase, previews, type Showpiece } from "./components/Showcase";
 import { LIVE_ID, LiveInspector } from "./components/LiveInspector";
 import { MapChrome, type Camera } from "./components/MapChrome";
 import { MapControls } from "./components/MapControls";
@@ -53,7 +61,7 @@ import { ModelInspector } from "./components/ModelInspector";
 import { ModelsPanel } from "./components/ModelsPanel";
 import { ProjectPanel } from "./components/ProjectPanel";
 import { Rail, type PaneId } from "./components/Rail";
-import { ScenePanel } from "./components/ScenePanel";
+import { ScenePanel, turnBuildingsOn } from "./components/ScenePanel";
 import { TitleBar } from "./components/TitleBar";
 import { emptyProject, emptyStyle, migrate } from "./project";
 import { allLayers, bundleIdsOf, duplicateNode, findLayer, removeNode, withNode } from "./tree";
@@ -126,6 +134,15 @@ export default function App() {
   const [adding, setAdding] = useState(false);
   const [menu, setMenu] = useState<{ id: string; at: { x: number; y: number } } | null>(null);
   const [table, setTable] = useState<string | null>(null);
+  const client = useQueryClient();
+  /*
+   * The imagery catalogue is server state, not document state. Which images
+   * exist is whatever the registry holds when it is asked, and none of it
+   * belongs in the undo history — what the document keeps is the rule.
+   */
+  const [viewport, setViewport] = useState<Extent | null>(null);
+  const [image, setImage] = useState<string | null>(null);
+  const [hoveredImage, setHoveredImage] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [presenting, setPresenting] = useState(false);
@@ -895,6 +912,22 @@ export default function App() {
     });
   }, [centre, camera.zoom, project.chrome.grids, edit]);
 
+  /*
+   * What the imagery catalogue is asked about. Kept in React state rather than
+   * in the document: it is where the camera happens to be pointing this second.
+   */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const bounds = map.getBounds();
+    setViewport({
+      west: bounds.getWest(),
+      south: bounds.getSouth(),
+      east: bounds.getEast(),
+      north: bounds.getNorth(),
+    });
+  }, [centre, camera.zoom]);
+
   /**
    * Put the camera where an extent fills the screen.
    *
@@ -1022,7 +1055,92 @@ export default function App() {
     [transient],
   );
 
+  /*
+   * The showcase. Each entry makes the conditions it needs rather than reporting
+   * that they are missing, for the reason the landing demonstration already
+   * gives: a button whose answer is "turn four things on first" is a button that
+   * does not work.
+   */
+  const showpieces: Showpiece[] = [
+    {
+      id: "landing",
+      title: "Fly an approach",
+      blurb:
+        "An aeroplane on final to Mehrabad, banking into the turn. Its attitude and altitude come from the track rather than from a keyframe.",
+      action: "Fly it",
+      onAction: flyApproach,
+      preview: previews.landing,
+    },
+    {
+      id: "buildings",
+      title: "Buildings, standing up",
+      blurb:
+        "OSM footprints raised to their real height and lit by the sun for a real instant, so the shadows fall where they would have.",
+      action: "Raise them",
+      onAction: () => {
+        edit((d) => turnBuildingsOn(d));
+        setPane("scene");
+      },
+      preview: previews.buildings,
+    },
+    {
+      id: "live",
+      title: "A live fleet",
+      blurb:
+        "Positions over a WebSocket as an ordinary row in the table of contents. Assets that go quiet are drawn hollow rather than deleted.",
+      action: "Connect the feed",
+      onAction: () => {
+        edit((d) => {
+          d.assets ??= defaultAssets();
+          d.assets.visible = true;
+          return d;
+        });
+        setSelected(LIVE_ID);
+      },
+      preview: previews.live,
+    },
+    {
+      id: "models",
+      title: "3D models on the ground",
+      blurb:
+        "glTF placed the way a surveyor states it — position, height, bearing — standing on the terrain, and assignable to every point in a layer at once.",
+      action: "Open models",
+      onAction: () => setPane("models"),
+      preview: previews.models,
+    },
+    {
+      id: "globe",
+      title: "A real globe",
+      blurb:
+        "Not a picture of one. The projection changes and the layers stay where they are, because the map is a document and the renderer is downstream of it.",
+      action: "Go round",
+      onAction: () => setProjection("globe"),
+      preview: previews.globe,
+    },
+    {
+      id: "imagery",
+      title: "Satellite imagery",
+      blurb:
+        "Drop GeoTIFFs and they are placed by their own georeferencing and indexed by their real footprint. Several images of one place sit together, and a rule decides which is drawn where.",
+      action: "Add imagery",
+      onAction: () => setAdding(true),
+      preview: previews.imagery,
+    },
+  ];
+
   const denominator = Math.round(denominatorAt(camera.zoom, camera.latitude));
+
+  const imageryLayer = project.tree.find(
+    (node): node is LayerNode => node.type === "layer" && node.imagery !== undefined,
+  );
+  // Nothing is fetched until there is a layer to draw it with, so an install
+  // with no imagery does not poll a catalogue on every pan.
+  const imagery = useImagery(imageryLayer ? viewport : null);
+  const images = imagery.data ?? [];
+  const showingImagery = imageryLayer !== undefined && selected === imageryLayer.id;
+  const drawnImages = new Set(
+    imageryLayer?.imagery ? contributing(images, imageryLayer.imagery.rule).map((i) => i.id) : [],
+  );
 
   /*
    * The hover tooltip.
@@ -1195,6 +1313,7 @@ export default function App() {
               feed={feed.status.state}
             />
           )}
+          {pane === "layers" && <Showcase items={showpieces} />}
           {pane === "basemaps" && <BasemapGallery project={project} edit={edit} />}
           {pane === "scene" && (
             <ScenePanel
@@ -1319,6 +1438,23 @@ export default function App() {
             Live feedback sits above the canvas rather than in the style. The
             rubber band follows the mouse, and the mouse is not part of the map.
           */}
+          {showingImagery && (
+            <FootprintOverlay
+              images={images}
+              selected={image}
+              hovered={hoveredImage}
+              drawn={drawnImages}
+              project={(position) => {
+                const map = mapRef.current;
+                if (!map) return null;
+                const point = map.project(position);
+                return { x: point.x, y: point.y };
+              }}
+              onSelect={setImage}
+              onHover={setHoveredImage}
+            />
+          )}
+
           <DrawOverlay
             annotations={project.annotations}
             active={drawing.active}
@@ -1407,6 +1543,30 @@ export default function App() {
             onZoomTo={() => zoomToModel(selectedModel)}
             onSelect={setSelectedModel}
           />
+        ) : showingImagery && imageryLayer?.imagery ? (
+          <ImageryPanel
+            settings={imageryLayer.imagery}
+            images={images}
+            selected={images.find((entry) => entry.id === image) ?? null}
+            onSettings={(change) => editImagery(edit, change)}
+            onEditImage={async (id, changes) => {
+              await editImage(id, changes);
+              void client.invalidateQueries({ queryKey: ["imagery"] });
+            }}
+            onRemoveImage={async (id) => {
+              await removeImage(id);
+              if (image === id) setImage(null);
+              void client.invalidateQueries({ queryKey: ["imagery"] });
+            }}
+            onZoomTo={(entry) =>
+              flyTo({
+                west: entry.bbox[0],
+                south: entry.bbox[1],
+                east: entry.bbox[2],
+                north: entry.bbox[3],
+              })
+            }
+          />
         ) : selected === LIVE_ID ? (
           <LiveInspector
             project={project}
@@ -1449,6 +1609,25 @@ export default function App() {
           />
         )}
       </div>
+
+      {showingImagery && imageryLayer?.imagery && (
+        <ImageryDock
+          images={images}
+          loading={imagery.isFetching}
+          selected={image}
+          comparing={null}
+          rule={imageryLayer.imagery.rule}
+          onSelect={setImage}
+          onLock={(id) => {
+            setImage(id);
+            editImagery(edit, (s) => ({ ...s, rule: { kind: "lock", image: id } }));
+          }}
+          onCompare={setImage}
+          onHover={setHoveredImage}
+          onAddDate={setImage}
+          onClose={() => setSelected(null)}
+        />
+      )}
 
       {table && (
         <AttributeTable

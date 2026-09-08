@@ -86,7 +86,16 @@ export class FakeMap implements Renderer {
   }
   getSource(id: string) {
     if (!this.sources.has(id)) return undefined;
-    return { id, setData: (data: unknown) => this.log("setData", id, data) };
+    /*
+     * A real raster source has `setTiles` and no `setData`, and a geojson source
+     * the other way round. The fake offers both; the adapter's own guard is what
+     * is under test.
+     */
+    return {
+      id,
+      setData: (data: unknown) => this.log("setData", id, data),
+      setTiles: (tiles: string[]) => this.log("setTiles", id, tiles),
+    };
   }
 
   /** What setStyle does: everything the application added is gone. */

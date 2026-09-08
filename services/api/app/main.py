@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 
 from .config import settings
 from .db import close_pool, open_pool, pool
-from .routers import layers, live, models, services, tiles
+from .routers import layers, live, models, rasters, services, tiles
 
 
 @asynccontextmanager
@@ -28,6 +28,7 @@ app.include_router(tiles.router)
 app.include_router(layers.router)
 app.include_router(services.router)
 app.include_router(models.router)
+app.include_router(rasters.router)
 app.include_router(live.router)
 
 logger = logging.getLogger(__name__)

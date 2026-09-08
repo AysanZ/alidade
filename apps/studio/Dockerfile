@@ -25,7 +25,8 @@ RUN pnpm build
 
 FROM nginx:1.27-alpine
 COPY --from=build /repo/apps/studio/dist /usr/share/nginx/html
-COPY deploy/nginx/default.conf /etc/nginx/conf.d/default.conf
+# A template, not conf.d: the entrypoint runs envsubst over it at startup.
+COPY deploy/nginx/default.conf /etc/nginx/templates/default.conf.template
 RUN mkdir -p /var/cache/nginx/tiles
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

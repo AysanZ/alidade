@@ -30,7 +30,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r services/api/requirements.txt pytest
-      - run: pytest tests/test_routes.py tests/test_naming.py tests/test_capabilities.py tests/test_net.py tests/test_live.py
+      - run: pytest tests/test_routes.py tests/test_naming.py tests/test_capabilities.py tests/test_net.py tests/test_live.py tests/test_imagery.py
         working-directory: services/api
 
   api:

@@ -32,6 +32,8 @@ services:
       TILE_CACHE_SECONDS: ${TILE_CACHE_SECONDS:-300}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
       MODELS_DIR: /srv/models
+      RASTERS_DIR: /srv/rasters
+      MAX_RASTER_MB: ${MAX_RASTER_MB:-4096}
       LIVE_FLEET_SIZE: ${LIVE_FLEET_SIZE:-60}
       LIVE_CENTRE_LON: ${LIVE_CENTRE_LON:-51.39}
       LIVE_CENTRE_LAT: ${LIVE_CENTRE_LAT:-35.69}
@@ -39,6 +41,8 @@ services:
     volumes:
       # Uploaded 3D models. Files, not rows, so they get a volume of their own.
       - models:/srv/models
+      # Converted imagery. Files, not rows, and much larger than a .glb.
+      - rasters:/srv/rasters
     depends_on:
       postgis:
         condition: service_healthy
@@ -59,3 +63,4 @@ services:
 volumes:
   pgdata:
   models:
+  rasters:

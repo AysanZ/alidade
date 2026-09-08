@@ -43,6 +43,9 @@ function run(renderer: Renderer, op: Op, warn?: Warn, host?: ModelHost): void {
     case "source.data":
       setData(renderer, op.id, op.data, warn);
       break;
+    case "source.tiles":
+      setTiles(renderer, op.id, op.tiles, warn);
+      break;
     case "source.remove":
       if (renderer.getSource && !renderer.getSource(op.id)) return;
       renderer.removeSource(op.id);
@@ -118,6 +121,23 @@ function run(renderer: Renderer, op: Op, warn?: Warn, host?: ModelHost): void {
       host?.remove(op.id);
       break;
   }
+}
+
+/**
+ * Point a raster source at different tiles without taking it down.
+ *
+ * `setTiles` is MapLibre's own method for this and it is the whole reason the
+ * operation exists: the engine keeps the tiles it already has on screen until
+ * the replacements have decoded, so changing which image is drawn crossfades
+ * rather than blinking through empty.
+ */
+function setTiles(renderer: Renderer, id: string, tiles: string[], warn?: Warn): void {
+  const source = renderer.getSource?.(id) as { setTiles?: (t: string[]) => void } | undefined;
+  if (!source?.setTiles) {
+    warn?.(`Source ${id} cannot take new tiles in place.`);
+    return;
+  }
+  source.setTiles(tiles);
 }
 
 function setData(renderer: Renderer, id: string, data: unknown, warn?: Warn): void {

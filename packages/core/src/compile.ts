@@ -16,6 +16,7 @@ import { annotationSourceId, annotationsGeoJSON, vertexGeoJSON } from "./annotat
 import { LABEL_FONT, vectorBasemapLayers } from "./basemap";
 import { buildingsLayer } from "./buildings";
 import { toExpression } from "./filter";
+import { imagerySource } from "./imagery";
 import { graticuleGeoJSON, graticuleSourceId } from "./graticule";
 import { squareGridGeoJSON, squareGridSourceId, utmGridGeoJSON, utmGridSourceId } from "./grids";
 import { assetsGeoJSON, assetsSourceId, headingGeoJSON, headingSourceId } from "./live";
@@ -104,6 +105,22 @@ interface Flat {
 }
 
 /** Depth first, table of contents order: the first entry is the top of the list. */
+/**
+ * Every layer in the tree, groups included, hidden ones included.
+ *
+ * Hidden ones included because a source belongs to a layer whether or not the
+ * eye is open: leaving them out would rebuild the source every time a layer was
+ * switched back on.
+ */
+function allLayers(nodes: TreeNode[]): LayerNode[] {
+  const out: LayerNode[] = [];
+  for (const node of nodes) {
+    if (node.type === "group") out.push(...allLayers(node.children));
+    else out.push(node);
+  }
+  return out;
+}
+
 function flatten(nodes: TreeNode[], opacity = 1, visible = true, seen = new Set<string>()): Flat[] {
   const out: Flat[] = [];
   for (const node of nodes) {
@@ -132,6 +149,28 @@ function flatten(nodes: TreeNode[], opacity = 1, visible = true, seen = new Set<
 
 export function compile(project: MapProject): Compiled {
   const sources: Record<string, Source> = { ...project.sources };
+
+  /*
+   * An imagery layer's tile template is derived from its settings rather than
+   * stored beside them. Two copies of "which image, which bands, which stretch"
+   * means one of them is eventually stale, and the stale one is the URL — so the
+   * map would go on drawing the image the user just changed away from.
+   *
+   * Because this runs on both sides of a reconcile, changing the rule changes
+   * exactly one string in exactly one source, which is what lets the reconciler
+   * answer with `source.tiles` instead of taking the layer down.
+   */
+  for (const layer of allLayers(project.tree)) {
+    if (!layer.imagery) continue;
+    const before = sources[layer.source];
+    sources[layer.source] = imagerySource(layer.imagery, {
+      // Carried through, not asserted: the settings decide where the pixels
+      // come from and nothing else.
+      tileSize: before && "tileSize" in before ? before.tileSize : undefined,
+      maxzoom: before && "maxzoom" in before ? before.maxzoom : undefined,
+      attribution: before && "attribution" in before ? before.attribution : undefined,
+    });
+  }
   const bySlot = new Map<Slot, EngineLayer[]>();
   for (const slot of SLOT_ORDER) bySlot.set(slot, []);
 

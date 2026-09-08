@@ -27,7 +27,8 @@ interface Props {
  * looks exactly the same whether the backend is healthy and you have not added
  * anything yet, or the backend is down.
  */
-export function Catalogue({ project, edit, onAdded, onFlyTo, onImport, compact }: Props) {
+export function Catalogue({ project, edit, onAdded, onFlyTo, onImport, compact,
+}: Props) {
   const client = useQueryClient();
   const { data: layers, error, isPending, refetch, isFetching } = useLayers();
 

@@ -105,7 +105,7 @@ styles are Esri, and the elevation is Mapzen terrarium.
 ## Tests
 
 ```bash
-pnpm test        # 507 tests, Node only: no browser, no WebGL
+pnpm test        # 559 tests, Node only: no browser, no WebGL
 pnpm typecheck
 pnpm build
 ```

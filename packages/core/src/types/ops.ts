@@ -46,8 +46,18 @@ export type Op =
    */
   | { t: "source.data"; id: string; data: unknown }
   /**
-   * New tile templates for a raster source that is otherwise unchanged.
-   * Declared, not yet emitted: see the todo tests in tests/imagery.test.ts.
+   * A new tile template for a raster source that is otherwise unchanged.
+   *
+   * The counterpart of `source.data` on the raster side, and it exists for the
+   * same reason. Choosing a different image, a different band combination or a
+   * different stretch changes nothing but the URL the tiles come from; without
+   * this that is a `source.remove` followed by a `source.add`, which takes every
+   * layer reading it down and puts it back. Stepped across twenty dates that is
+   * twenty teardowns, and what the user sees is the imagery blinking out to
+   * nothing between every step.
+   *
+   * A renderer given new tiles keeps the old ones on screen until the new ones
+   * have decoded, so the same edit crossfades instead.
    */
   | { t: "source.tiles"; id: string; tiles: string[] }
   | { t: "layer.add"; spec: EngineLayer; before?: string }

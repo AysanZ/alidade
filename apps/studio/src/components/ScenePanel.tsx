@@ -52,7 +52,7 @@ const TERRAIN_DENOMINATOR = 3_000_000;
  * a layer at a source that was not declared. Whatever turns a thing on is
  * responsible for what that thing needs.
  */
-function turnBuildingsOn(draft: MapProject): MapProject {
+export function turnBuildingsOn(draft: MapProject): MapProject {
   draft.sources[OSM_SOURCE_ID] ??= OSM_SOURCE;
   draft.environment.buildings ??= BUILDINGS(isDark(draft.basemap.background));
   return draft;

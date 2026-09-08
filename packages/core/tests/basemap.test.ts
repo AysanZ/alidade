@@ -66,11 +66,42 @@ describe("basemap", () => {
     ]);
   });
 
-  it("takes a layer down before replacing the source it reads", () => {
+  /*
+   * Two raster services of the same shape differ in nothing but where the
+   * pictures come from, and a renderer can be pointed at different tiles without
+   * the source being rebuilt — it keeps the tiles it has until the new ones
+   * decode. So this swap crossfades rather than flashing through the background.
+   */
+  it("swapping one raster basemap for another of the same shape only retiles", () => {
     const light: Basemap = {
       ...dark,
       id: "light",
       raster: { tiles: ["https://tiles.example.com/light/{z}/{x}/{y}.png"], attribution: "Example" },
+    };
+    expect(reconcile(withBasemap(dark), withBasemap(light))).toEqual([
+      {
+        t: "source.tiles",
+        id: "basemap:raster",
+        tiles: ["https://tiles.example.com/light/{z}/{x}/{y}.png"],
+      },
+    ]);
+  });
+
+  it("takes a layer down before replacing the source it reads", () => {
+    const light: Basemap = {
+      ...dark,
+      id: "light",
+      raster: {
+        tiles: ["https://tiles.example.com/light/{z}/{x}/{y}.png"],
+        attribution: "Example",
+        /*
+         * A different service caches to a different depth, and that is a
+         * different source rather than different tiles: the zoom range is read
+         * once when the source is built. Sending `setTiles` here would leave the
+         * engine asking for zoom 18 from a service that stops at 17.
+         */
+        maxzoom: 17,
+      },
     };
     const ops = reconcile(withBasemap(dark), withBasemap(light));
     const kinds = ops.map((o) => o.t);

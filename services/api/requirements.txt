@@ -4,3 +4,7 @@ asyncpg==0.30.0
 pydantic-settings==2.7.0
 python-multipart==0.0.20
 httpx==0.28.1
+# Dynamic tiling from Cloud-Optimised GeoTIFFs. Brings rasterio, which carries
+# its own GDAL build: about a hundred megabytes of image, and the price of
+# the imagery being interrogable rather than merely visible.
+rio-tiler==7.9.6

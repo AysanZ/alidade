@@ -28,6 +28,7 @@ export function reconcile(prev: MapProject | null, next: MapProject): Op[] {
   const added: string[] = [];
   const changed: string[] = [];
   const refreshed: string[] = [];
+  const retiled: string[] = [];
   for (const [id, source] of Object.entries(b.sources)) {
     const before = a.sources[id];
     if (!before) added.push(id);
@@ -45,6 +46,13 @@ export function reconcile(prev: MapProject | null, next: MapProject): Op[] {
      * it off left the counts on the map. That is a new source, not new data.
      */
     else if (onlyDataChanged(before, source)) refreshed.push(id);
+    /*
+     * The same on the raster side. Choosing a different image, band combination
+     * or stretch changes the tile URL and nothing else, and a renderer given new
+     * tiles keeps the old ones up until the new ones decode. Rebuilding the
+     * source instead is what made stepping through a date list blink.
+     */
+    else if (onlyTilesChanged(before, source)) retiled.push(id);
     else changed.push(id);
   }
   const replaced = new Set(changed);
@@ -81,6 +89,9 @@ export function reconcile(prev: MapProject | null, next: MapProject): Op[] {
   }
   for (const id of refreshed) {
     ops.push({ t: "source.data", id, data: (b.sources[id] as { data: unknown }).data });
+  }
+  for (const id of retiled) {
+    ops.push({ t: "source.tiles", id, tiles: (b.sources[id] as { tiles: string[] }).tiles });
   }
 
   /* back up, each placed under the first layer above it that is already there */
@@ -232,6 +243,24 @@ function onlyDataChanged(before: Source, after: Source): boolean {
   const { data: _before, ...restBefore } = before;
   const { data: _after, ...restAfter } = after;
   return same(restBefore, restAfter);
+}
+
+/**
+ * Two raster sources that differ in nothing but where their tiles come from.
+ *
+ * Compared the way `onlyDataChanged` compares geojson, and for the same reason:
+ * by setting the one field aside and asking whether the rest is equal, so that a
+ * field added to the source type later is handled by being different. Tile size
+ * and the zoom range are read once when the source is built and cannot be
+ * changed in place, so a source whose `tileSize` moved is a different source and
+ * pretending otherwise draws it wrong.
+ */
+function onlyTilesChanged(before: Source, after: Source): boolean {
+  if (before.type !== "raster" || after.type !== "raster") return false;
+  const { tiles: beforeTiles, ...restBefore } = before;
+  const { tiles: afterTiles, ...restAfter } = after;
+  if (!afterTiles?.length) return false;
+  return !same(beforeTiles, afterTiles) && same(restBefore, restAfter);
 }
 
 function same(a: unknown, b: unknown): boolean {

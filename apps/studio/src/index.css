@@ -1903,3 +1903,244 @@ input.doc:focus { border-color: var(--accent); color: var(--txt); outline: none;
 .assets li .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .assets li:last-child { border-bottom: 0; }
 .assets li.stale .name { color: var(--txt-3); }
+
+/* ==================================================================
+   Imagery
+   ================================================================== */
+
+.imagery-dock {
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  display: flex; flex-direction: column;
+  height: 172px; flex: none;
+}
+.idtabs {
+  height: 31px; flex: none;
+  display: flex; align-items: center; gap: 1px;
+  padding-inline: 8px; border-bottom: 1px solid var(--line);
+}
+.idtabs > button {
+  height: 31px; padding-inline: 11px;
+  color: var(--txt-3); font-size: 11.5px;
+  border: 0; background: none; border-bottom: 2px solid transparent;
+  display: flex; align-items: center; gap: 6px; cursor: pointer;
+}
+.idtabs > button:hover { color: var(--txt); }
+.idtabs > button.on { color: var(--txt); border-bottom-color: var(--accent); }
+.idtabs .n {
+  font-family: "IBM Plex Mono", monospace; font-size: 9.5px;
+  color: var(--txt-3); background: var(--raise); border-radius: 2px; padding: 0 4px;
+}
+.idright { margin-inline-start: auto; display: flex; align-items: center; gap: 9px; }
+.idclose {
+  width: 22px; height: 22px; border: 0; background: none;
+  border-radius: 2px; color: var(--txt-3); cursor: pointer;
+}
+.idclose:hover { background: var(--raise); color: var(--txt); }
+
+.idbar {
+  height: 30px; flex: none;
+  display: flex; align-items: center; gap: 7px;
+  padding-inline: 11px; border-bottom: 1px solid var(--line-soft);
+}
+.idsep { width: 1px; height: 15px; background: var(--line); }
+.idchip {
+  height: 20px; padding-inline: 8px; border-radius: 10px;
+  border: 1px solid transparent; background: none;
+  color: var(--txt-3); font-size: 10.5px; cursor: pointer;
+}
+.idchip:hover { color: var(--txt); background: var(--raise); }
+.idchip.on { color: var(--txt); background: var(--raise-2); border-color: var(--line); }
+.idbar select, .idbar input { height: 21px; font-size: 10.5px; width: auto; }
+.idbar input { width: 132px; }
+
+.idempty { flex: 1; display: grid; place-items: center; color: var(--txt-3); font-size: 11px; }
+
+.idcards {
+  flex: 1; min-height: 0;
+  display: flex; align-items: stretch; gap: 8px;
+  padding: 10px 12px; overflow-x: auto; overflow-y: hidden;
+}
+.idgroup { display: flex; align-items: stretch; gap: 8px; flex: none; }
+.iddivider {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 4px; padding-inline: 4px;
+}
+.iddivider i { width: 1px; flex: 1; background: var(--line-soft); }
+.iddivider span {
+  font-family: "IBM Plex Sans Condensed", sans-serif; font-size: 9px;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--txt-3);
+  writing-mode: vertical-rl; transform: rotate(180deg);
+}
+
+.idcard {
+  flex: none; width: 158px; border-radius: 4px;
+  background: var(--void); border: 1px solid var(--line);
+  overflow: hidden; cursor: pointer; position: relative;
+  transition: border-color 0.16s, transform 0.16s;
+}
+.idcard:hover { border-color: #4a4a52; transform: translateY(-2px); }
+.idcard.sel { border-color: #38d6c0; box-shadow: 0 0 0 1px rgba(56, 214, 192, 0.3); }
+.idcard.cmp { border-color: var(--accent); }
+/* Which cards the mosaic rule is actually drawing with. */
+.idcard.drawn::after {
+  content: ""; position: absolute; inset-inline-start: 0; top: 0; bottom: 0;
+  width: 2px; background: #38d6c0; opacity: 0.7;
+}
+.idthumb { height: 56px; position: relative; }
+.idgsd, .idcov {
+  position: absolute; top: 5px;
+  font-family: "IBM Plex Mono", monospace; font-size: 9px;
+  padding: 1px 4px; border-radius: 2px; background: rgba(5, 5, 5, 0.62);
+}
+.idgsd { inset-inline-start: 5px; color: #c8c8ce; }
+.idcov { inset-inline-end: 5px; color: #38d6c0; }
+.idcov.low { color: #e8b14c; }
+.idacts {
+  position: absolute; bottom: 4px; inset-inline-end: 4px;
+  display: flex; gap: 2px; opacity: 0; transition: opacity 0.14s;
+}
+.idcard:hover .idacts { opacity: 1; }
+.idacts button {
+  width: 19px; height: 19px; border: 0; border-radius: 2px;
+  background: rgba(5, 5, 5, 0.72); color: var(--txt-3);
+  font-size: 9.5px; cursor: pointer;
+}
+.idacts button:hover { color: var(--txt); }
+.idmeta { padding: 6px 8px 7px; display: grid; gap: 3px; }
+.idname { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.idrow { display: flex; align-items: center; gap: 6px; }
+.iddate { font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--txt-2); }
+/* A date the user typed reads differently from one the file stated. */
+.iddate.mine { color: #38d6c0; }
+.idadddate {
+  font-size: 10px; color: #e8b14c;
+  border: 1px dashed rgba(232, 177, 76, 0.4); border-radius: 2px;
+  padding: 0 5px; height: 16px; background: none; cursor: pointer;
+}
+.idadddate:hover { background: rgba(232, 177, 76, 0.12); border-style: solid; }
+.idsensor {
+  font-family: "IBM Plex Mono", monospace; font-size: 9px; color: var(--txt-3);
+  margin-inline-start: auto; max-width: 68px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.idtable { flex: 1; overflow: auto; }
+.idtable table { border-collapse: collapse; width: 100%; font-size: 11px; }
+.idtable thead th {
+  position: sticky; top: 0; z-index: 1; background: #131315;
+  border-bottom: 1px solid var(--line); padding: 5px 9px;
+  text-align: start; white-space: nowrap;
+  font-family: "IBM Plex Sans Condensed", sans-serif; font-size: 9.5px;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--txt-3);
+}
+.idtable tbody td {
+  padding: 4px 9px; border-bottom: 1px solid var(--line-soft);
+  white-space: nowrap; color: var(--txt-2);
+}
+.idtable tbody tr { cursor: pointer; }
+.idtable tbody tr:hover td { background: rgba(76, 141, 255, 0.05); }
+.idtable tbody tr.sel td { background: rgba(56, 214, 192, 0.09); color: var(--txt); }
+.idtable td.m { font-family: "IBM Plex Mono", monospace; }
+.idtable td.n { font-family: "IBM Plex Mono", monospace; text-align: end; color: var(--txt); }
+.idtable td.small { font-size: 10px; color: var(--txt-3); }
+.idtable td .none { color: #e8b14c; }
+
+/* Footprints over the canvas. Not layers in the style: this is a function of
+   what the server answered for the current view, so it is not in the document
+   and costs no operations. */
+.footprints { position: absolute; inset: 0; z-index: 3; pointer-events: none; overflow: visible; }
+.footprint { fill: none; stroke-width: 1; pointer-events: stroke; cursor: pointer; }
+.footprint.other { stroke: rgba(154, 154, 160, 0.28); stroke-dasharray: 5 4; }
+.footprint.drawn { stroke: rgba(56, 214, 192, 0.5); }
+.footprint.sel { stroke: #38d6c0; stroke-width: 1.8; fill: rgba(56, 214, 192, 0.07); }
+.footprint.hover { stroke: #fff; stroke-width: 1.8; fill: rgba(255, 255, 255, 0.07); }
+
+/* How much of the view the mosaic rule actually fills. */
+.coverage { margin: 9px 0 4px; }
+.covbar { height: 3px; background: var(--line-soft); border-radius: 2px; overflow: hidden; }
+.covbar i { display: block; height: 100%; background: #38d6c0; transition: width 0.25s; }
+.covbar.part i { background: #e8b14c; }
+
+/* Whether a setting belongs to the layer or to one image. */
+.sect .scope {
+  font-family: "IBM Plex Sans Condensed", sans-serif;
+  font-size: 8.5px; letter-spacing: 0.1em; text-transform: uppercase;
+}
+.tag.good { color: #38d6c0; border-color: rgba(56, 214, 192, 0.3); }
+.tag.mine { color: var(--accent); border-color: rgba(76, 141, 255, 0.3); }
+.tag.none { color: #e8b14c; border-color: rgba(232, 177, 76, 0.3); }
+
+.stack { display: block; margin-block: 6px; }
+.stack .k { display: block; margin-bottom: 5px; font-size: 11px; color: var(--txt-2); }
+.stack textarea, .stack input { width: 100%; }
+.between { color: var(--txt-3); }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 9px; }
+
+.readfile {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border: 1px solid var(--line);
+  border-radius: 3px; background: var(--void); margin-bottom: 6px;
+}
+.readfile.undated { border-color: rgba(232, 177, 76, 0.3); }
+.readfile .name {
+  flex: 1; min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; font-size: 11px;
+}
+
+/* ==================================================================
+   Showcase
+   ================================================================== */
+
+/*
+ * Most of what this application does is invisible from a map of country
+ * outlines, so each card carries a drawing of what it turns on. A schematic
+ * rather than a screenshot: a screenshot goes stale the first time the palette
+ * changes and is a lie about this install's data.
+ */
+.showcase { padding: 14px 10px 18px; border-top: 1px solid var(--line-soft); margin-top: 10px; }
+.showcase header { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
+.showcase header .cap { color: var(--txt-3); }
+.hideall {
+  margin-inline-start: auto; border: 0; background: none; cursor: pointer;
+  color: var(--txt-3); font-size: 10.5px;
+}
+.hideall:hover { color: var(--txt-2); text-decoration: underline; }
+
+.showcase ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.showcase li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--void);
+  padding: 8px;
+  transition: border-color 0.14s;
+}
+.showcase li:hover { border-color: #34343a; }
+.showcase .shot {
+  border: 0; padding: 0; background: none; cursor: pointer;
+  border-radius: 2px; overflow: hidden; line-height: 0;
+  align-self: start;
+}
+.showcase .shot svg { display: block; border-radius: 2px; }
+.showcase .words { min-width: 0; padding-inline-end: 16px; }
+.showcase b { font-size: 11.5px; font-weight: 500; display: block; margin-bottom: 3px; }
+.showcase p { font-size: 10.5px; color: var(--txt-3); line-height: 1.5; margin: 0 0 7px; }
+.showcase .try {
+  height: 21px; padding-inline: 9px;
+  border: 1px solid var(--line); border-radius: 2px;
+  background: var(--raise); color: var(--txt-2);
+  font-size: 10.5px; cursor: pointer;
+}
+.showcase .try:hover { background: var(--raise-2); color: var(--txt); border-color: var(--accent); }
+/* Always visible rather than revealed on hover: a prompt you cannot obviously
+   get rid of stops being help and becomes furniture. */
+.showcase .dismiss {
+  position: absolute; top: 5px; inset-inline-end: 5px;
+  width: 19px; height: 19px; border: 0; border-radius: 2px;
+  background: none; color: var(--txt-3); font-size: 10.5px; cursor: pointer;
+}
+.showcase .dismiss:hover { background: var(--raise); color: var(--txt); }

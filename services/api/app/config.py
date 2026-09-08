@@ -15,6 +15,16 @@ class Settings(BaseSettings):
     max_upload_mb: int = 200
     # Where uploaded 3D models are kept. A volume in the compose stack.
     models_dir: str = "./models"
+    # Where converted imagery is kept. A volume too: these are files, not rows,
+    # and a COG of one satellite scene is a couple of hundred megabytes.
+    rasters_dir: str = "./rasters"
+    # Imagery is bigger than vector data by an order of magnitude, so it gets its
+    # own ceiling rather than sharing the upload limit with a Shapefile.
+    max_raster_mb: int = 4096
+    # How many images one tile may be built from. Reading a hundred COGs for one
+    # tile is not a mosaic, it is a timeout, and past a handful the ones
+    # underneath are never seen anyway.
+    max_mosaic_assets: int = 6
 
     # The built-in live feed. Simulated, so the studio has something to connect
     # to without a fleet attached; replace the endpoint's source and the client
