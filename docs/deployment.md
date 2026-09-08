@@ -1,244 +1,197 @@
 # Deployment
 
-Alidade in production on a single small VPS — 2 GB of RAM, 2 cores, 50 GB of
-SSD — behind `aysanz.dev`, sharing the box with a portfolio and whatever comes
-next.
+Alidade on a 2 GB / 2 core / 50 GB VPS, sharing the box with a portfolio and
+other projects under `aysanz.dev`.
 
-The server runs containers and nothing else. Both images are built by GitHub
-Actions and pulled by tag, so the box needs no Node, no pnpm, and no checkout of
-this repository. That is not tidiness: `vite build` on a bundle carrying
-MapLibre and three.js peaks somewhere near 3 GB, which a 2 GB machine cannot
-survive. Building elsewhere is what makes the small instance viable at all.
+Images are built by GitHub Actions and pulled by tag. The server never builds:
+`vite build` on a bundle carrying MapLibre and three.js peaks near 3 GB, which
+this machine cannot survive.
 
 ```
-                     ┌──────────────── GitHub Actions ────────────────┐
-                     │  ci.yml  →  deploy.yml                         │
-                     │  builds alidade-api and alidade-web            │
-                     │  pushes to ghcr.io, tagged with the commit     │
-                     └──────────────────────┬─────────────────────────┘
-                                            │ ssh: pull, up -d
-                                            ▼
-  :443 ──► caddy ──┬──► /srv/portfolio                     aysanz.dev
-                   └──► web (nginx + dist) ──► api ──► postgis
-                        tile cache on disk     GDAL     no published port
+                   ┌─────────── GitHub Actions ───────────┐
+                   │  ci.yml → deploy.yml                 │
+                   │  pushes to ghcr.io/aysanz, by commit │
+                   └──────────────────┬───────────────────┘
+                                      │ ssh: pull, up -d
+                                      ▼
+  :443 ─► /opt/edge  caddy ─┬─► /srv/portfolio          aysanz.dev
+                            ├─► /srv/sites/nili         nili.aysanz.dev
+                            └─► alidade-web-1 ─► api ─► postgis
+                                                 GDAL   no published port
 ```
 
-Development is unchanged. `deploy/docker-compose.yml` still builds locally and
-still publishes Postgres on 5433; everything below is a separate, additive
-path that leaves it alone.
+Caddy is a separate stack because it owns 80 and 443. Restarting Alidade must
+not take the other sites down with it.
 
----
+`deploy/docker-compose.yml` is unchanged and still builds locally.
 
-## What is in the repository
+## Layout
+
+```
+/opt/edge/                 the only stack that publishes ports
+  Caddyfile                routing for every hostname
+  docker-compose.yml
+  .env                     ACME_EMAIL
+  portfolio/               static
+  sites/nili/              static
+  sites/nili-storybook/    static
+
+/opt/alidade/
+  docker-compose.prod.yml
+  .env
+  init/                    *.sql, run once on an empty volume
+```
+
+Static projects need no container. Only Alidade has one, because it has a
+database and an API.
+
+## Repository
 
 | Path | What it is |
 |---|---|
 | `apps/studio/Dockerfile` | Multi-stage build of the studio into an nginx image |
-| `deploy/nginx/default.conf` | The config baked into that image — tile cache, rate limits, WebSocket upgrade |
-| `deploy/docker-compose.prod.yml` | The production stack: prebuilt images, no published database port |
-| `deploy/Caddyfile` | TLS termination and hostname routing |
+| `deploy/nginx/default.conf` | Baked into that image: tile cache, rate limits, WebSocket upgrade |
+| `deploy/docker-compose.prod.yml` | Production stack, no published ports |
 | `deploy/.env.prod.example` | Template for `/opt/alidade/.env` |
 | `.github/workflows/deploy.yml` | Build, push, deploy |
 | `.dockerignore` | Keeps `node_modules` and `.git` out of the build context |
 
-### The one code change this needed
+The Caddyfile is not here. It routes every project on the box, so it lives in
+the edge stack.
 
-`app/db.py` had `max_size=10` hardcoded into the connection pool. It now reads
-`DB_POOL_MIN` and `DB_POOL_MAX` through `Settings`, and the production compose
-file sets them to 1 and 5. Ten connections competing for two cores is slower
-than five that are not, and Postgres is started with `max_connections=20`
-shared with anything else that attaches.
+### Code changes this needed
 
-Everything else worth tuning — the upload ceiling, the tile cache duration, the
-fleet size — was already environment-driven through `pydantic-settings`, so it
-is configured in `.env` without touching Python.
+`app/db.py` had `max_size=10` hardcoded. It now reads `DB_POOL_MIN` and
+`DB_POOL_MAX`, set to 1 and 5 in production; Postgres runs with
+`max_connections=20`.
 
----
+`services/api/pytest.ini` puts `services/api` on `sys.path`. Without it a bare
+`pytest` cannot import `app` from `conftest.py`.
 
 ## 1 · GitHub
 
-**Make the packages public.** After the first successful build, `alidade-api`
-and `alidade-web` appear under your profile → Packages. Open each → Package
-settings → Change visibility → Public. The server then pulls with no
-credentials at all. Leave them private and you need a PAT with `read:packages`
-on the box and a `docker login` in the deploy script — more moving parts for a
-repository that is Apache-2.0 anyway.
+Make both packages public: profile → Packages → `alidade-api` and
+`alidade-web` → Package settings → Change visibility → Public. The server then
+pulls without credentials.
 
-**Add a deploy key.** On your laptop:
-
-```bash
-ssh-keygen -t ed25519 -C "github-deploy" -f ~/.ssh/aysan_deploy -N ""
-ssh-copy-id -i ~/.ssh/aysan_deploy.pub deploy@SERVER_IP
-```
-
-**Create the environment.** Settings → Environments → New environment →
-`production`. Four environment secrets:
+Settings → Environments → New environment → `production`, with four secrets:
 
 | Secret | Value |
 |---|---|
-| `SSH_HOST` | server IP |
+| `SSH_HOST` | `185.110.190.42` |
 | `SSH_USER` | `deploy` |
-| `SSH_KEY` | all of `~/.ssh/aysan_deploy` — the private half, `BEGIN`/`END` lines included |
-| `SSH_PORT` | `22`, or wherever you moved it |
+| `SSH_KEY` | the private half of the deploy key, `BEGIN`/`END` lines included |
+| `SSH_PORT` | `22` |
 
-An environment rather than plain repository secrets, because a required
-reviewer can be added later and deploys become a button press. It costs nothing
-now and is awkward to retrofit.
-
-**Check workflow permissions.** Settings → Actions → General. The workflow asks
-for `packages: write` explicitly, but an organisation-level read-only default
-overrides that and the push fails with a 403.
-
----
+Check Settings → Actions → General allows `packages: write`. An org-level
+read-only default overrides the workflow and the push fails with 403.
 
 ## 2 · DNS
 
-Three A records on `aysanz.dev`, all pointing at the server:
-
 | Type | Name | Value | TTL |
 |---|---|---|---|
-| A | `@` | `SERVER_IP` | 300 |
-| A | `www` | `SERVER_IP` | 300 |
-| A | `alidade` | `SERVER_IP` | 300 |
-| AAAA | `@` | `SERVER_IPv6` | 300, if the VPS has one |
+| A | `@` | `185.110.190.42` | 300 |
+| A | `www` | `185.110.190.42` | 300 |
+| A | `alidade` | `185.110.190.42` | 300 |
+| A | `*` | `185.110.190.42` | 300 |
 
-Keep the TTL low until it works, then raise it. Wait for propagation before the
-first `up -d`: Caddy requests a certificate on the first request to each
-hostname, and failed challenges count against a limit of five per week per
-domain.
+Proxy off — DNS only. A CDN in front breaks the HTTP-01 challenge, because
+Let's Encrypt has to reach port 80 on this server.
 
-```bash
-dig +short aysanz.dev alidade.aysanz.dev
-```
+The wildcard means a new project needs a Caddyfile block and nothing else.
 
-> `.dev` is on the HSTS preload list. Browsers refuse plain HTTP to it before a
-> request leaves the machine, so there is no "get it up on port 80 and add TLS
-> later" for this domain — TLS has to work on the first day. Caddy is here
-> rather than certbot for that reason: it obtains and renews without being
-> asked, and it proxies a WebSocket upgrade without special configuration.
+`.dev` is HSTS-preloaded: browsers refuse plain HTTP before a request leaves
+the machine. TLS has to work on day one, which is why Caddy is here rather than
+certbot.
 
----
+## 3 · Server
 
-## 3 · Preparing the server
-
-As root, once.
+Debian 13, x86_64. Done once, as root:
 
 ```bash
-# A user that is not root.
 adduser --disabled-password --gecos "" deploy
-usermod -aG sudo deploy
-mkdir -p /home/deploy/.ssh && cp ~/.ssh/authorized_keys /home/deploy/.ssh/
-chown -R deploy:deploy /home/deploy/.ssh && chmod 700 /home/deploy/.ssh
+usermod -aG sudo,docker deploy
+mkdir -p /home/deploy/.ssh && chown -R deploy:deploy /home/deploy/.ssh
+chmod 700 /home/deploy/.ssh
 
-# Docker.
 curl -fsSL https://get.docker.com | sh
-usermod -aG docker deploy
 systemctl enable --now docker
 
-# Swap. The margin for ogr2ogr on a 2 GB box: insurance against a spike, not a
-# place to run from, which is what swappiness=10 says.
 fallocate -l 4G /swapfile && chmod 600 /swapfile
 mkswap /swapfile && swapon /swapfile
 echo '/swapfile none swap sw 0 0' >> /etc/fstab
-echo 'vm.swappiness=10' > /etc/sysctl.d/99-swap.conf
-sysctl --system
+echo 'vm.swappiness=10' > /etc/sysctl.d/99-swap.conf && sysctl --system
 
-# Firewall.
 ufw allow OpenSSH && ufw allow 80/tcp && ufw allow 443/tcp && ufw allow 443/udp
 ufw --force enable
 
-# Security updates without being asked.
-apt-get update && apt-get install -y unattended-upgrades
-dpkg-reconfigure -f noninteractive unattended-upgrades
+mkdir -p /opt/edge/portfolio /opt/edge/sites /opt/alidade/init
+chown -R deploy:deploy /opt/edge /opt/alidade
 ```
 
-Check the architecture **now**:
+Confirm `uname -m` is `x86_64`. On ARM, add `linux/arm64` to `platforms:` in
+`deploy.yml` — an amd64 image builds fine in CI and fails at `up` with
+`exec format error`.
+
+## 4 · Files onto the server
 
 ```bash
-uname -m    # x86_64  → deploy.yml is correct as written
-            # aarch64 → add linux/arm64 to `platforms:` in deploy.yml
-```
+# edge
+scp Caddyfile docker-compose.yml deploy@SERVER:/opt/edge/
 
-An amd64 image on an ARM host builds cleanly in CI and fails at `docker compose
-up` with `exec format error`, which is a confusing place to learn this.
-
----
-
-## 4 · Laying out `/opt/alidade`
-
-As `deploy`:
-
-```bash
-sudo mkdir -p /opt/alidade && sudo chown deploy:deploy /opt/alidade
-cd /opt/alidade && mkdir -p portfolio init
-```
-
-Four things have to be here, because the compose file bind-mounts them:
-
-```bash
-# from a checkout on your laptop
+# alidade
 scp deploy/docker-compose.prod.yml deploy@SERVER:/opt/alidade/
-scp deploy/Caddyfile               deploy@SERVER:/opt/alidade/
 scp deploy/.env.prod.example       deploy@SERVER:/opt/alidade/.env
 scp data/init/*.sql                deploy@SERVER:/opt/alidade/init/
 ```
 
-`init/` is the one that bites. Postgres runs everything in there exactly once,
-in filename order, on a first-boot empty volume — and never again. Copy all of
-them, not just the schema: `01_schema.sql` creates the layer registry and the
-PostGIS extension, `02_imagery.sql` the raster catalogue. Miss any of it and
-the API starts, connects, and returns 500 on every request, and fixing it
-afterwards means destroying the volume and the data on it.
+`init/` is the one that bites. Postgres runs everything in there once, in
+filename order, on a first-boot empty volume, and never again. `01_schema.sql`
+creates the layer registry and the PostGIS extension, `02_imagery.sql` the
+raster catalogue. Miss either and the API starts, connects, and 500s on every
+request; fixing it afterwards means destroying the volume.
 
-Then edit `/opt/alidade/.env`: `GHCR_OWNER`, `ACME_EMAIL`, and a real password.
+Fill in `/opt/alidade/.env` — `GHCR_OWNER=aysanz`, `CORS_ORIGINS`, and a real
+password:
 
 ```bash
 openssl rand -base64 32 | tr -d '/+=' | head -c 32; echo
-chmod 600 /opt/alidade/.env
+chmod 600 /opt/alidade/.env /opt/edge/.env
 ```
 
-Put a holding page at `portfolio/index.html` so `aysanz.dev` is not a 404 while
-the real thing is being built.
+## 5 · First run
 
----
-
-## 5 · The first deploy
-
-Push to `main`. `ci.yml` runs; on green, `deploy.yml` builds both images, pushes
-them to GHCR tagged with the commit, and restarts the stack over SSH.
-
-The first time, do it by hand so failures are legible:
+Edge first: it creates the `edge` network that Alidade attaches to.
 
 ```bash
+cd /opt/edge
+docker compose --env-file .env up -d
+docker compose logs -f caddy        # watch the certificate
+
 cd /opt/alidade
 docker compose --env-file .env -f docker-compose.prod.yml pull
 docker compose --env-file .env -f docker-compose.prod.yml up -d
 docker compose -f docker-compose.prod.yml ps
-docker compose -f docker-compose.prod.yml logs -f caddy   # watch the certificate
 ```
 
-Then check it:
+Check:
 
 ```bash
 curl -s  https://alidade.aysanz.dev/api/health     # {"status":"ok", ...}
 curl -I  https://aysanz.dev
 curl -sI https://alidade.aysanz.dev/api/tiles/LAYER/6/40/25.mvt | grep X-Cache
-#   MISS on the first request, HIT on the second. That header is the whole
-#   point of the tile cache and the quickest confirmation it is working.
+#   MISS then HIT. That header is the tile cache working.
 ```
 
-The database ships empty by design. Load layers through **Add data** in the
-studio. Note that `data/seed.sh` assumes a published host port, which the
-production compose file deliberately does not have:
+The database ships empty. Load layers through **Add data**. `data/seed.sh`
+assumes a published host port, which production does not have:
 
 ```bash
 docker compose -f docker-compose.prod.yml exec -T postgis \
   psql -U alidade -d alidade < layer.sql
 ```
 
----
-
-## 6 · Rolling back
+## 6 · Rollback
 
 ```bash
 cd /opt/alidade
@@ -246,59 +199,36 @@ sed -i 's|^TAG=.*|TAG=PREVIOUS_SHA|' .env
 docker compose --env-file .env -f docker-compose.prod.yml up -d
 ```
 
-Every image stays in GHCR under its commit SHA and the last week of them stay
-on the server. A rollback is one line and about ten seconds.
-
----
+Images stay in GHCR under their commit SHA; a week of them stay on the server.
 
 ## 7 · Maintenance
 
-`crontab -e` as `deploy`:
-
 ```cron
-# Images accumulate with every deploy, and 50 GB goes faster than it sounds.
 0 4 * * 0  docker image prune -af --filter "until=168h" >/dev/null 2>&1
-
-# Nightly dump, seven kept.
 0 3 * * *  cd /opt/alidade && docker compose -f docker-compose.prod.yml exec -T postgis pg_dump -U alidade alidade | gzip > /opt/backups/alidade-$(date +\%u).sql.gz
 ```
 
-```bash
-sudo mkdir -p /opt/backups && sudo chown deploy:deploy /opt/backups
-```
+Consider restoring that dump nightly rather than only keeping it. The demo has
+no authentication: any visitor can upload a layer and delete yours. A demo that
+forgets overnight beats one that greets a recruiter with an empty map.
 
-**Consider a nightly restore rather than only a backup.** This is a public demo
-with no authentication: any visitor can upload a layer, and any visitor can
-delete yours. Someone opening the demo to an empty table of contents is a worse
-outcome than a demo that forgets overnight. Keep a clean dump, restore it at
-04:00, and the problem stops being one.
-
----
-
-## 8 · What the failures look like
+## 8 · Failures
 
 | Symptom | Cause |
 |---|---|
-| Caddy loops on `obtaining certificate` | DNS has not propagated, or the provider blocks 80/443 upstream of ufw. `dig` first, then `nc -zv IP 80` from somewhere else. |
-| `no such host: web` in Caddy's log | Caddy and web are not both on the `edge` network. |
-| API calls fail in the browser, `curl` works | `CORS_ORIGINS` is not an exact match. `https://alidade.aysanz.dev`, no trailing slash. |
-| Live feed connects, then drops every 60 seconds | Something between Caddy and nginx is not passing the upgrade. Caddy does it by default; nginx needs the three `proxy_set_header` lines, which are in `default.conf` as shipped. |
-| `exec format error` at `up` | amd64 image, ARM host. See §3. |
-| Push to GHCR returns 403 | Workflow permissions are read-only at the organisation level. See §1. |
-| Postgres keeps restarting | `mem_limit` too tight, or `init/` was absent when the volume was first created. `down -v` re-runs it and destroys the data. |
+| Caddy loops on `obtaining certificate` | DNS not propagated, CDN proxy left on, or the provider blocks 80/443 upstream of ufw |
+| `no such host: alidade-web-1` | Alidade is not on the `edge` network, or the edge stack was started second |
+| `network edge declared as external, but could not be found` | Start `/opt/edge` first |
+| API calls fail in the browser, `curl` works | `CORS_ORIGINS` is not an exact match — `https://alidade.aysanz.dev`, no trailing slash |
+| Live feed drops every 60 seconds | The upgrade is not reaching the API. Caddy does it by default; nginx needs the three `proxy_set_header` lines, which ship in `default.conf` |
+| `exec format error` at `up` | amd64 image, ARM host |
+| Postgres restarting | `mem_limit` too tight, or `init/` was empty when the volume was created. `down -v` re-runs it and destroys the data |
 
----
+## 9 · Next project
 
-## 9 · Adding the next project to this box
+Static: drop the build in `/opt/edge/sites/NAME`, add a Caddyfile block, reload
+Caddy. Containerised: build in CI, add a service on the `edge` network with no
+published ports and a `mem_limit`, add the block.
 
-1. Build its image in CI and push to `ghcr.io/OWNER/NAME`.
-2. Add a service to `docker-compose.prod.yml` on the `edge` network, with no
-   published ports and a `mem_limit`.
-3. Add a block to the `Caddyfile` — there is a template at the bottom of it.
-4. Add an A record for the subdomain.
-5. `docker compose up -d`.
-
-Alidade's stack sits at roughly 800 MB, and Caddy is shared and already counted.
-That leaves about a gigabyte, which is comfortable for static sites and small
-Go or Python services and tight for a second database. A second Postgres is the
-signal to move up an instance size, and not before.
+Alidade sits near 800 MB and Caddy is shared. That leaves about a gigabyte —
+comfortable for static sites and small services, tight for a second database.
