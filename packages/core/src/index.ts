@@ -192,3 +192,23 @@ export {
   anchorLift,
 } from "./models";
 export type { Mercator, Frame } from "./models";
+
+export {
+  IMAGERY_ENDPOINT,
+  contributing,
+  defaultImagery,
+  estimateCoverage,
+  imageryQuery,
+  imagerySource,
+  imageryTileUrl,
+  nativeZoom,
+  orderByRule,
+} from "./imagery";
+export type {
+  ImageRecord,
+  ImageryRender,
+  ImagerySettings,
+  MosaicRule,
+  Overlap,
+  Resampling,
+} from "./imagery";

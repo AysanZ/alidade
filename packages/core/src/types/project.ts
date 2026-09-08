@@ -5,6 +5,8 @@
  * JSON.parse(JSON.stringify(x)), it does not belong in the project.
  */
 
+import type { ImagerySettings } from "../imagery";
+
 export type Slot = "base" | "data" | "labels" | "overlay";
 
 /** Slots are applied before tree order. Earlier in this list draws further down. */
@@ -263,6 +265,8 @@ export interface LayerNode {
   marker?: MarkerStyle;
   labels?: LabelStyle;
   filter?: FilterNode;
+  /** Raster layers only. Not read by compile or reconcile yet. */
+  imagery?: ImagerySettings;
   /** Kept for the interface, never used for rendering. */
   metadata?: {
     sourceCrs?: string;

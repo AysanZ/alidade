@@ -45,6 +45,11 @@ export type Op =
    * which takes every layer reading it down with it.
    */
   | { t: "source.data"; id: string; data: unknown }
+  /**
+   * New tile templates for a raster source that is otherwise unchanged.
+   * Declared, not yet emitted: see the todo tests in tests/imagery.test.ts.
+   */
+  | { t: "source.tiles"; id: string; tiles: string[] }
   | { t: "layer.add"; spec: EngineLayer; before?: string }
   | { t: "layer.remove"; id: string }
   | { t: "layer.move"; id: string; before?: string }
