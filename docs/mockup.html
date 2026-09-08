@@ -1,0 +1,2001 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alidade — Web GIS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Vazirmatn:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:#050505;
+  --shell:#0A0A0B;
+  --panel:#0E0E10;
+  --raise:#161618;
+  --raise-2:#1D1D20;
+  --line:#252528;
+  --line-soft:#1A1A1C;
+  --txt:#E4E4E6;
+  --txt-2:#9A9AA0;
+  --txt-3:#66666D;
+  --accent:#4C8DFF;
+  --accent-2:#2E6FE0;
+  --accent-soft:rgba(76,141,255,.13);
+  --signal:#38D6C0;
+  --alert:#F0616B;
+  --sans:"IBM Plex Sans",system-ui,sans-serif;
+  --cond:"IBM Plex Sans Condensed","IBM Plex Sans",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,monospace;
+  --r:3px;
+  --rail:46px;
+  --lw:274px;
+  --rw:300px;
+}
+html[dir="rtl"] body{--sans:"Vazirmatn","IBM Plex Sans",sans-serif;--cond:"Vazirmatn",sans-serif}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--shell);color:var(--txt);
+  font-family:var(--sans);font-size:12px;line-height:1.45;
+  -webkit-font-smoothing:antialiased;overflow:hidden;
+}
+button,input,select,textarea{font:inherit;color:inherit}
+button{background:none;border:0;cursor:pointer}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#2A2A2E;border:2px solid var(--panel);border-radius:6px}
+::-webkit-scrollbar-thumb:hover{background:#34343A}
+:focus-visible{outline:1px solid var(--accent);outline-offset:1px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.cap{font-family:var(--cond);font-size:9.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--txt-3)}
+html[dir="rtl"] .cap{letter-spacing:0}
+
+/* ---------- shell ---------- */
+.app{height:100%;display:grid;grid-template-rows:auto 1fr auto auto;overflow:hidden}
+.mid{display:grid;grid-template-columns:var(--rail) var(--lw) minmax(0,1fr) var(--rw);min-height:0;border-block:1px solid var(--line)}
+.app.no-left .mid{grid-template-columns:var(--rail) 0 minmax(0,1fr) var(--rw)}
+.app.no-right .mid{grid-template-columns:var(--rail) var(--lw) minmax(0,1fr) 0}
+.app.no-left.no-right .mid{grid-template-columns:var(--rail) 0 minmax(0,1fr) 0}
+
+/* ---------- title + menu ---------- */
+.title{height:38px;display:flex;align-items:center;gap:14px;padding-inline:10px;background:var(--panel)}
+.brand{display:flex;align-items:center;gap:8px;padding-inline-end:12px;border-inline-end:1px solid var(--line);height:38px}
+.mark{width:19px;height:19px;color:var(--accent)}
+.brand b{font-size:12.5px;font-weight:600;letter-spacing:.19em;text-transform:uppercase}
+.brand span{font-family:var(--cond);font-size:9px;letter-spacing:.1em;color:var(--txt-3);text-transform:uppercase;padding:1px 4px;border:1px solid var(--line);border-radius:2px}
+.menubar{display:flex;gap:1px}
+.menubar>div{position:relative}
+.mtrig{padding:4px 9px;border-radius:var(--r);color:var(--txt-2);font-size:11.5px}
+.mtrig:hover{background:var(--raise);color:var(--txt)}
+.menubar>div.open .mtrig{background:var(--raise-2);color:var(--txt)}
+.mpop{position:absolute;top:calc(100% + 4px);inset-inline-start:0;min-width:216px;background:#141416;border:1px solid var(--line);border-radius:var(--r);padding:4px;z-index:80;box-shadow:0 18px 40px rgba(0,0,0,.55);display:none}
+.menubar>div.open .mpop{display:block}
+.mi{display:flex;align-items:center;gap:10px;width:100%;padding:5px 8px;border-radius:2px;color:var(--txt-2);text-align:start;font-size:11.5px}
+.mi:hover{background:var(--accent-soft);color:var(--txt)}
+.mi kbd{margin-inline-start:auto;font-family:var(--mono);font-size:9.5px;color:var(--txt-3)}
+.mi .tick{width:9px;color:var(--accent);font-size:10px}
+.msep{height:1px;background:var(--line);margin:4px 6px}
+.mi.dis{opacity:.42;cursor:default}
+.mi.dis:hover{background:none;color:var(--txt-2)}
+.mi .badge{margin-inline-start:auto;font-family:var(--cond);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--txt-3);border:1px solid var(--line);border-radius:2px;padding:0 4px}
+.scope{display:flex;gap:8px;padding:6px 0;border-bottom:1px solid var(--line-soft)}
+.scope:last-child{border:0}
+.scope .m{flex:none;width:13px;text-align:center;font-family:var(--mono);font-size:11px;line-height:1.5}
+.scope .m.in{color:var(--signal)}
+.scope .m.out{color:var(--txt-3)}
+.scope b{display:block;font-size:11.5px;font-weight:500;color:var(--txt)}
+.scope span{font-size:10.5px;color:var(--txt-3);line-height:1.5}
+.page{background:#fff;border-radius:2px;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+.pgwrap{background:var(--void);border:1px solid var(--line);border-radius:var(--r);padding:14px;display:grid;place-items:center}
+.spacer{flex:1}
+.tbtn{display:flex;align-items:center;gap:6px;height:24px;padding-inline:8px;border-radius:var(--r);border:1px solid transparent;color:var(--txt-2);font-size:11.5px}
+.tbtn:hover{background:var(--raise);color:var(--txt)}
+.tbtn.bd{border-color:var(--line);background:var(--raise)}
+.tbtn.pri{background:var(--accent-2);border-color:#3F7FE8;color:#fff}
+.tbtn.pri:hover{background:var(--accent)}
+.tbtn svg{width:13px;height:13px}
+.langsw{display:flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.langsw button{padding:2px 8px;font-size:10.5px;color:var(--txt-3);height:22px}
+.langsw button.on{background:var(--raise-2);color:var(--txt)}
+
+/* ---------- rail ---------- */
+.rail{background:var(--panel);border-inline-end:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding-block:6px;gap:2px}
+.rbtn{width:34px;height:32px;display:grid;place-items:center;border-radius:var(--r);color:var(--txt-3);position:relative}
+.rbtn svg{width:16px;height:16px}
+.rbtn:hover{background:var(--raise);color:var(--txt)}
+.rbtn.on{background:var(--accent-soft);color:var(--accent)}
+.rbtn.on::before{content:"";position:absolute;inset-inline-start:-7px;top:7px;bottom:7px;width:2px;background:var(--accent);border-radius:2px}
+.rbtn .dot{position:absolute;top:5px;inset-inline-end:5px;width:5px;height:5px;border-radius:50%;background:var(--signal)}
+.rail .gap{flex:1}
+
+/* ---------- panels ---------- */
+.side{background:var(--panel);display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.side.left{border-inline-end:1px solid var(--line)}
+.side.right{border-inline-start:1px solid var(--line)}
+.phead{height:30px;display:flex;align-items:center;gap:8px;padding-inline:10px;border-bottom:1px solid var(--line);flex:none}
+.phead .cap{color:var(--txt-2)}
+.phead .ico{width:13px;height:13px;color:var(--txt-3)}
+.pbody{overflow:auto;flex:1;min-height:0}
+.pane{display:none}
+.pane.on{display:block}
+.sect{border-bottom:1px solid var(--line-soft)}
+.shead{display:flex;align-items:center;gap:7px;width:100%;padding:7px 10px;text-align:start}
+.shead:hover{background:var(--raise)}
+.shead .chev{width:9px;height:9px;color:var(--txt-3);transition:transform .15s}
+.sect.closed .chev{transform:rotate(-90deg)}
+html[dir="rtl"] .sect.closed .chev{transform:rotate(90deg)}
+.sbody{padding:2px 10px 11px}
+.sect.closed .sbody{display:none}
+
+/* ---------- form atoms ---------- */
+.f{display:flex;align-items:center;gap:8px;min-height:24px;margin-block:5px}
+.f>.k{flex:none;width:88px;font-size:11px;color:var(--txt-2)}
+.f>.v{flex:1;min-width:0;display:flex;align-items:center;gap:6px}
+.f.col{display:block}
+.f.col>.k{width:auto;margin-bottom:5px}
+input[type=text],input[type=number],select,textarea{
+  width:100%;height:24px;background:var(--void);border:1px solid var(--line);border-radius:var(--r);
+  padding-inline:7px;font-size:11.5px;color:var(--txt)
+}
+textarea{height:auto;padding:6px 7px;font-family:var(--mono);font-size:10.5px;line-height:1.6;resize:vertical}
+select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,#66666D 50%),linear-gradient(135deg,#66666D 50%,transparent 50%);background-position:calc(100% - 12px) 10px,calc(100% - 8px) 10px;background-size:4px 4px;background-repeat:no-repeat;padding-inline-end:22px;cursor:pointer}
+html[dir="rtl"] select{background-position:12px 10px,8px 10px}
+input:hover,select:hover{border-color:#3A3A40}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);outline:none}
+input[type=color]{width:26px;height:22px;padding:0;border:1px solid var(--line);border-radius:2px;background:none;cursor:pointer}
+input[type=range]{-webkit-appearance:none;appearance:none;height:16px;background:none;flex:1;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:2px;background:#2A2A2E;border-radius:2px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;height:11px;margin-top:-4.5px;border-radius:50%;background:var(--txt);border:2px solid var(--panel);box-shadow:0 0 0 1px #34343A}
+input[type=range]:hover::-webkit-slider-thumb{background:var(--accent)}
+input[type=range]::-moz-range-track{height:2px;background:#2A2A2E}
+input[type=range]::-moz-range-thumb{width:9px;height:9px;border:2px solid var(--panel);border-radius:50%;background:var(--txt)}
+.num{flex:none;width:46px;text-align:end;font-family:var(--mono);font-size:10.5px;color:var(--txt-2)}
+.sw{position:relative;width:26px;height:14px;flex:none;border-radius:8px;background:#2A2A2E;transition:background .15s;cursor:pointer;border:0}
+.sw::after{content:"";position:absolute;top:2px;inset-inline-start:2px;width:10px;height:10px;border-radius:50%;background:#7A7A82;transition:transform .15s,background .15s}
+.sw.on{background:rgba(76,141,255,.35)}
+.sw.on::after{background:var(--accent);transform:translateX(12px)}
+html[dir="rtl"] .sw.on::after{transform:translateX(-12px)}
+.seg{display:flex;background:var(--void);border:1px solid var(--line);border-radius:var(--r);padding:1px;gap:1px;width:100%}
+.seg button{flex:1;height:20px;border-radius:2px;font-size:10.5px;color:var(--txt-3);white-space:nowrap}
+.seg button:hover{color:var(--txt)}
+.seg button.on{background:var(--raise-2);color:var(--txt);box-shadow:inset 0 0 0 1px #2E2E33}
+.chk{display:flex;align-items:center;gap:7px;padding-block:3px;font-size:11.5px;color:var(--txt-2);cursor:pointer}
+.chk input{appearance:none;width:12px;height:12px;border:1px solid #34343A;border-radius:2px;background:var(--void);flex:none;position:relative}
+.chk input:checked{background:var(--accent);border-color:var(--accent)}
+.chk input:checked::after{content:"";position:absolute;inset-inline-start:3.5px;top:1px;width:3px;height:6px;border:solid #06101F;border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}
+.btn{height:24px;padding-inline:9px;border:1px solid var(--line);background:var(--raise);border-radius:var(--r);color:var(--txt-2);font-size:11px;display:inline-flex;align-items:center;gap:6px;justify-content:center}
+.btn:hover{background:var(--raise-2);color:var(--txt);border-color:#3A3A40}
+.btn.wide{width:100%}
+.btn.pri{background:var(--accent-2);border-color:#3F7FE8;color:#fff}
+.btn.pri:hover{background:var(--accent)}
+.btn.danger:hover{color:var(--alert);border-color:rgba(240,97,107,.4)}
+.btn svg{width:12px;height:12px}
+.hint{font-size:10.5px;color:var(--txt-3);line-height:1.55}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.tag{font-family:var(--mono);font-size:9.5px;padding:1px 5px;border-radius:2px;background:var(--raise);color:var(--txt-3);border:1px solid var(--line)}
+.tag.b{color:var(--accent);border-color:rgba(76,141,255,.3);background:var(--accent-soft)}
+.tag.g{color:var(--signal);border-color:rgba(56,214,192,.28);background:rgba(56,214,192,.1)}
+
+/* ---------- layer tree ---------- */
+.slot{display:flex;align-items:center;gap:8px;padding:6px 10px 4px;position:sticky;top:0;background:var(--panel);z-index:2}
+.slot .cap{white-space:nowrap}
+.slot i{flex:1;height:1px;background:var(--line);display:block}
+.node{display:flex;align-items:center;gap:6px;height:26px;padding-inline:8px 8px;border-radius:2px;color:var(--txt-2);cursor:pointer;user-select:none}
+.node:hover{background:var(--raise)}
+.node.sel{background:var(--accent-soft);color:var(--txt);box-shadow:inset 2px 0 0 var(--accent)}
+html[dir="rtl"] .node.sel{box-shadow:inset -2px 0 0 var(--accent)}
+.node .grip{width:9px;color:#3A3A40;flex:none;cursor:grab}
+.node .chev{width:9px;height:9px;color:var(--txt-3);flex:none}
+.node.closed .chev{transform:rotate(-90deg)}
+.node .sym{width:14px;height:14px;flex:none;border-radius:2px}
+.node .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11.5px}
+.node.off .nm{color:var(--txt-3);text-decoration:line-through;text-decoration-color:#3A3A40}
+.node .act{opacity:0;display:flex;gap:2px;flex:none}
+.node:hover .act{opacity:1}
+.node .act button{width:17px;height:17px;display:grid;place-items:center;border-radius:2px;color:var(--txt-3)}
+.node .act button:hover{background:var(--raise-2);color:var(--txt)}
+.node .act svg{width:11px;height:11px}
+.node .eye{width:15px;height:15px;flex:none;display:grid;place-items:center;color:var(--txt-3)}
+.node .eye svg{width:12px;height:12px}
+.node.on .eye{color:var(--accent)}
+.kids{margin-inline-start:14px;border-inline-start:1px solid var(--line-soft);padding-inline-start:2px}
+.node.closed + .kids{display:none}
+.node .scaleflag{font-family:var(--mono);font-size:9px;color:var(--txt-3);flex:none}
+
+/* ---------- map ---------- */
+.mapwrap{position:relative;background:var(--void);overflow:hidden;min-width:0}
+.stage{position:absolute;inset:0;overflow:hidden;perspective:1400px;perspective-origin:50% 62%}
+.scene{position:absolute;inset:-14%;transform-style:preserve-3d;transition:transform .5s cubic-bezier(.2,.7,.2,1)}
+#mapsvg{width:100%;height:100%;display:block}
+.frame{position:absolute;inset:0;pointer-events:none;z-index:6}
+.reticle{position:absolute;inset:0;pointer-events:none;z-index:5;opacity:.9}
+.mapui{position:absolute;inset:0;pointer-events:none;z-index:8}
+.mapui>*{pointer-events:auto}
+.float{position:absolute;background:rgba(12,12,13,.92);border:1px solid var(--line);border-radius:var(--r);backdrop-filter:blur(8px)}
+.mtools{top:22px;inset-inline-end:22px;display:flex;flex-direction:column;padding:3px;gap:1px}
+.mtools button{width:26px;height:26px;display:grid;place-items:center;border-radius:2px;color:var(--txt-2)}
+.mtools button svg{width:14px;height:14px}
+.mtools button:hover{background:var(--raise);color:var(--txt)}
+.mtools button.on{background:var(--accent-soft);color:var(--accent)}
+.mtools .hr{height:1px;background:var(--line);margin:3px 2px}
+.legend{bottom:22px;inset-inline-start:22px;width:184px;padding:0}
+.legend .lh{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--line)}
+.legend .lb{padding:7px 8px;display:grid;gap:4px}
+.lrow{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--txt-2)}
+.lrow i{width:13px;height:9px;border-radius:1px;flex:none}
+.lrow span{font-family:var(--mono);font-size:9.5px;color:var(--txt-3);margin-inline-start:auto}
+.legend.min .lb{display:none}
+.ovmap{bottom:22px;inset-inline-end:22px;width:132px;height:96px;overflow:hidden;padding:0}
+.ovmap svg{width:100%;height:100%}
+.scalebar{bottom:22px;inset-inline-start:50%;transform:translateX(-50%);padding:5px 9px;display:flex;align-items:center;gap:9px}
+.sbar{width:88px;height:5px;border:1px solid var(--txt-2);border-top:0;position:relative}
+.sbar i{position:absolute;inset:0 50% 0 0;background:var(--txt-2);opacity:.5}
+.compass{top:22px;inset-inline-start:22px;width:62px;height:62px;border-radius:50%;display:grid;place-items:center;padding:0}
+.compass svg{width:100%;height:100%}
+.identify{top:96px;inset-inline-start:22px;width:216px;display:none}
+.identify.on{display:block}
+.identify .ih{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--line)}
+.identify .ib{padding:6px 8px;display:grid;gap:3px;max-height:190px;overflow:auto}
+.irow{display:flex;gap:8px;font-size:10.5px}
+.irow b{color:var(--txt-3);font-weight:400;width:74px;flex:none}
+.irow span{font-family:var(--mono);color:var(--txt);font-size:10px}
+.ghost{position:absolute;inset-inline-start:50%;top:14px;transform:translateX(-50%);font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--txt-3);z-index:7;pointer-events:none}
+
+/* ---------- timeline ---------- */
+.timeline{height:38px;display:flex;align-items:center;gap:12px;padding-inline:12px;background:var(--panel);border-top:1px solid var(--line)}
+.timeline.hide{display:none}
+.tctl{display:flex;gap:2px}
+.tctl button{width:24px;height:22px;display:grid;place-items:center;border-radius:2px;color:var(--txt-2)}
+.tctl button:hover{background:var(--raise);color:var(--txt)}
+.tctl svg{width:12px;height:12px}
+.track{flex:1;position:relative;height:22px;display:flex;align-items:center}
+.track .rail2{position:absolute;inset-inline:0;height:3px;background:#1A1A1C;border-radius:2px}
+.track .fill{position:absolute;inset-inline-start:0;height:3px;background:linear-gradient(90deg,rgba(56,214,192,.25),var(--signal));border-radius:2px;width:42%}
+.track .ticks{position:absolute;inset-inline:0;top:-4px;height:5px;display:flex;justify-content:space-between}
+.track .ticks i{width:1px;height:5px;background:#2A2A2E}
+.track input{position:absolute;inset-inline:-4px;margin:0}
+
+/* ---------- dock ---------- */
+.dock{background:var(--panel);border-top:1px solid var(--line);display:flex;flex-direction:column;height:236px}
+.dock.min{height:31px}
+.dock.min .dbody{display:none}
+.dtabs{height:30px;display:flex;align-items:center;gap:1px;padding-inline:8px;border-bottom:1px solid var(--line);flex:none}
+.dtab{height:30px;padding-inline:11px;color:var(--txt-3);font-size:11.5px;border-bottom:2px solid transparent;display:flex;align-items:center;gap:6px}
+.dtab:hover{color:var(--txt)}
+.dtab.on{color:var(--txt);border-bottom-color:var(--accent)}
+.dtab .n{font-family:var(--mono);font-size:9.5px;color:var(--txt-3);background:var(--raise);border-radius:2px;padding:0 4px}
+.dbody{flex:1;min-height:0;overflow:hidden}
+.dpane{display:none;height:100%;flex-direction:column}
+.dpane.on{display:flex}
+.dbar{height:30px;display:flex;align-items:center;gap:6px;padding-inline:9px;border-bottom:1px solid var(--line-soft);flex:none}
+.dbar .sep{width:1px;height:15px;background:var(--line)}
+.dbar input[type=text]{width:170px;height:21px}
+.tablewrap{flex:1;overflow:auto}
+table{border-collapse:collapse;width:100%;font-size:11px}
+thead th{position:sticky;top:0;background:#131315;border-bottom:1px solid var(--line);text-align:start;padding:5px 9px;font-family:var(--cond);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--txt-3);font-weight:600;white-space:nowrap;cursor:pointer;z-index:2}
+thead th:hover{color:var(--txt)}
+thead th .srt{color:var(--accent);margin-inline-start:4px}
+tbody td{padding:4px 9px;border-bottom:1px solid var(--line-soft);white-space:nowrap;color:var(--txt-2)}
+tbody td.n{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:end;color:var(--txt)}
+tbody tr:hover td{background:rgba(76,141,255,.05)}
+tbody tr.sel td{background:var(--accent-soft);color:var(--txt)}
+tbody td.edit{color:var(--signal);position:relative}
+tbody td.edit::after{content:"";position:absolute;top:0;inset-inline-start:0;border-top:5px solid var(--signal);border-inline-end:5px solid transparent}
+.statgrid{padding:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:9px;overflow:auto}
+.stat{border:1px solid var(--line);border-radius:var(--r);padding:8px 9px;background:var(--void)}
+.stat .cap{margin-bottom:3px}
+.stat b{font-family:var(--mono);font-size:15px;font-weight:500;color:var(--txt)}
+.stat i{font-style:normal;font-size:10px;color:var(--txt-3);margin-inline-start:3px}
+.feed{flex:1;overflow:auto;padding:6px 0}
+.fline{display:flex;gap:10px;padding:3px 12px;font-family:var(--mono);font-size:10.5px;color:var(--txt-2)}
+.fline:hover{background:var(--raise)}
+.fline .t{color:var(--txt-3);flex:none}
+.fline .id{color:var(--signal);flex:none;width:56px}
+.fline .lvl{flex:none;width:34px;color:var(--txt-3)}
+.fline .lvl.ok{color:var(--signal)}
+.fline .lvl.warn{color:#E8B14C}
+.fline .lvl.err{color:var(--alert)}
+
+/* ---------- status ---------- */
+.status{height:25px;display:flex;align-items:center;gap:0;background:var(--panel);font-family:var(--mono);font-size:10px;color:var(--txt-3);padding-inline:4px}
+.st{display:flex;align-items:center;gap:6px;padding-inline:9px;height:25px;white-space:nowrap}
+.st + .st{border-inline-start:1px solid var(--line-soft)}
+.st b{color:var(--txt-2);font-weight:400}
+.st.click{cursor:pointer}
+.st.click:hover{background:var(--raise);color:var(--txt-2)}
+.st .led{width:6px;height:6px;border-radius:50%;background:var(--signal);box-shadow:0 0 0 2px rgba(56,214,192,.15)}
+.st .led.b{background:var(--accent);box-shadow:0 0 0 2px rgba(76,141,255,.15)}
+
+/* ---------- symbology extras ---------- */
+.ramp{height:14px;border-radius:2px;border:1px solid var(--line);flex:1}
+.classrow{display:flex;align-items:center;gap:7px;padding:3px 0}
+.classrow .sw2{position:relative;width:16px;height:12px;border-radius:2px;flex:none;border:1px solid rgba(255,255,255,.12);cursor:pointer}
+.classrow .rg{flex:1;min-width:0;font-family:var(--mono);font-size:10px;color:var(--txt-2)}
+.classrow .rg:focus{color:var(--txt);outline:none;box-shadow:inset 0 -1px 0 var(--accent)}
+.classrow .ct{font-family:var(--mono);font-size:9.5px;color:var(--txt-3)}
+.classrow input[type=text]{height:20px;font-family:var(--mono);font-size:10px}
+.histo{position:relative;height:88px;margin:8px 0 4px;background:var(--void);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.histo .bars{position:absolute;inset:0;display:flex;align-items:flex-end;gap:1px;padding:5px 4px}
+.histo .bars i{flex:1;background:#2E2E34;border-radius:1px 1px 0 0}
+.brk{position:absolute;top:0;bottom:0;width:9px;margin-inline-start:-4px;cursor:ew-resize;z-index:3}
+.brk::before{content:"";position:absolute;inset-block:0;inset-inline-start:4px;width:1px;background:var(--accent)}
+.brk::after{content:"";position:absolute;top:0;inset-inline-start:1px;width:7px;height:7px;background:var(--accent);border-radius:1px}
+.brk.drag::before{background:#fff}
+.hlabels{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--txt-3)}
+
+/* ---------- filter builder ---------- */
+.ftree{border:1px solid var(--line);border-radius:var(--r);background:var(--void);padding:7px}
+.fgroup{border-inline-start:1px solid #2A2A2E;padding-inline-start:8px;margin-inline-start:3px}
+.frow{display:flex;align-items:center;gap:4px;margin-block:4px}
+.frow select,.frow input{height:21px;font-size:10.5px}
+.frow .fld{flex:1.2}
+.frow .op{flex:.9}
+.frow .val{flex:1}
+.frow .x{width:18px;height:20px;flex:none;color:var(--txt-3);border-radius:2px}
+.frow .x:hover{background:var(--raise);color:var(--alert)}
+.logic{display:inline-flex;border:1px solid var(--line);border-radius:2px;overflow:hidden;margin-bottom:2px}
+.logic button{padding:1px 7px;font-family:var(--mono);font-size:9.5px;color:var(--txt-3)}
+.logic button.on{background:var(--accent-soft);color:var(--accent)}
+.code{background:var(--void);border:1px solid var(--line);border-radius:var(--r);padding:7px 8px;font-family:var(--mono);font-size:10px;line-height:1.65;color:var(--txt-2);overflow-x:auto;white-space:pre-wrap;word-break:break-word}
+.code .kw{color:#6E9BD8}.code .st{color:var(--signal)}.code .pm{color:#E8B14C}
+
+/* ---------- basemaps ---------- */
+.bmgrid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.bm{border:1px solid var(--line);border-radius:var(--r);overflow:hidden;cursor:pointer;background:var(--void)}
+.bm:hover{border-color:#34343A}
+.bm.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.bm .th{height:48px;display:block;width:100%}
+.bm .nm{padding:4px 6px;font-size:10.5px;color:var(--txt-2);border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+.bm.on .nm{color:var(--txt)}
+
+/* ---------- source list ---------- */
+.src{display:flex;gap:9px;padding:8px;border:1px solid var(--line);border-radius:var(--r);background:var(--void);margin-bottom:7px}
+.src .ic{width:26px;height:26px;border-radius:var(--r);background:var(--raise);display:grid;place-items:center;color:var(--accent);flex:none}
+.src .ic svg{width:13px;height:13px}
+.src .tx{min-width:0;flex:1}
+.src .tx b{display:block;font-size:11.5px;font-weight:500;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.src .tx span{font-family:var(--mono);font-size:9.5px;color:var(--txt-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.src .st2{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+
+/* ---------- assets ---------- */
+.asset{display:flex;align-items:center;gap:8px;padding:5px 7px;border-radius:2px;cursor:pointer}
+.asset:hover{background:var(--raise)}
+.asset .pin{width:7px;height:7px;border-radius:50%;flex:none;background:var(--signal)}
+.asset .pin.stale{background:#4A5A6C}
+.asset .nm{flex:1;font-family:var(--mono);font-size:10.5px;color:var(--txt-2)}
+.asset .sp{font-family:var(--mono);font-size:9.5px;color:var(--txt-3)}
+
+/* ---------- modal ---------- */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.68);backdrop-filter:blur(3px);z-index:200;display:none;align-items:center;justify-content:center}
+.scrim.on{display:flex}
+.modal{width:672px;max-width:94vw;max-height:86vh;background:var(--panel);border:1px solid var(--line);border-radius:5px;box-shadow:0 30px 90px rgba(0,0,0,.6);display:flex;flex-direction:column;overflow:hidden}
+.mh{height:40px;display:flex;align-items:center;gap:9px;padding-inline:13px;border-bottom:1px solid var(--line);flex:none}
+.mh b{font-size:12.5px;font-weight:500}
+.mh .x{margin-inline-start:auto;width:24px;height:24px;display:grid;place-items:center;border-radius:2px;color:var(--txt-3)}
+.mh .x:hover{background:var(--raise);color:var(--txt)}
+.mtabs{display:flex;gap:1px;padding:7px 11px 0;border-bottom:1px solid var(--line);flex:none}
+.mtabs button{padding:5px 10px;font-size:11.5px;color:var(--txt-3);border-bottom:2px solid transparent}
+.mtabs button.on{color:var(--txt);border-bottom-color:var(--accent)}
+.mb{padding:14px;overflow:auto;flex:1}
+.mpane{display:none}
+.mpane.on{display:block}
+.drop{border:1px dashed #34343A;border-radius:4px;padding:26px;text-align:center;background:var(--void)}
+.drop svg{width:22px;height:22px;color:var(--txt-3);margin-bottom:7px}
+.drop b{display:block;font-size:12px;font-weight:500;margin-bottom:3px}
+.caps{border:1px solid var(--line);border-radius:var(--r);max-height:170px;overflow:auto;background:var(--void);margin-top:9px}
+.caps .cr{display:flex;align-items:center;gap:8px;padding:5px 9px;border-bottom:1px solid var(--line-soft);font-size:11px;color:var(--txt-2);cursor:pointer}
+.caps .cr:hover{background:var(--raise)}
+.caps .cr.sel{background:var(--accent-soft);color:var(--txt)}
+.caps .cr .mono{margin-inline-start:auto;font-size:9.5px;color:var(--txt-3)}
+.mf{height:48px;display:flex;align-items:center;gap:8px;padding-inline:13px;border-top:1px solid var(--line);flex:none}
+.mf .spacer{flex:1}
+
+/* ---------- toast ---------- */
+.toasts{position:fixed;bottom:64px;inset-inline-start:50%;transform:translateX(-50%);z-index:300;display:grid;gap:6px;justify-items:center;pointer-events:none}
+.toast{background:#161618;border:1px solid var(--line);border-inline-start:2px solid var(--accent);border-radius:var(--r);padding:7px 13px;font-size:11.5px;color:var(--txt);box-shadow:0 12px 30px rgba(0,0,0,.5);animation:tin .22s ease}
+@keyframes tin{from{opacity:0;transform:translateY(6px)}}
+
+@media (max-width:1180px){:root{--lw:242px;--rw:264px}}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms !important;transition-duration:.01ms !important}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="m3 14 9 5 9-5"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.3 3.6 5.3 3.6 8.5s-1.2 6.2-3.6 8.5c-2.4-2.3-3.6-5.3-3.6-8.5S9.6 5.8 12 3.5Z"/></symbol>
+<symbol id="i-scene" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M2 19h20L15 8l-4 6-2.5-3L2 19Z"/><circle cx="17" cy="5.5" r="2.5"/></symbol>
+<symbol id="i-live" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="2.2"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4m8.4-8.4a6 6 0 0 1 0 8.4M4.9 4.9a10 10 0 0 0 0 14.2m14.2-14.2a10 10 0 0 1 0 14.2"/></symbol>
+<symbol id="i-doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8l-5-5Z"/><path d="M14 3v5h5"/></symbol>
+<symbol id="i-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.6"/></symbol>
+<symbol id="i-eyeoff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 4l16 16M9.5 6c.8-.3 1.6-.5 2.5-.5 6 0 9.5 6.5 9.5 6.5a16 16 0 0 1-3 3.7M6.3 8.3A16 16 0 0 0 2.5 12S6 18.5 12 18.5c1.3 0 2.4-.3 3.4-.7"/></symbol>
+<symbol id="i-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="i-grip" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="18" r="1.4"/></symbol>
+<symbol id="i-zin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5M11 8.5v5M8.5 11h5"/></symbol>
+<symbol id="i-zout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5M8.5 11h5"/></symbol>
+<symbol id="i-cube" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/></symbol>
+<symbol id="i-ruler" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3.5 15.5 15.5 3.5l5 5-12 12-5-5Z"/><path d="m7 12 2 2m2-5 2 2m2-5 2 2"/></symbol>
+<symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="2"/><path d="M12 1.5v4M12 18.5v4M1.5 12h4M18.5 12h4"/></symbol>
+<symbol id="i-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 9V4h5M20 15v5h-5M15 4h5v5M9 20H4v-5"/></symbol>
+<symbol id="i-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h11a5 5 0 0 1 0 10H8"/><path d="m8 4-4 4 4 4"/></symbol>
+<symbol id="i-redo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 8H9a5 5 0 0 0 0 10h7"/><path d="m16 4 4 4-4 4"/></symbol>
+<symbol id="i-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="18" cy="5.5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="18.5" r="2.5"/><path d="m8.2 10.8 7.6-4m0 10.4-7.6-4"/></symbol>
+<symbol id="i-save" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M4.5 4.5h11L20 9v10.5H4.5v-15Z"/><path d="M8 4.5v5h6v-5M8 19.5V14h8v5.5"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+<symbol id="i-table" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M3.5 9.5h17M9.5 9.5v10"/></symbol>
+<symbol id="i-filter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3.5 5h17l-6.5 7.5v6l-4 2.5v-8.5L3.5 5Z"/></symbol>
+<symbol id="i-tag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M4 4h7l9 9-7 7-9-9V4Z"/><circle cx="8" cy="8" r="1.4"/></symbol>
+<symbol id="i-db" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><ellipse cx="12" cy="6" rx="7.5" ry="3"/><path d="M4.5 6v12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3"/></symbol>
+<symbol id="i-server" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3.5" y="4" width="17" height="6" rx="1.5"/><rect x="3.5" y="14" width="17" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></symbol>
+<symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M13 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V9l-6-6Z"/><path d="M13 3v6h6"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5-13-7.5Z"/></symbol>
+<symbol id="i-pause" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4.5" width="4" height="15" rx="1"/><rect x="14" y="4.5" width="4" height="15" rx="1"/></symbol>
+<symbol id="i-back" viewBox="0 0 24 24" fill="currentColor"><path d="M18 5v14L8 12l10-7Z"/><rect x="5" y="5" width="2" height="14"/></symbol>
+<symbol id="i-fwd" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5v14l10-7L6 5Z"/><rect x="17" y="5" width="2" height="14"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 6.5h16M9 6.5V4h6v2.5M6.5 6.5 7.5 20h9l1-13.5M10 10v6.5M14 10v6.5"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="8.5" y="8.5" width="12" height="12" rx="1.5"/><path d="M15.5 5.5v-1a1 1 0 0 0-1-1h-10a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h1"/></symbol>
+<symbol id="i-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v12M7.5 11 12 15.5 16.5 11M4 20h16"/></symbol>
+<symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3.5 6.5A1.5 1.5 0 0 1 5 5h4l2 2.5h8A1.5 1.5 0 0 1 20.5 9v9A1.5 1.5 0 0 1 19 19.5H5A1.5 1.5 0 0 1 3.5 18v-11.5Z"/></symbol>
+<symbol id="i-fit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M9 9h6v6H9z"/></symbol>
+<symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.6h.01"/></symbol>
+<symbol id="i-alidade" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 1.5v21M1.5 12h21" stroke-width="1"/><path d="m12 4.5 3 7.5-3 7.5-3-7.5 3-7.5Z" fill="currentColor" fill-opacity=".18"/></symbol>
+</defs></svg>
+
+<div class="app" id="app">
+
+  <!-- ================= TITLE ================= -->
+  <div class="title">
+    <div class="brand"><svg class="mark"><use href="#i-alidade"/></svg><b>Alidade</b><span>v1.0 · demo</span></div>
+
+    <nav class="menubar" id="menubar">
+      <div><button class="mtrig" data-t="Project">Project</button><div class="mpop">
+        <button class="mi"><span class="tick"></span>New project<kbd>⌘N</kbd></button>
+        <button class="mi"><span class="tick"></span>Open…<kbd>⌘O</kbd></button>
+        <button class="mi"><span class="tick"></span>Save<kbd>⌘S</kbd></button>
+        <button class="mi"><span class="tick"></span>Save as copy</button>
+        <div class="msep"></div>
+        <button class="mi" data-act="share"><span class="tick"></span>Share by link…</button>
+        <button class="mi"><span class="tick"></span>Import project JSON</button>
+        <button class="mi"><span class="tick"></span>Export project JSON</button>
+        <div class="msep"></div>
+        <button class="mi"><span class="tick"></span>Load sample project</button>
+        <div class="msep"></div>
+        <button class="mi" data-act="print"><span class="tick"></span>Print layout…<kbd>⌘P</kbd></button>
+        <button class="mi" data-act="print"><span class="tick"></span>Export map image…</button>
+      </div></div>
+      <div><button class="mtrig">Edit</button><div class="mpop">
+        <button class="mi"><span class="tick"></span>Undo move layer<kbd>⌘Z</kbd></button>
+        <button class="mi"><span class="tick"></span>Redo<kbd>⇧⌘Z</kbd></button>
+        <div class="msep"></div>
+        <button class="mi"><span class="tick"></span>Select all features<kbd>⌘A</kbd></button>
+        <button class="mi"><span class="tick"></span>Clear selection<kbd>Esc</kbd></button>
+        <div class="msep"></div>
+        <button class="mi" data-pane="prefs"><span class="tick"></span>Preferences…</button>
+      </div></div>
+      <div><button class="mtrig">View</button><div class="mpop">
+        <button class="mi" data-mode="2d"><span class="tick">✓</span>2D<kbd>1</kbd></button>
+        <button class="mi" data-mode="25d"><span class="tick"></span>2.5D<kbd>2</kbd></button>
+        <button class="mi" data-mode="3d"><span class="tick"></span>3D<kbd>3</kbd></button>
+        <div class="msep"></div>
+        <button class="mi" data-act="reset-camera"><span class="tick"></span>Reset pitch and bearing</button>
+        <button class="mi" data-tog="l-graticule"><span class="tick">✓</span>Graticule</button>
+        <button class="mi" data-ui="scalebar"><span class="tick">✓</span>Scale bar</button>
+        <button class="mi" data-ui="compass"><span class="tick">✓</span>North arrow</button>
+        <button class="mi" data-ui="ovmap"><span class="tick">✓</span>Overview map</button>
+        <button class="mi" data-ui="legend"><span class="tick">✓</span>Legend</button>
+        <button class="mi" data-ui="reticle"><span class="tick">✓</span>Sighting reticle</button>
+        <div class="msep"></div>
+        <button class="mi" data-act="panels"><span class="tick"></span>Hide side panels<kbd>⌘\</kbd></button>
+      </div></div>
+      <div><button class="mtrig">Layer</button><div class="mpop">
+        <button class="mi" data-act="add"><span class="tick"></span>Add layer…<kbd>⌘⇧A</kbd></button>
+        <button class="mi"><span class="tick"></span>New group</button>
+        <div class="msep"></div>
+        <button class="mi"><span class="tick"></span>Zoom to layer extent</button>
+        <button class="mi"><span class="tick"></span>Duplicate layer</button>
+        <button class="mi"><span class="tick"></span>Rename…<kbd>F2</kbd></button>
+        <button class="mi"><span class="tick"></span>Remove layer<kbd>⌫</kbd></button>
+        <div class="msep"></div>
+        <button class="mi" data-rtab="sym"><span class="tick"></span>Symbology</button>
+        <button class="mi" data-rtab="lab"><span class="tick"></span>Labels</button>
+        <button class="mi" data-rtab="fld"><span class="tick"></span>Fields and metadata</button>
+        <div class="msep"></div>
+        <button class="mi" data-scope="1"><span class="tick"></span>Edit attributes<kbd>⌘E</kbd></button>
+        <button class="mi dis" data-scope="1"><span class="tick"></span>Edit geometry<span class="badge">not in v1</span></button>
+        <button class="mi dis" data-scope="1"><span class="tick"></span>Snapping and topology<span class="badge">not in v1</span></button>
+      </div></div>
+      <div><button class="mtrig">Data</button><div class="mpop">
+        <button class="mi" data-act="add"><span class="tick"></span>Add file…</button>
+        <button class="mi" data-act="add"><span class="tick"></span>Add service…</button>
+        <button class="mi" data-act="add"><span class="tick"></span>Connect PostGIS table…</button>
+        <div class="msep"></div>
+        <button class="mi" data-dtab="attr"><span class="tick"></span>Attribute table<kbd>F6</kbd></button>
+        <button class="mi" data-rtab="flt"><span class="tick"></span>Filter builder</button>
+        <button class="mi" data-dtab="stats"><span class="tick"></span>Field statistics</button>
+        <div class="msep"></div>
+        <button class="mi"><span class="tick"></span>Export layer as GeoJSON</button>
+        <button class="mi"><span class="tick"></span>Export selection as CSV</button>
+      </div></div>
+      <div><button class="mtrig">Services</button><div class="mpop">
+        <button class="mi"><span class="tick"></span>WMS GetCapabilities…</button>
+        <button class="mi"><span class="tick"></span>WMTS GetCapabilities…</button>
+        <button class="mi"><span class="tick"></span>WFS feature request…</button>
+        <div class="msep"></div>
+        <button class="mi"><span class="tick">✓</span>GetFeatureInfo on click</button>
+        <button class="mi"><span class="tick">✓</span>Use GetLegendGraphic in legend</button>
+        <div class="msep"></div>
+        <button class="mi"><span class="tick"></span>Open GeoServer admin</button>
+      </div></div>
+      <div><button class="mtrig">Help</button><div class="mpop">
+        <button class="mi"><span class="tick"></span>Documentation</button>
+        <button class="mi"><span class="tick"></span>Keyboard shortcuts<kbd>?</kbd></button>
+        <button class="mi"><span class="tick"></span>Report an issue</button>
+        <div class="msep"></div>
+        <button class="mi"><span class="tick"></span>About Alidade</button>
+      </div></div>
+    </nav>
+
+    <div class="spacer"></div>
+    <button class="tbtn" title="Undo"><svg><use href="#i-undo"/></svg></button>
+    <button class="tbtn" title="Redo"><svg><use href="#i-redo"/></svg></button>
+    <div class="tag b mono" id="projname">Dushanbe · density 2024</div>
+    <button class="tbtn bd" data-act="share"><svg><use href="#i-share"/></svg>Share</button>
+    <button class="tbtn pri" data-act="save"><svg><use href="#i-save"/></svg>Save</button>
+    <div class="langsw" id="langsw"><button class="on" data-lang="en">EN</button><button data-lang="fa">فا</button></div>
+  </div>
+
+  <!-- ================= MIDDLE ================= -->
+  <div class="mid">
+
+    <!-- rail -->
+    <div class="rail" id="rail">
+      <button class="rbtn on" data-pane="layers" title="Layers"><svg><use href="#i-layers"/></svg></button>
+      <button class="rbtn" data-pane="sources" title="Data sources"><svg><use href="#i-db"/></svg></button>
+      <button class="rbtn" data-pane="basemaps" title="Basemaps"><svg><use href="#i-globe"/></svg></button>
+      <button class="rbtn" data-pane="scene" title="Scene and furniture"><svg><use href="#i-scene"/></svg></button>
+      <button class="rbtn" data-pane="livep" title="Live assets"><svg><use href="#i-live"/></svg><i class="dot"></i></button>
+      <button class="rbtn" data-pane="project" title="Project"><svg><use href="#i-doc"/></svg></button>
+      <div class="gap"></div>
+      <button class="rbtn" data-pane="prefs" title="Preferences"><svg><use href="#i-sliders"/></svg></button>
+    </div>
+
+    <!-- ============ LEFT PANEL ============ -->
+    <aside class="side left">
+      <div class="phead"><span class="cap" id="lefttitle">Layers</span><div class="spacer" style="flex:1"></div>
+        <button class="tbtn" data-act="add" title="Add layer"><svg><use href="#i-plus"/></svg></button>
+        <button class="tbtn" title="New group"><svg><use href="#i-folder"/></svg></button>
+      </div>
+      <div class="pbody">
+
+        <!-- pane: layers -->
+        <div class="pane on" id="p-layers">
+          <div style="padding:8px 10px 4px"><input type="text" placeholder="Search layers" id="layersearch"></div>
+
+          <div class="slot"><span class="cap">Overlay</span><i></i><span class="tag mono">2</span></div>
+          <div class="tree">
+            <div class="node on" data-vis="l-live" data-layer="fleet"><span class="grip"><svg viewBox="0 0 24 24" width="9" height="9"><use href="#i-grip"/></svg></span><span class="eye"><svg><use href="#i-eye"/></svg></span><i class="sym" style="background:var(--signal);border-radius:50%"></i><span class="nm">Fleet · live feed</span><span class="tag g mono">WS</span><span class="act"><button title="Zoom to layer"><svg><use href="#i-fit"/></svg></button></span></div>
+            <div class="node off" data-vis="l-measure" data-layer="meas"><span class="grip"><svg viewBox="0 0 24 24" width="9" height="9"><use href="#i-grip"/></svg></span><span class="eye"><svg><use href="#i-eyeoff"/></svg></span><i class="sym" style="background:#E8B14C33;border:1px dashed #E8B14C"></i><span class="nm">Measurements</span></div>
+          </div>
+
+          <div class="slot"><span class="cap">Labels</span><i></i><span class="tag mono">2</span></div>
+          <div class="tree">
+            <div class="node on" data-vis="l-wardlabels" data-layer="wardlab"><span class="grip"><svg viewBox="0 0 24 24" width="9" height="9"><use href="#i-grip"/></svg></span><span class="eye"><svg><use href="#i-eye"/></svg></span><i class="sym" style="background:#1D1D20;display:grid;place-items:center"><svg viewBox="0 0 24 24" width="10" height="10" style="color:#9A9AA0"><use href="#i-tag"/></svg></i><span class="nm">Ward labels</span><span class="scaleflag">≤1:50k</span></div>
+            <div class="node on" data-vis="l-bmlabels" data-layer="bmlab"><span class="grip"><svg viewBox="0 0 24 24" width="9" height="9"><use href="#i-grip"/></svg></span><span class="eye"><svg><use href="#i-eye"/></svg></span><i class="sym" style="background:#1D1D20"></i><span class="nm">Basemap labels</span><span class="tag mono">base</span></div>
+          </div>
+
+          <div class="slot"><span class="cap">Data</span><i></i><span class="tag mono">6</span></div>
+          <div class="tree">
+            <div class="node grp" data-group="g1"><span class="grip"><svg viewBox="0 0 24 24" width="9" height="9"><use href="#i-grip"/></svg></span><svg class="chev"><use href="#i-chev"/></svg><svg viewBox="0 0 24 24" class="sym" style="color:#6E9BD8;background:none"><use href="#i-folder"/></svg><span class="nm" style="font-weight:500;color:var(--txt)">Census 1400</span><span class="tag mono">2</span></div>
+            <div class="kids">
+              <div class="node on sel" data-vis="l-density" data-layer="density"><span class="grip"><svg viewBox="0 0 24 24" width="9" height="9"><use href="#i-grip"/></svg></span><span class="eye"><svg><use href="#i-eye"/></svg></span><i class="sym" style="background:linear-gradient(90deg,#12283F,#4C8DFF,#A8D2FF)"></i><span class="nm">Population density</span><svg style="width:9px;height:9px;color:#4C8DFF;flex:none" title="Filter is active"><use href="#i-filter"/></svg><span class="tag mono">28/42</span><span class="act"><button title="Zoom to layer"><svg><use href="#i-fit"/></svg></button><button title="Remove"><svg><use href="#i-trash"/></svg></button></span></div>
+              <div class="node on" data-vis="l-wards" data-layer="wards"><span class="grip"><svg viewBox="0 0 24 24" width="9" height="9"><use href="#i-grip"/></svg></span><span class="eye"><svg><use href="#i-eye"/></svg></span><i class="sym" style="background:none;border:1px solid #7A7A85"></i><span class="nm">Ward boundaries</span><span class="tag mono">42</span></div>
+            </div>
+
+            <div class="node grp" data-group="g2"><span class="grip"><svg viewBox="0 0 24 24" width="9" height="9"><use href="#i-grip"/></svg></span><svg class="chev"><use href="#i-chev"/></svg><svg viewBox="0 0 24 24" class="sym" style="color:#6E9BD8;background:none"><use href="#i-folder"/></svg><span class="nm" style="font-weight:500;color:var(--txt)">Infrastructure</span><span class="tag mono">3</span></div>
+            <div class="kids">
+              <div class="node on" data-vis="l-network" data-layer="network"><span class="grip"><svg viewBox="0 0 24 24" width="9" height="9"><use href="#i-grip"/></svg></span><span class="eye"><svg><use href="#i-eye"/></svg></span><i class="sym" style="background:none;border-bottom:2px solid #46B4E8"></i><span class="nm">Water network</span><span class="tag mono">890</span></div>
+              <div class="node on" data-vis="l-sensors" data-layer="sensors"><span class="grip"><svg viewBox="0 0 24 24" width="9" height="9"><use href="#i-grip"/></svg></span><span class="eye"><svg><use href="#i-eye"/></svg></span><i class="sym" style="background:#4C8DFF;border-radius:50%"></i><span class="nm">Sensor points</span><span class="tag mono">1 240</span></div>
+              <div class="node off" data-vis="l-build3d" data-layer="build"><span class="grip"><svg viewBox="0 0 24 24" width="9" height="9"><use href="#i-grip"/></svg></span><span class="eye"><svg><use href="#i-eyeoff"/></svg></span><i class="sym" style="background:#34343A"></i><span class="nm">Buildings 2.5D</span><span class="tag mono">ext</span></div>
+            </div>
+
+            <div class="node off" data-vis="l-wms" data-layer="wms"><span class="grip"><svg viewBox="0 0 24 24" width="9" height="9"><use href="#i-grip"/></svg></span><span class="eye"><svg><use href="#i-eyeoff"/></svg></span><i class="sym" style="background:#243A2E"></i><span class="nm">Land cover</span><span class="tag mono">WMS</span></div>
+          </div>
+
+          <div class="slot"><span class="cap">Base</span><i></i><span class="tag mono">3</span></div>
+          <div class="tree" style="padding-bottom:12px">
+            <div class="node on" data-vis="l-hillshade" data-layer="hill"><span class="grip"><svg viewBox="0 0 24 24" width="9" height="9"><use href="#i-grip"/></svg></span><span class="eye"><svg><use href="#i-eye"/></svg></span><i class="sym" style="background:linear-gradient(135deg,#33333A,#0D0D0F)"></i><span class="nm">Hillshade</span></div>
+            <div class="node on" data-vis="l-terrain" data-layer="terrain"><span class="grip"><svg viewBox="0 0 24 24" width="9" height="9"><use href="#i-grip"/></svg></span><span class="eye"><svg><use href="#i-eye"/></svg></span><i class="sym" style="background:#1D211C"></i><span class="nm">Terrain · SRTM 30 m</span><span class="tag mono">DEM</span></div>
+            <div class="node on" data-vis="l-base" data-layer="basemap"><span class="grip"><svg viewBox="0 0 24 24" width="9" height="9"><use href="#i-grip"/></svg></span><span class="eye"><svg><use href="#i-eye"/></svg></span><i class="sym" style="background:#0E0E10;border:1px solid #34343A"></i><span class="nm">Basemap · Slate</span><span class="tag mono">lock</span></div>
+          </div>
+        </div>
+
+        <!-- pane: sources -->
+        <div class="pane" id="p-sources">
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Connected</span></button><div class="sbody">
+            <div class="src"><div class="ic"><svg><use href="#i-db"/></svg></div><div class="tx"><b>PostGIS · alidade</b><span>postgis:5432/alidade · public</span></div><div class="st2"><span class="tag g">live</span><span class="tag mono">4 tbl</span></div></div>
+            <div class="src"><div class="ic"><svg><use href="#i-server"/></svg></div><div class="tx"><b>GeoServer</b><span>/geoserver/wms · 1.3.0</span></div><div class="st2"><span class="tag g">live</span><span class="tag mono">7 lyr</span></div></div>
+            <div class="src"><div class="ic"><svg><use href="#i-live"/></svg></div><div class="tx"><b>Asset feed</b><span>wss://…/live?fleet=dushanbe</span></div><div class="st2"><span class="tag g">12 ast</span><span class="tag mono">1 Hz</span></div></div>
+            <div class="src"><div class="ic"><svg><use href="#i-file"/></svg></div><div class="tx"><b>wards_1400.gpkg</b><span>uploaded · EPSG:32642 → 4326</span></div><div class="st2"><span class="tag mono">42 ft</span></div></div>
+            <button class="btn wide" data-act="add"><svg><use href="#i-plus"/></svg>Add data</button>
+          </div></div>
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Tile server</span></button><div class="sbody">
+            <div class="f"><span class="k">Endpoint</span><div class="v"><input type="text" value="/api/tiles/{z}/{x}/{y}.mvt" readonly></div></div>
+            <div class="f"><span class="k">Buffer</span><div class="v"><input type="range" min="0" max="128" value="64"><span class="num">64 px</span></div></div>
+            <div class="f"><span class="k">Extent</span><div class="v"><select><option>4096</option><option>2048</option><option>8192</option></select></div></div>
+            <div class="f"><span class="k">Simplify</span><div class="v"><input type="range" min="0" max="10" value="4"><span class="num">4.0</span></div></div>
+            <label class="chk"><input type="checkbox" checked>Cache tiles for 5 minutes</label>
+            <label class="chk"><input type="checkbox" checked>Push filter down to SQL</label>
+            <div class="hint" style="margin-top:6px">Last tile: 24 ms · 18 KB · 1 412 features</div>
+          </div></div>
+        </div>
+
+        <!-- pane: basemaps -->
+        <div class="pane" id="p-basemaps">
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Gallery</span></button><div class="sbody">
+            <div class="bmgrid" id="bmgrid"></div>
+            <label class="chk" style="margin-top:8px"><input type="checkbox" checked data-tog="l-bmlabels">Show basemap labels</label>
+            <label class="chk"><input type="checkbox" checked>Show basemap roads</label>
+            <div class="f"><span class="k">Opacity</span><div class="v"><input type="range" min="0" max="100" value="100"><span class="num">100%</span></div></div>
+          </div></div>
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Projection</span></button><div class="sbody">
+            <div class="seg" data-seg="proj"><button class="on">Mercator</button><button>Globe</button></div>
+            <div class="hint" style="margin-top:7px">Rendering is EPSG:3857. Coordinates can be read out in any CRS.</div>
+          </div></div>
+        </div>
+
+        <!-- pane: scene -->
+        <div class="pane" id="p-scene">
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Camera</span></button><div class="sbody">
+            <div class="seg" id="modeseg"><button class="on" data-mode="2d">2D</button><button data-mode="25d">2.5D</button><button data-mode="3d">3D</button></div>
+            <div class="f"><span class="k">Pitch</span><div class="v"><input type="range" id="pitch" min="0" max="70" value="0"><span class="num" id="pitchv">0°</span></div></div>
+            <div class="f"><span class="k">Bearing</span><div class="v"><input type="range" id="bearing" min="-180" max="180" value="0"><span class="num" id="bearv">0°</span></div></div>
+            <div class="f"><span class="k">Min zoom</span><div class="v"><input type="number" value="4"><span class="k" style="width:auto">Max</span><input type="number" value="19"></div></div>
+            <label class="chk"><input type="checkbox">Lock camera to project bounds</label>
+            <button class="btn wide" data-act="reset-camera" style="margin-top:6px">Reset pitch and bearing</button>
+          </div></div>
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Terrain</span></button><div class="sbody">
+            <div class="f"><span class="k">DEM source</span><div class="v"><select><option>SRTM 30 m</option><option>ALOS 30 m</option><option>None</option></select></div></div>
+            <div class="f"><span class="k">Exaggeration</span><div class="v"><input type="range" min="0" max="30" value="14"><span class="num">1.4×</span></div></div>
+            <label class="chk"><input type="checkbox" checked data-tog="l-hillshade">Hillshade</label>
+            <div class="f"><span class="k">Sun azimuth</span><div class="v"><input type="range" id="azim" min="0" max="360" value="315"><span class="num" id="azimv">315°</span></div></div>
+            <div class="f"><span class="k">Intensity</span><div class="v"><input type="range" id="hint" min="0" max="100" value="55"><span class="num">0.55</span></div></div>
+          </div></div>
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Atmosphere</span></button><div class="sbody">
+            <label class="chk"><input type="checkbox" checked data-tog="l-fog">Fog</label>
+            <div class="f"><span class="k">Range</span><div class="v"><input type="range" min="0" max="100" value="38"><span class="num">0.38</span></div></div>
+            <div class="f"><span class="k">Colour</span><div class="v"><input type="color" value="#0a0a0b"><input type="text" value="#0A0A0B" class="mono"></div></div>
+            <label class="chk"><input type="checkbox">Sky and stars</label>
+            <div class="f"><span class="k">Light</span><div class="v"><select><option>Viewport</option><option>Map anchor</option></select></div></div>
+            <div class="f"><span class="k">Ambient</span><div class="v"><input type="range" min="0" max="100" value="62"><span class="num">0.62</span></div></div>
+          </div></div>
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Map furniture</span></button><div class="sbody">
+            <label class="chk"><input type="checkbox" checked data-tog="l-graticule">Graticule</label>
+            <div class="f"><span class="k">Interval</span><div class="v"><select id="gratint"><option>0.05°</option><option selected>0.1°</option><option>0.25°</option><option>1°</option></select></div></div>
+            <label class="chk"><input type="checkbox" checked data-ui="scalebar">Scale bar</label>
+            <div class="f"><span class="k">Units</span><div class="v"><select id="sbunits"><option>Metric</option><option>Imperial</option><option>Nautical</option></select></div></div>
+            <label class="chk"><input type="checkbox" checked data-ui="compass">North arrow</label>
+            <label class="chk"><input type="checkbox" checked data-ui="ovmap">Overview map</label>
+            <label class="chk"><input type="checkbox" checked data-ui="legend">Legend</label>
+            <label class="chk"><input type="checkbox" checked data-ui="reticle">Sighting reticle and bearing rule</label>
+            <div class="f"><span class="k">Readout</span><div class="v"><select id="coordfmt"><option>Decimal degrees</option><option>Degrees, minutes, seconds</option><option>UTM 42N metres</option></select></div></div>
+          </div></div>
+        </div>
+
+        <!-- pane: live -->
+        <div class="pane" id="p-livep">
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Connection</span></button><div class="sbody">
+            <div class="f"><span class="k">Socket</span><div class="v"><input type="text" value="wss://demo.alidade.io/live" class="mono"></div></div>
+            <div class="f"><span class="k">Status</span><div class="v"><span class="tag g">connected · 1 Hz</span><span class="tag mono">12 assets</span></div></div>
+            <div class="grid2"><button class="btn">Reconnect</button><button class="btn">Pause feed</button></div>
+          </div></div>
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Movement</span></button><div class="sbody">
+            <label class="chk"><input type="checkbox" checked id="interp">Interpolate between messages</label>
+            <div class="f"><span class="k">Smoothing</span><div class="v"><input type="range" min="0" max="100" value="70"><span class="num">0.70</span></div></div>
+            <label class="chk"><input type="checkbox" checked id="trailon">Draw trail</label>
+            <div class="f"><span class="k">Trail</span><div class="v"><input type="range" id="trail" min="0" max="100" value="45"><span class="num" id="trailv">4 min</span></div></div>
+            <div class="f"><span class="k">Drop after</span><div class="v"><input type="number" value="90"><span class="k" style="width:auto">s</span></div></div>
+            <label class="chk"><input type="checkbox" checked>Write tracks to PostGIS</label>
+          </div></div>
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Assets</span><span class="tag mono" style="margin-inline-start:auto">12</span></button><div class="sbody" id="assetlist"></div></div>
+        </div>
+
+        <!-- pane: project -->
+        <div class="pane" id="p-project">
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Document</span></button><div class="sbody">
+            <div class="f col"><span class="k">Name</span><div class="v"><input type="text" value="Dushanbe · population density 2024"></div></div>
+            <div class="f"><span class="k">Schema</span><div class="v"><span class="tag mono">project/3</span><span class="hint">migrated on open</span></div></div>
+            <div class="f"><span class="k">Saved</span><div class="v"><span class="hint">2 minutes ago · 41 KB</span></div></div>
+            <div class="grid2"><button class="btn"><svg><use href="#i-save"/></svg>Save</button><button class="btn"><svg><use href="#i-copy"/></svg>Duplicate</button></div>
+          </div></div>
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Share</span></button><div class="sbody">
+            <div class="f col"><span class="k">Link</span><div class="v"><input type="text" class="mono" value="demo.alidade.io/p/8f3a2c" readonly></div></div>
+            <label class="chk"><input type="checkbox" checked>Include current camera position</label>
+            <label class="chk"><input type="checkbox">Open with attribute table visible</label>
+            <button class="btn wide pri" data-act="copylink"><svg><use href="#i-share"/></svg>Copy link</button>
+          </div></div>
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">What this version does</span></button><div class="sbody">
+            <div class="scope"><span class="m in">✓</span><div><b>Attribute editing</b><span>Values are written back to PostGIS and the change is versioned.</span></div></div>
+            <div class="scope"><span class="m in">✓</span><div><b>Print layout and map export</b><span>Page setup, elements, PDF and PNG at print resolution.</span></div></div>
+            <div class="scope"><span class="m out">—</span><div><b>Geometry editing and snapping</b><span>Left out on purpose. Vertex editing needs snapping to layers and segments, topology rules and validation. A half-built version is worse than none, so use QGIS against the same PostGIS database and Alidade will show your edits.</span></div></div>
+            <div class="scope"><span class="m out">—</span><div><b>3D scenes and glTF models</b><span>Extrusion and terrain are supported. A second rendering engine is not.</span></div></div>
+            <div class="scope"><span class="m out">—</span><div><b>Accounts and permissions</b><span>Projects are shared by link. Put an identity proxy in front if you need more.</span></div></div>
+          </div></div>
+          <div class="sect closed"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">History</span></button><div class="sbody" style="padding-inline:0">
+            <div class="fline"><span class="t">14:22:07</span><span>Changed break 3 to 4 800</span></div>
+            <div class="fline"><span class="t">14:21:44</span><span>Set method to natural breaks</span></div>
+            <div class="fline"><span class="t">14:20:12</span><span>Added layer Sensor points</span></div>
+            <div class="fline"><span class="t">14:19:58</span><span>Switched basemap to Slate</span></div>
+            <div class="fline"><span class="t">14:18:30</span><span>Opened project</span></div>
+          </div></div>
+        </div>
+
+        <!-- pane: prefs -->
+        <div class="pane" id="p-prefs">
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Interface</span></button><div class="sbody">
+            <div class="f"><span class="k">Language</span><div class="v"><select id="langsel"><option value="en">English</option><option value="fa">فارسی</option></select></div></div>
+            <div class="f"><span class="k">Direction</span><div class="v"><span class="hint">Follows the language. Persian lays the interface out right to left.</span></div></div>
+            <div class="f"><span class="k">Density</span><div class="v"><div class="seg"><button class="on">Compact</button><button>Comfortable</button></div></div></div>
+            <label class="chk"><input type="checkbox" checked>Show tooltips</label>
+          </div></div>
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Units and CRS</span></button><div class="sbody">
+            <div class="f"><span class="k">Display CRS</span><div class="v"><select id="crssel"><option>EPSG:4326</option><option>EPSG:3857</option><option>EPSG:32642</option></select></div></div>
+            <div class="f"><span class="k">Distance</span><div class="v"><select><option>Metric</option><option>Imperial</option><option>Nautical</option></select></div></div>
+            <div class="f"><span class="k">Scale style</span><div class="v"><select><option>1:25 000</option><option>Zoom level</option><option>Both</option></select></div></div>
+          </div></div>
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Performance</span></button><div class="sbody">
+            <label class="chk"><input type="checkbox" checked>Virtualise attribute tables</label>
+            <label class="chk"><input type="checkbox" checked>Reuse tiles while zooming</label>
+            <label class="chk"><input type="checkbox">Log every reconciler operation</label>
+            <div class="f"><span class="k">Max features</span><div class="v"><input type="number" value="250000"></div></div>
+          </div></div>
+        </div>
+
+      </div>
+    </aside>
+
+    <!-- ============ MAP ============ -->
+    <div class="mapwrap" id="mapwrap">
+      <div class="stage"><div class="scene" id="scene">
+        <svg id="mapsvg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice"></svg>
+      </div></div>
+      <svg class="reticle" id="reticle"></svg>
+      <svg class="frame" id="frame"></svg>
+      <div class="ghost mono" id="ghost">SIGHT LINE · 038°</div>
+
+      <div class="mapui">
+        <div class="float mtools">
+          <button title="Zoom in" data-z="1"><svg><use href="#i-zin"/></svg></button>
+          <button title="Zoom out" data-z="-1"><svg><use href="#i-zout"/></svg></button>
+          <div class="hr"></div>
+          <button title="Identify features" class="on" data-tool="identify"><svg><use href="#i-target"/></svg></button>
+          <button title="Measure distance" data-tool="measure"><svg><use href="#i-ruler"/></svg></button>
+          <button title="Select by rectangle" data-tool="select"><svg><use href="#i-fit"/></svg></button>
+          <div class="hr"></div>
+          <button title="Toggle 3D" data-act="cycle3d"><svg><use href="#i-cube"/></svg></button>
+          <button title="Full screen" data-act="panels"><svg><use href="#i-expand"/></svg></button>
+        </div>
+
+        <div class="float compass" id="compass"></div>
+
+        <div class="float identify on" id="identify">
+          <div class="ih"><svg style="width:12px;height:12px;color:var(--accent)"><use href="#i-target"/></svg><span class="cap">Identify</span><span class="tag mono" style="margin-inline-start:auto">1 / 3</span><button class="x" style="width:16px;height:16px;color:var(--txt-3)" data-close="identify"><svg style="width:10px;height:10px"><use href="#i-x"/></svg></button></div>
+          <div class="ib" id="idbody"></div>
+        </div>
+
+        <div class="float legend" id="legend">
+          <div class="lh"><span class="cap">Legend</span><span class="tag mono" style="margin-inline-start:auto">1:25k</span></div>
+          <div class="lb" id="legendbody"></div>
+        </div>
+
+        <div class="float scalebar" id="scalebar">
+          <span class="mono" style="font-size:10px;color:var(--txt-2)" id="scaletxt">1 km</span>
+          <div class="sbar"><i></i></div>
+          <span class="mono" style="font-size:10px;color:var(--txt-3)" id="scaleden">1:25 000</span>
+        </div>
+
+        <div class="float ovmap" id="ovmap"></div>
+      </div>
+    </div>
+
+    <!-- ============ RIGHT PANEL ============ -->
+    <aside class="side right">
+      <div class="phead">
+        <i class="sym" style="width:12px;height:12px;border-radius:2px;background:linear-gradient(90deg,#12283F,#4C8DFF,#A8D2FF)"></i>
+        <span class="cap" id="rlayer" style="color:var(--txt)">Population density</span>
+        <span class="tag mono" style="margin-inline-start:auto">MVT</span>
+      </div>
+      <div class="dtabs" style="padding-inline:6px">
+        <button class="dtab on" data-rtab="sym">Symbology</button>
+        <button class="dtab" data-rtab="lab">Labels</button>
+        <button class="dtab" data-rtab="flt">Filter</button>
+        <button class="dtab" data-rtab="fld">Fields</button>
+        <button class="dtab" data-rtab="pop">Popup</button>
+      </div>
+      <div class="pbody">
+
+        <!-- symbology -->
+        <div class="pane on" id="r-sym">
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Renderer</span></button><div class="sbody">
+            <div class="seg" id="rendseg" style="flex-wrap:wrap"><button class="on" data-r="grad">Graduated</button><button data-r="cat">Categorized</button><button data-r="single">Single</button></div>
+            <div class="seg" style="margin-top:5px"><button data-r="rule">Rule-based</button><button data-r="heat">Heatmap</button><button data-r="clust">Cluster</button><button data-r="ext">3D</button></div>
+            <div class="f"><span class="k">Layer opacity</span><div class="v"><input type="range" id="lyrop" min="0" max="100" value="100"><span class="num" id="lyropv">100%</span></div></div>
+            <div class="f"><span class="k">Blend mode</span><div class="v"><select id="blend"><option>Normal</option><option>Multiply</option><option>Screen</option><option>Overlay</option><option>Darken</option><option>Lighten</option></select></div></div>
+            <div class="f"><span class="k">Field</span><div class="v"><select id="symfield"><option>density</option><option>pop_2024</option><option>area_km2</option><option>growth_pct</option></select></div></div>
+            <div class="f"><span class="k">Method</span><div class="v"><select id="method"><option>Natural breaks (Jenks)</option><option>Equal interval</option><option>Quantile</option><option>Standard deviation</option><option>Manual</option></select></div></div>
+            <div class="f"><span class="k">Classes</span><div class="v"><input type="range" id="nclass" min="3" max="7" value="5"><span class="num" id="nclassv">5</span></div></div>
+            <div class="f"><span class="k">Visual var</span><div class="v"><div class="seg"><button class="on">Colour</button><button>Size</button></div></div></div>
+          </div></div>
+
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Breaks</span><span class="hint" style="margin-inline-start:auto">drag to edit</span></button><div class="sbody">
+            <div class="histo" id="histo"><div class="bars" id="bars"></div></div>
+            <div class="hlabels"><span id="hmin">120</span><span class="cap" style="letter-spacing:.1em">persons / km²</span><span id="hmax">9 800</span></div>
+            <div style="margin-top:9px" id="classlist"></div>
+            <div class="classrow" style="margin-top:6px;border-top:1px solid var(--line-soft);padding-top:7px">
+              <i class="sw2" style="background:#3A3A40"></i><span class="rg">No data</span><span class="ct">2</span>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button class="btn" id="classifybtn" style="flex:1">Classify</button>
+              <button class="btn" id="addclass" title="Add a class">+</button>
+              <button class="btn" id="delclass" title="Remove the last class">−</button>
+            </div>
+            <label class="chk" style="margin-top:4px"><input type="checkbox" checked id="cntlegend">Show feature count in the legend</label>
+            <div class="hint">Click a swatch to set the colour by hand. Editing a class label overrides the generated range text.</div>
+          </div></div>
+
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Colour ramp</span></button><div class="sbody">
+            <div class="f"><span class="k">Ramp</span><div class="v"><select id="rampsel"><option value="blues">Blues</option><option value="ice">Ice</option><option value="steel">Steel</option><option value="depth">Depth</option></select></div></div>
+            <div class="f"><span class="k"></span><div class="v"><div class="ramp" id="ramppv"></div><button class="btn" id="revramp" title="Reverse">⇄</button></div></div>
+          </div></div>
+
+          <div class="sect closed"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Fill and stroke</span></button><div class="sbody">
+            <div class="f"><span class="k">Fill opacity</span><div class="v"><input type="range" id="fillop" min="0" max="100" value="86"><span class="num" id="fillopv">86%</span></div></div>
+            <div class="f"><span class="k">Pattern</span><div class="v"><select><option>Solid</option><option>Diagonal hatch</option><option>Cross hatch</option><option>Dots</option></select></div></div>
+            <div class="f"><span class="k">Stroke</span><div class="v"><input type="color" value="#0a0a0b"><input type="range" min="0" max="40" value="6"><span class="num">0.6</span></div></div>
+            <div class="f"><span class="k">Dash</span><div class="v"><select><option>Solid</option><option>Dashed</option><option>Dotted</option></select></div></div>
+            <div class="f"><span class="k">Visible</span><div class="v"><input type="text" class="mono" value="1:250 000"><span class="k" style="width:auto">to</span><input type="text" class="mono" value="1:2 000"></div></div>
+          </div></div>
+
+          <div class="sect closed"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Raster adjustment</span></button><div class="sbody">
+            <div class="f"><span class="k">Brightness</span><div class="v"><input type="range" min="-100" max="100" value="0"><span class="num">0.0</span></div></div>
+            <div class="f"><span class="k">Contrast</span><div class="v"><input type="range" min="-100" max="100" value="12"><span class="num">0.12</span></div></div>
+            <div class="f"><span class="k">Saturation</span><div class="v"><input type="range" min="-100" max="100" value="-30"><span class="num">-0.30</span></div></div>
+            <div class="hint">Applies to raster and WMS layers only.</div>
+          </div></div>
+
+          <div style="padding:10px" class="grid2"><button class="btn">Copy style</button><button class="btn pri" data-act="applystyle">Apply</button></div>
+        </div>
+
+        <!-- labels -->
+        <div class="pane" id="r-lab">
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Label</span></button><div class="sbody">
+            <div class="f"><span class="k">Show labels</span><div class="v"><button class="sw on" data-sw></button></div></div>
+            <div class="f col"><span class="k">Template</span><div class="v"><input type="text" class="mono" id="labtpl" value="{name}"></div></div>
+            <div class="hint">Fields: {name} {ward_id} {density} {pop_2024}</div>
+          </div></div>
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Type</span></button><div class="sbody">
+            <div class="f"><span class="k">Family</span><div class="v"><select><option>IBM Plex Sans</option><option>Noto Sans</option><option>Vazirmatn</option></select></div></div>
+            <div class="f"><span class="k">Size</span><div class="v"><input type="range" id="labsize" min="8" max="20" value="12"><span class="num" id="labsizev">12 px</span></div></div>
+            <div class="f"><span class="k">Weight</span><div class="v"><div class="seg"><button>400</button><button class="on">500</button><button>600</button></div></div></div>
+            <div class="f"><span class="k">Colour</span><div class="v"><input type="color" value="#e4e4e6"><span class="k" style="width:auto">Halo</span><input type="color" value="#050505"><input type="range" min="0" max="30" value="12" style="max-width:56px"></div></div>
+          </div></div>
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Placement</span></button><div class="sbody">
+            <div class="f"><span class="k">Anchor</span><div class="v"><select><option>Centroid</option><option>Point</option><option>Along line</option><option>Pole of inaccessibility</option></select></div></div>
+            <div class="f"><span class="k">Offset</span><div class="v"><input type="number" value="0"><input type="number" value="-6"></div></div>
+            <label class="chk"><input type="checkbox">Allow labels to overlap</label>
+            <label class="chk"><input type="checkbox" checked>Keep upright when rotating</label>
+            <div class="f"><span class="k">Priority</span><div class="v"><input type="range" min="0" max="10" value="6"><span class="num">6</span></div></div>
+            <div class="f"><span class="k">Visible</span><div class="v"><input type="text" class="mono" value="1:50 000"><span class="k" style="width:auto">to</span><input type="text" class="mono" value="1:2 000"></div></div>
+          </div></div>
+        </div>
+
+        <!-- filter -->
+        <div class="pane" id="r-flt">
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Conditions</span><span class="tag mono" style="margin-inline-start:auto">3</span></button><div class="sbody">
+            <div class="ftree">
+              <div class="logic"><button class="on">AND</button><button>OR</button></div>
+              <div class="frow"><select class="fld"><option>density</option><option>name</option><option>pop_2024</option></select><select class="op"><option>≥</option><option>≤</option><option>=</option><option>≠</option></select><input type="text" class="val mono" value="1200"><button class="x"><svg style="width:10px;height:10px"><use href="#i-x"/></svg></button></div>
+              <div class="frow"><select class="fld"><option>area_km2</option></select><select class="op"><option>≤</option></select><input type="text" class="val mono" value="18.5"><button class="x"><svg style="width:10px;height:10px"><use href="#i-x"/></svg></button></div>
+              <div class="fgroup">
+                <div class="logic"><button>AND</button><button class="on">OR</button></div>
+                <div class="frow"><select class="fld"><option>name</option></select><select class="op"><option>starts with</option><option>contains</option></select><input type="text" class="val mono" value="Sino"><button class="x"><svg style="width:10px;height:10px"><use href="#i-x"/></svg></button></div>
+              </div>
+              <div style="display:flex;gap:6px;margin-top:7px"><button class="btn" style="flex:1"><svg><use href="#i-plus"/></svg>Condition</button><button class="btn" style="flex:1">Group</button></div>
+            </div>
+            <label class="chk" style="margin-top:8px"><input type="checkbox" checked>Filter on the server as well</label>
+            <div class="grid2" style="margin-top:6px"><button class="btn">Clear</button><button class="btn pri">Apply filter</button></div>
+            <div class="hint" style="margin-top:7px">28 of 42 features pass.</div>
+          </div></div>
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Compiles to</span></button><div class="sbody">
+            <div class="cap" style="margin-bottom:4px">MapLibre expression</div>
+            <div class="code">[<span class="st">"all"</span>,
+  [<span class="st">"&gt;="</span>, [<span class="st">"get"</span>,<span class="st">"density"</span>], <span class="pm">1200</span>],
+  [<span class="st">"&lt;="</span>, [<span class="st">"get"</span>,<span class="st">"area_km2"</span>], <span class="pm">18.5</span>]]</div>
+            <div class="cap" style="margin:9px 0 4px">SQL</div>
+            <div class="code"><span class="kw">WHERE</span> density &gt;= <span class="pm">$1</span>
+  <span class="kw">AND</span> area_km2 &lt;= <span class="pm">$2</span>
+  <span class="kw">AND</span> name <span class="kw">LIKE</span> <span class="pm">$3</span></div>
+            <div class="hint" style="margin-top:6px">Values travel as bound parameters, never as text in the query.</div>
+          </div></div>
+        </div>
+
+        <!-- fields -->
+        <div class="pane" id="r-fld">
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Source</span></button><div class="sbody">
+            <div class="f"><span class="k">Provider</span><div class="v"><span class="tag b">PostGIS · MVT</span></div></div>
+            <div class="f"><span class="k">Table</span><div class="v"><span class="mono" style="font-size:10.5px">public.wards_1400</span></div></div>
+            <div class="f"><span class="k">Geometry</span><div class="v"><span class="mono" style="font-size:10.5px">MultiPolygon</span></div></div>
+            <div class="f"><span class="k">Source CRS</span><div class="v"><span class="mono" style="font-size:10.5px">EPSG:32642</span><span class="tag">reprojected</span></div></div>
+            <div class="f"><span class="k">Features</span><div class="v"><span class="mono" style="font-size:10.5px">42</span></div></div>
+            <div class="f col"><span class="k">Extent</span><div class="v"><span class="mono" style="font-size:10px;color:var(--txt-2)">68.6912, 38.4835 → 68.8901, 38.6402</span></div></div>
+          </div></div>
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Fields</span><span class="tag mono" style="margin-inline-start:auto">6</span></button><div class="sbody" style="padding-inline:0">
+            <div id="fieldlist"></div>
+          </div></div>
+        </div>
+
+        <!-- popup -->
+        <div class="pane" id="r-pop">
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Popup</span></button><div class="sbody">
+            <div class="f"><span class="k">Show on</span><div class="v"><select><option>Click</option><option>Hover</option><option>Never</option></select></div></div>
+            <div class="f col"><span class="k">Title</span><div class="v"><input type="text" class="mono" value="{name} · ward {ward_id}"></div></div>
+            <label class="chk"><input type="checkbox" checked>Highlight the feature under the cursor</label>
+            <label class="chk"><input type="checkbox" checked>Use GetFeatureInfo for WMS layers</label>
+          </div></div>
+          <div class="sect"><button class="shead"><svg class="chev"><use href="#i-chev"/></svg><span class="cap">Rows</span></button><div class="sbody" style="padding-inline:0" id="poprows"></div></div>
+        </div>
+
+      </div>
+    </aside>
+  </div>
+
+  <!-- ================= TIMELINE ================= -->
+  <div class="timeline" id="timeline">
+    <span class="cap" style="color:var(--signal)">Playback</span>
+    <div class="tctl">
+      <button title="Back one step" data-tp="back"><svg><use href="#i-back"/></svg></button>
+      <button title="Play" data-tp="play" id="playbtn"><svg><use href="#i-play"/></svg></button>
+      <button title="Forward one step" data-tp="fwd"><svg><use href="#i-fwd"/></svg></button>
+    </div>
+    <span class="mono" style="font-size:10px;color:var(--txt-3)" id="t0">13:00</span>
+    <div class="track">
+      <div class="rail2"></div><div class="fill" id="tfill"></div>
+      <div class="ticks" id="tticks"></div>
+      <input type="range" id="timeslider" min="0" max="100" value="42">
+    </div>
+    <span class="mono" style="font-size:10px;color:var(--txt-3)" id="t1">14:30</span>
+    <span class="tag mono" id="tnow">14:22:07</span>
+    <select style="width:64px;height:21px" id="speed"><option>1×</option><option>2×</option><option>4×</option><option>8×</option></select>
+    <button class="btn" data-ui="timeline">Hide</button>
+  </div>
+
+  <!-- ================= DOCK ================= -->
+  <div class="dock" id="dock">
+    <div class="dtabs">
+      <button class="dtab on" data-dtab="attr"><svg style="width:12px;height:12px"><use href="#i-table"/></svg>Attributes<span class="n">42</span></button>
+      <button class="dtab" data-dtab="stats">Statistics</button>
+      <button class="dtab" data-dtab="feed">Live feed<span class="n">12</span></button>
+      <button class="dtab" data-dtab="log">Operations<span class="n">318</span></button>
+      <div style="flex:1"></div>
+      <button class="dtab" data-act="dockmin" title="Collapse"><svg style="width:12px;height:12px"><use href="#i-chev"/></svg></button>
+    </div>
+    <div class="dbody">
+      <div class="dpane on" id="d-attr">
+        <div class="dbar">
+          <span class="cap">public.wards_1400</span>
+          <div class="sep"></div>
+          <input type="text" placeholder="Search all fields" id="tsearch">
+          <button class="btn" data-rtab="flt"><svg><use href="#i-filter"/></svg>Filter</button>
+          <button class="btn" id="selonly">Selected only</button>
+          <div class="sep"></div>
+          <button class="btn"><svg><use href="#i-fit"/></svg>Zoom to selection</button>
+          <button class="btn"><svg><use href="#i-down"/></svg>Export</button>
+          <div style="flex:1"></div>
+          <span class="hint mono" id="selcount">1 selected · 42 rows</span>
+        </div>
+        <div class="tablewrap"><table id="attrtable">
+          <thead><tr>
+            <th data-s="ward_id">ward_id</th><th data-s="name">name</th><th data-s="pop_2024">pop_2024</th>
+            <th data-s="area_km2">area_km²</th><th data-s="density">density <span class="srt">▾</span></th>
+            <th data-s="growth_pct">growth_pct</th><th data-s="updated_at">updated_at</th>
+          </tr></thead>
+          <tbody id="attrbody"></tbody>
+        </table></div>
+      </div>
+
+      <div class="dpane" id="d-stats">
+        <div class="dbar"><span class="cap">density · 42 values</span><div class="sep"></div><select style="width:130px;height:21px"><option>density</option><option>pop_2024</option></select></div>
+        <div class="statgrid" id="statgrid"></div>
+      </div>
+
+      <div class="dpane" id="d-feed">
+        <div class="dbar"><span class="cap">wss://demo.alidade.io/live</span><div class="sep"></div><span class="tag g">connected</span><span class="hint">1 Hz · 12 assets · 0 dropped</span></div>
+        <div class="feed" id="feedbody"></div>
+      </div>
+
+      <div class="dpane" id="d-log">
+        <div class="dbar"><span class="cap">Reconciler operations</span><div class="sep"></div><span class="hint">Last diff produced 6 operations in 0.4 ms</span><div style="flex:1"></div><button class="btn">Copy as JSON</button></div>
+        <div class="feed" id="logbody"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= STATUS ================= -->
+  <div class="status">
+    <div class="st" id="coords">38.5598° N · 68.7870° E</div>
+    <div class="st"><b id="scaleden2">1:25 000</b></div>
+    <div class="st">z <b id="zoomv">13.4</b></div>
+    <div class="st">pitch <b id="pitchs">0°</b> · bearing <b id="bears">0°</b></div>
+    <div style="flex:1"></div>
+    <div class="st"><span class="led b"></span>ST_AsMVT <b>24 ms</b></div>
+    <div class="st"><span class="led"></span>WS <b>12 assets</b></div>
+    <div class="st">42 features · 1 selected</div>
+    <div class="st click" data-act="dockmin">Attributes</div>
+    <div class="st"><label class="chk" style="padding:0;gap:5px"><input type="checkbox" checked id="renderchk">Render</label></div>
+    <div class="st click" id="crsbtn"><b>EPSG:4326</b></div>
+  </div>
+</div>
+
+<!-- ================= ADD DATA MODAL ================= -->
+<div class="scrim" id="scrim">
+  <div class="modal">
+    <div class="mh"><svg style="width:14px;height:14px;color:var(--accent)"><use href="#i-plus"/></svg><b>Add data</b><button class="x" data-close="modal"><svg style="width:13px;height:13px"><use href="#i-x"/></svg></button></div>
+    <div class="mtabs" id="mtabs">
+      <button class="on" data-mt="file">File</button><button data-mt="csv">CSV</button>
+      <button data-mt="wms">WMS / WMTS</button><button data-mt="xyz">XYZ / TMS</button>
+      <button data-mt="pg">PostGIS</button>
+    </div>
+    <div class="mb">
+      <div class="mpane on" id="m-file">
+        <div class="drop"><svg><use href="#i-down"/></svg><b>Drop a file here, or browse</b><div class="hint">GeoJSON · zipped Shapefile · GeoPackage · KML · GPX — up to 200 MB</div></div>
+        <div class="grid2" style="margin-top:12px">
+          <div class="f col"><span class="k">Source CRS</span><div class="v"><select><option>Read from file</option><option>EPSG:4326</option><option>EPSG:32642</option></select></div></div>
+          <div class="f col"><span class="k">Target CRS</span><div class="v"><select><option>EPSG:4326</option></select></div></div>
+        </div>
+        <label class="chk"><input type="checkbox" checked>Load into PostGIS and serve as vector tiles</label>
+        <label class="chk"><input type="checkbox" checked>Zoom to the layer after import</label>
+        <div class="hint" style="margin-top:8px">Imports run through ogr2ogr. The original CRS is kept in the layer metadata.</div>
+      </div>
+
+      <div class="mpane" id="m-csv">
+        <div class="f"><span class="k">File</span><div class="v"><input type="text" value="sensors_dushanbe.csv" class="mono"><button class="btn">Browse</button></div></div>
+        <div class="grid2">
+          <div class="f col"><span class="k">X / longitude</span><div class="v"><select><option>lon</option><option>x</option></select></div></div>
+          <div class="f col"><span class="k">Y / latitude</span><div class="v"><select><option>lat</option><option>y</option></select></div></div>
+        </div>
+        <div class="grid2">
+          <div class="f col"><span class="k">Delimiter</span><div class="v"><select><option>Comma</option><option>Semicolon</option><option>Tab</option></select></div></div>
+          <div class="f col"><span class="k">Source CRS</span><div class="v"><select><option>EPSG:4326</option><option>EPSG:32642</option></select></div></div>
+        </div>
+        <div class="cap" style="margin:10px 0 5px">Preview</div>
+        <div class="caps"><div class="cr"><span class="mono" style="margin:0">id</span><span class="mono" style="margin:0 auto 0 12px">lon</span><span class="mono">lat</span></div><div class="cr">S-001 · 68.7791 · 38.5602</div><div class="cr">S-002 · 68.7844 · 38.5571</div><div class="cr">S-003 · 68.7903 · 38.5648</div></div>
+      </div>
+
+      <div class="mpane" id="m-wms">
+        <div class="f"><span class="k">Service URL</span><div class="v"><input type="text" class="mono" value="http://localhost/geoserver/wms"><button class="btn pri">Connect</button></div></div>
+        <div class="hint">GetCapabilities parsed · WMS 1.3.0 · GeoServer 2.25</div>
+        <div class="cap" style="margin:11px 0 5px">Layers on this server</div>
+        <div class="caps">
+          <div class="cr sel"><span>Land cover 2023</span><span class="mono">alidade:landcover</span></div>
+          <div class="cr"><span>Ward boundaries</span><span class="mono">alidade:wards</span></div>
+          <div class="cr"><span>Contours 10 m</span><span class="mono">alidade:contours</span></div>
+          <div class="cr"><span>Orthophoto 2022</span><span class="mono">alidade:ortho</span></div>
+          <div class="cr"><span>Rivers</span><span class="mono">alidade:rivers</span></div>
+        </div>
+        <div class="grid2" style="margin-top:10px">
+          <div class="f col"><span class="k">Style</span><div class="v"><select><option>default</option><option>raster</option></select></div></div>
+          <div class="f col"><span class="k">Format</span><div class="v"><select><option>image/png</option><option>image/jpeg</option><option>image/webp</option></select></div></div>
+        </div>
+        <div class="grid2">
+          <div class="f col"><span class="k">CRS</span><div class="v"><select><option>EPSG:3857</option><option>EPSG:4326</option></select></div></div>
+          <div class="f col"><span class="k">Tiling</span><div class="v"><select><option>WMTS tiles</option><option>Single image</option></select></div></div>
+        </div>
+        <label class="chk"><input type="checkbox" checked>Request transparent images</label>
+        <label class="chk"><input type="checkbox" checked>Use GetFeatureInfo when identifying</label>
+      </div>
+
+      <div class="mpane" id="m-xyz">
+        <div class="f col"><span class="k">Tile URL template</span><div class="v"><input type="text" class="mono" value="https://tiles.example.com/{z}/{x}/{y}.png"></div></div>
+        <div class="grid2">
+          <div class="f col"><span class="k">Scheme</span><div class="v"><select><option>XYZ</option><option>TMS</option></select></div></div>
+          <div class="f col"><span class="k">Tile size</span><div class="v"><select><option>256</option><option>512</option></select></div></div>
+        </div>
+        <div class="grid2">
+          <div class="f col"><span class="k">Min zoom</span><div class="v"><input type="number" value="0"></div></div>
+          <div class="f col"><span class="k">Max zoom</span><div class="v"><input type="number" value="19"></div></div>
+        </div>
+        <div class="f col"><span class="k">Attribution</span><div class="v"><input type="text" value="© Example tiles"></div></div>
+      </div>
+
+      <div class="mpane" id="m-pg">
+        <div class="f"><span class="k">Connection</span><div class="v"><select><option>alidade @ postgis:5432</option><option>Add connection…</option></select></div></div>
+        <div class="cap" style="margin:11px 0 5px">Tables with geometry</div>
+        <div class="caps">
+          <div class="cr sel"><span>public.wards_1400</span><span class="mono">MultiPolygon · 42</span></div>
+          <div class="cr"><span>public.sensors</span><span class="mono">Point · 1 240</span></div>
+          <div class="cr"><span>public.water_network</span><span class="mono">LineString · 890</span></div>
+          <div class="cr"><span>public.asset_tracks</span><span class="mono">LineString · 12 044</span></div>
+          <div class="cr"><span>public.buildings</span><span class="mono">Polygon · 214 806</span></div>
+        </div>
+        <div class="grid2" style="margin-top:10px">
+          <div class="f col"><span class="k">Geometry column</span><div class="v"><select><option>geom</option></select></div></div>
+          <div class="f col"><span class="k">Primary key</span><div class="v"><select><option>ward_id</option><option>gid</option></select></div></div>
+        </div>
+        <div class="f col"><span class="k">Server-side filter</span><div class="v"><input type="text" class="mono" value="density > 0"></div></div>
+        <label class="chk"><input type="checkbox" checked>Serve as vector tiles with ST_AsMVT</label>
+        <label class="chk"><input type="checkbox">Allow editing attributes</label>
+      </div>
+    </div>
+    <div class="mf"><span class="hint" id="mfhint">Nothing is written until you add the layer.</span><div class="spacer"></div><button class="btn" data-close="modal">Cancel</button><button class="btn pri" data-act="addlayer">Add layer</button></div>
+  </div>
+</div>
+
+<!-- ================= PRINT LAYOUT ================= -->
+<div class="scrim" id="scrim2">
+  <div class="modal" style="width:860px">
+    <div class="mh"><svg style="width:14px;height:14px;color:var(--accent)"><use href="#i-down"/></svg><b>Print layout</b><span class="tag mono">A4 landscape · 300 dpi</span><button class="x" data-close="scrim2"><svg style="width:13px;height:13px"><use href="#i-x"/></svg></button></div>
+    <div class="mb" style="display:grid;grid-template-columns:1fr 268px;gap:14px">
+      <div class="pgwrap"><svg id="pgview" viewBox="0 0 420 297" class="page" style="width:100%;max-height:340px"></svg></div>
+      <div>
+        <div class="cap" style="margin-bottom:5px">Page</div>
+        <div class="f"><span class="k">Size</span><div class="v"><select id="pgsize"><option>A4</option><option>A3</option><option>Letter</option><option>Custom</option></select></div></div>
+        <div class="f"><span class="k">Orientation</span><div class="v"><div class="seg" id="pgorient"><button class="on">Landscape</button><button>Portrait</button></div></div></div>
+        <div class="f"><span class="k">Resolution</span><div class="v"><select><option>300 dpi</option><option>150 dpi</option><option>96 dpi</option></select></div></div>
+        <div class="f"><span class="k">Format</span><div class="v"><select id="pgfmt"><option>PDF</option><option>PNG</option><option>GeoTIFF</option><option>SVG</option></select></div></div>
+        <div class="f"><span class="k">Scale</span><div class="v"><input type="text" class="mono" value="1:25 000"><button class="btn" title="Use the current map scale">Map</button></div></div>
+        <div class="cap" style="margin:12px 0 5px">Elements</div>
+        <label class="chk"><input type="checkbox" checked data-pv="pv-title">Title and subtitle</label>
+        <label class="chk"><input type="checkbox" checked data-pv="pv-legend">Legend</label>
+        <label class="chk"><input type="checkbox" checked data-pv="pv-scale">Scale bar</label>
+        <label class="chk"><input type="checkbox" checked data-pv="pv-north">North arrow</label>
+        <label class="chk"><input type="checkbox" data-pv="pv-grid">Coordinate grid</label>
+        <label class="chk"><input type="checkbox" checked data-pv="pv-credit">Data credit and CRS note</label>
+        <div class="cap" style="margin:12px 0 5px">Georeferencing</div>
+        <label class="chk"><input type="checkbox" checked>Write a world file next to the image</label>
+        <label class="chk"><input type="checkbox">Embed the project JSON in the PDF</label>
+        <div class="f col" style="margin-top:8px"><span class="k">Title</span><div class="v"><input type="text" id="pgtitle" value="Population density · Dushanbe 2024"></div></div>
+      </div>
+    </div>
+    <div class="mf"><span class="hint">Rendered server side at print resolution, not a screenshot of the canvas.</span><div class="spacer"></div><button class="btn" data-close="scrim2">Cancel</button><button class="btn pri" data-act="doexport">Export PDF</button></div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+<style>
+.histo,.track,.code,.brk,.hlabels{direction:ltr}
+#mapsvg text{font-family:"IBM Plex Sans",sans-serif}
+</style>
+<script>
+(() => {
+"use strict";
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const SVGNS = "http://www.w3.org/2000/svg";
+const el = (n, a = {}, p) => { const e = document.createElementNS(SVGNS, n); for (const k in a) e.setAttribute(k, a[k]); if (p) p.appendChild(e); return e; };
+const fmt = n => n.toLocaleString("en-US").replace(/,/g, " ");
+const rnd = s => () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+const R = rnd(20260829);
+
+/* ---------------- geography ---------------- */
+const W = 1600, H = 1000;
+const LON0 = 68.6600, LON1 = 68.9200, LAT0 = 38.6350, LAT1 = 38.4700;
+const x2lon = x => LON0 + (x / W) * (LON1 - LON0);
+const y2lat = y => LAT0 + (y / H) * (LAT1 - LAT0);
+
+const NAMES = ["Sino", "Firdavsi", "Shohmansur", "Somoni", "Zarafshon", "Guliston", "Varzob", "Hisor", "Rudaki", "Navruz", "Bahoriston", "Chorbogh", "Kohistan", "Dehmoy"];
+const COLS = 7, ROWS = 6;
+
+/* lattice with jitter → shared corners, no gaps */
+const P = [];
+for (let r = 0; r <= ROWS; r++) {
+  P[r] = [];
+  for (let c = 0; c <= COLS; c++) {
+    const bx = 110 + (c / COLS) * 1390, by = 80 + (r / ROWS) * 840;
+    const edge = (c === 0 || c === COLS || r === 0 || r === ROWS) ? .35 : 1;
+    P[r][c] = { x: bx + (R() - .5) * 120 * edge, y: by + (R() - .5) * 110 * edge };
+  }
+}
+
+const wards = [];
+for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+  const i = r * COLS + c;
+  const a = P[r][c], b = P[r][c + 1], d = P[r + 1][c + 1], e2 = P[r + 1][c];
+  const cx = (a.x + b.x + d.x + e2.x) / 4, cy = (a.y + b.y + d.y + e2.y) / 4;
+  const dist = Math.hypot((cx - 800) / 700, (cy - 500) / 460);
+  let dens = Math.round(9800 * Math.pow(Math.max(0, 1 - dist * .78), 2.1) + R() * 1500 + 120);
+  dens = Math.max(120, Math.min(9800, dens));
+  const area = +(4 + R() * 22).toFixed(1);
+  wards.push({
+    id: "W-" + String(101 + i),
+    name: NAMES[i % NAMES.length] + " " + (Math.floor(i / NAMES.length) + 1),
+    pts: [a, b, d, e2].map(p => [p.x, p.y]),
+    cx, cy, density: (i === 9 || i === 34) ? null : dens, area,
+    pop: Math.round(dens * area), growth: +((R() * 6) - 1.4).toFixed(1),
+    updated: "2024-0" + (1 + (i % 6)) + "-1" + (i % 9)
+  });
+}
+const values = wards.filter(w => w.density != null).map(w => w.density).sort((a, b) => a - b);
+const VMIN = values[0], VMAX = values[values.length - 1];
+
+/* ---------------- ramps + classes ---------------- */
+const RAMPS = {
+  blues: ["#0F2438", "#1B4674", "#2E6FE0", "#6FA8FF", "#BBDAFF"],
+  ice: ["#0E2A33", "#175A6B", "#1F93A8", "#4FC8D6", "#B7EEF2"],
+  steel: ["#161E2A", "#2C3D55", "#4A6488", "#7C97BE", "#C0D2E8"],
+  depth: ["#0B1A3A", "#1B3D8A", "#3C6FD1", "#79A6EE", "#C6DBFA"]
+};
+let rampName = "blues", reversed = false, nClass = 5, ovr = {}, labelOvr = {};
+let breaks = [900, 2100, 3900, 6200];
+const ramp = () => { const c = RAMPS[rampName].slice(0, 5); return reversed ? c.slice().reverse() : c; };
+const colorsFor = n => { const c = ramp(); return Array.from({ length: n }, (_, i) => ovr[i] || c[Math.round(i * (c.length - 1) / (n - 1))]); };
+const classOf = v => { if (v == null) return -1; let i = 0; while (i < breaks.length && v >= breaks[i]) i++; return i; };
+const fillOf = v => v == null ? "#3A3A40" : colorsFor(nClass)[Math.min(classOf(v), nClass - 1)];
+
+/* ---------------- map drawing ---------------- */
+const svg = $("#mapsvg");
+const defs = el("defs", {}, svg);
+const mkGrad = (id, stops, attrs = {}) => {
+  const g = el("linearGradient", Object.assign({ id, x1: "0", y1: "0", x2: "1", y2: "1" }, attrs), defs);
+  stops.forEach(s => el("stop", { offset: s[0], "stop-color": s[1], "stop-opacity": s[2] ?? 1 }, g));
+};
+mkGrad("gHill", [[0, "#33333A", .5], [.55, "#141416", .1], [1, "#000000", .55]]);
+mkGrad("gFog", [[0, "#0A0A0B", 0], [1, "#0A0A0B", .9]], { x1: "0", y1: "0", x2: "0", y2: "1" });
+const gTrail = el("linearGradient", { id: "gTrail", x1: "0", y1: "0", x2: "1", y2: "0" }, defs);
+el("stop", { offset: "0", "stop-color": "#38D6C0", "stop-opacity": "0" }, gTrail);
+el("stop", { offset: "1", "stop-color": "#38D6C0", "stop-opacity": ".85" }, gTrail);
+
+const G = {};
+["base", "terrain", "hillshade", "water", "roads", "wms", "density", "wards", "network", "sensors", "build3d", "graticule", "bmlabels", "wardlabels", "select", "measure", "live", "fog"]
+  .forEach(k => { G[k] = el("g", { id: "l-" + k }, svg); });
+
+/* basemap */
+el("rect", { x: 0, y: 0, width: W, height: H, fill: "#0B0B0C" }, G.base);
+/* terrain: soft ridges */
+for (let i = 0; i < 26; i++) {
+  const y = 40 + i * 40, amp = 26 + R() * 42;
+  let d = `M -40 ${y}`;
+  for (let x = 0; x <= W + 40; x += 80) d += ` Q ${x + 40} ${y + Math.sin((x + i * 90) / 260) * amp} ${x + 80} ${y + Math.sin((x + 40 + i * 90) / 260) * amp * .6}`;
+  el("path", { d, fill: "none", stroke: "#171719", "stroke-width": 1 }, G.terrain);
+}
+el("rect", { x: 0, y: 0, width: W, height: H, fill: "url(#gHill)" }, G.hillshade);
+
+/* water */
+let riverD = "M -30 120 C 260 210, 320 340, 560 430 S 900 560, 1010 700 S 1240 900, 1640 940";
+el("path", { d: riverD, fill: "none", stroke: "#0F2129", "stroke-width": 26, "stroke-linecap": "round" }, G.water);
+el("path", { d: riverD, fill: "none", stroke: "#173A4A", "stroke-width": 13, "stroke-linecap": "round" }, G.water);
+el("ellipse", { cx: 1310, cy: 250, rx: 130, ry: 62, fill: "#0F2129", stroke: "#173A4A" }, G.water);
+
+/* roads */
+const roads = [
+  "M -20 640 C 300 600, 700 620, 1620 520",
+  "M 240 -20 C 300 300, 420 620, 520 1020",
+  "M -20 300 C 400 340, 900 300, 1620 380",
+  "M 1120 -20 C 1080 320, 1180 700, 1120 1020"
+];
+roads.forEach((d, i) => {
+  el("path", { d, fill: "none", stroke: "#141416", "stroke-width": i < 2 ? 9 : 6 }, G.roads);
+  el("path", { d, fill: "none", stroke: "#242428", "stroke-width": i < 2 ? 4 : 2.5 }, G.roads);
+});
+
+/* WMS land cover (hidden by default) */
+for (let i = 0; i < 9; i++) {
+  el("ellipse", { cx: 120 + R() * 1360, cy: 90 + R() * 820, rx: 90 + R() * 150, ry: 60 + R() * 110, fill: "#2C4C3B", "fill-opacity": .34 }, G.wms);
+}
+G.wms.setAttribute("opacity", "0"); G.wms.dataset.off = "1";
+
+/* choropleth + boundaries + labels */
+const shapes = {};
+wards.forEach(w => {
+  const pts = w.pts.map(p => p.join(",")).join(" ");
+  const poly = el("polygon", { points: pts, fill: fillOf(w.density), "fill-opacity": .86, stroke: "#0A0A0B", "stroke-width": .6 }, G.density);
+  poly.style.cursor = "pointer";
+  poly.addEventListener("click", () => selectWard(w.id, true));
+  shapes[w.id] = poly;
+  el("polygon", { points: pts, fill: "none", stroke: "#7A7A85", "stroke-width": 1, "stroke-opacity": .5 }, G.wards);
+  const t = el("text", { x: w.cx, y: w.cy, "text-anchor": "middle", fill: "#E4E4E6", "font-size": 12, "font-weight": 500, "paint-order": "stroke", stroke: "#050505", "stroke-width": 3 }, G.wardlabels);
+  t.textContent = w.name;
+  w.label = t;
+});
+
+/* water network */
+for (let i = 0; i < 22; i++) {
+  const x = 100 + R() * 1400, y = 80 + R() * 840;
+  el("path", { d: `M ${x} ${y} l ${(R() - .5) * 260} ${(R() - .5) * 200} l ${(R() - .5) * 200} ${(R() - .5) * 160}`, fill: "none", stroke: "#46B4E8", "stroke-width": 1.4, "stroke-opacity": .75 }, G.network);
+}
+
+/* sensors + clusters */
+for (let i = 0; i < 46; i++) {
+  el("circle", { cx: 110 + R() * 1380, cy: 80 + R() * 840, r: 3.2, fill: "#4C8DFF", stroke: "#0A0A0B", "stroke-width": 1 }, G.sensors);
+}
+[[420, 300, 34], [980, 620, 128], [1280, 420, 61]].forEach(([cx, cy, n]) => {
+  const r = 15 + Math.log(n) * 4;
+  el("circle", { cx, cy, r: r + 5, fill: "#4C8DFF", "fill-opacity": .13 }, G.sensors);
+  el("circle", { cx, cy, r, fill: "#132339", stroke: "#4C8DFF", "stroke-width": 1.4 }, G.sensors);
+  const t = el("text", { x: cx, y: cy + 4, "text-anchor": "middle", fill: "#BBDAFF", "font-size": 11, "font-family": "IBM Plex Mono" }, G.sensors);
+  t.textContent = n;
+});
+
+/* buildings 2.5D */
+for (let i = 0; i < 90; i++) {
+  const x = 760 + R() * 420, y = 380 + R() * 320, w2 = 10 + R() * 16, h2 = 8 + R() * 12, ht = 10 + R() * 34;
+  el("polygon", { points: `${x},${y} ${x + w2},${y + h2 * .5} ${x + w2},${y + h2 * .5 - ht} ${x},${y - ht}`, fill: "#2A2A2F" }, G.build3d);
+  el("polygon", { points: `${x},${y - ht} ${x + w2},${y + h2 * .5 - ht} ${x + w2 * .5},${y - h2 * .5 - ht} ${x - w2 * .5},${y - ht - h2}`, fill: "#3A3A4180" }, G.build3d);
+}
+G.build3d.setAttribute("opacity", "0"); G.build3d.dataset.off = "1";
+G.measure.setAttribute("opacity", "0"); G.measure.dataset.off = "1";
+
+/* graticule */
+function drawGraticule(step = .1) {
+  G.graticule.innerHTML = "";
+  for (let lon = 68.65; lon <= 68.95; lon += step) {
+    const x = ((lon - LON0) / (LON1 - LON0)) * W; if (x < 0 || x > W) continue;
+    el("line", { x1: x, y1: 0, x2: x, y2: H, stroke: "#2B2B30", "stroke-width": .7, "stroke-dasharray": "3 5" }, G.graticule);
+    const t = el("text", { x: x + 4, y: 16, fill: "#66666D", "font-size": 10, "font-family": "IBM Plex Mono" }, G.graticule);
+    t.textContent = lon.toFixed(2) + "°E";
+  }
+  for (let lat = 38.45; lat <= 38.65; lat += step) {
+    const y = ((LAT0 - lat) / (LAT0 - LAT1)) * H; if (y < 0 || y > H) continue;
+    el("line", { x1: 0, y1: y, x2: W, y2: y, stroke: "#2B2B30", "stroke-width": .7, "stroke-dasharray": "3 5" }, G.graticule);
+    const t = el("text", { x: 6, y: y - 5, fill: "#66666D", "font-size": 10, "font-family": "IBM Plex Mono" }, G.graticule);
+    t.textContent = lat.toFixed(2) + "°N";
+  }
+}
+drawGraticule();
+
+/* basemap labels */
+[["Varzob", 300, 190], ["Rudaki avenue", 700, 640], ["Hisor valley", 1240, 800], ["Kofarnihon", 1420, 180]].forEach(([s, x, y]) => {
+  const t = el("text", { x, y, fill: "#8A8A92", "font-size": 12, "letter-spacing": 1.4, "paint-order": "stroke", stroke: "#050505", "stroke-width": 3 }, G.bmlabels);
+  t.textContent = s;
+});
+
+/* fog */
+el("rect", { x: 0, y: 400, width: W, height: 600, fill: "url(#gFog)", opacity: .55 }, G.fog);
+
+/* selection */
+const selRing = el("polygon", { points: "", fill: "none", stroke: "#38D6C0", "stroke-width": 2.4, "stroke-dasharray": "7 4" }, G.select);
+
+/* ---------------- live assets ---------------- */
+const ASSETS = Array.from({ length: 6 }, (_, i) => {
+  const cx = 260 + R() * 1080, cy = 200 + R() * 600;
+  return {
+    id: "AL-" + (102 + i * 7), cx, cy, rx: 120 + R() * 220, ry: 90 + R() * 180,
+    ph: R() * 6.28, sp: .18 + R() * .22, hist: [], stale: i === 5,
+    speed: Math.round(18 + R() * 46)
+  };
+});
+ASSETS.forEach(a => {
+  a.trail = el("path", { d: "", fill: "none", stroke: "url(#gTrail)", "stroke-width": 2, "stroke-linecap": "round" }, G.live);
+  a.halo = el("circle", { r: 11, fill: "#38D6C0", "fill-opacity": .13 }, G.live);
+  a.dot = el("path", { d: "M 0 -7 L 5 6 L 0 3 L -5 6 Z", fill: "#38D6C0", stroke: "#062622", "stroke-width": 1 }, G.live);
+  a.tag = el("text", { fill: "#9A9AA0", "font-size": 10, "font-family": "IBM Plex Mono" }, G.live);
+  a.tag.textContent = a.id;
+});
+
+let tClock = 0, playing = true, speedMul = 1, trailLen = 45;
+function stepAssets(dt) {
+  ASSETS.forEach(a => {
+    a.ph += a.sp * dt * speedMul;
+    const x = a.cx + Math.cos(a.ph) * a.rx, y = a.cy + Math.sin(a.ph * 1.3) * a.ry;
+    a.x = x; a.y = y;
+    a.hist.push([x, y]); if (a.hist.length > 140) a.hist.shift();
+    const n = Math.max(2, Math.round(trailLen * 1.4));
+    const h = a.hist.slice(-n);
+    a.trail.setAttribute("d", h.length > 1 ? "M " + h.map(p => p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" L ") : "");
+    const ang = Math.atan2(y - (a.py ?? y), x - (a.px ?? x)) * 180 / Math.PI + 90;
+    a.dot.setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${ang.toFixed(0)})`);
+    a.halo.setAttribute("cx", x); a.halo.setAttribute("cy", y);
+    a.tag.setAttribute("x", x + 12); a.tag.setAttribute("y", y + 4);
+    a.px = x; a.py = y;
+    const c = a.stale ? "#4A5A6C" : "#38D6C0";
+    a.dot.setAttribute("fill", c); a.halo.setAttribute("fill", c);
+  });
+}
+
+/* ---------------- camera ---------------- */
+const scene = $("#scene");
+let cam = { pitch: 0, bearing: 0, zoom: 13.4 };
+function applyCam() {
+  const z = Math.pow(1.28, cam.zoom - 13.4);
+  scene.style.transform = `rotateX(${cam.pitch}deg) rotateZ(${cam.bearing}deg) scale(${z.toFixed(3)})`;
+  const den = Math.round(559082264 / Math.pow(2, cam.zoom) / 1.4);
+  $("#scaleden").textContent = "1:" + fmt(den);
+  $("#scaleden2").textContent = "1:" + fmt(den);
+  $("#zoomv").textContent = cam.zoom.toFixed(1);
+  $("#pitchs").textContent = Math.round(cam.pitch) + "°";
+  $("#bears").textContent = Math.round(cam.bearing) + "°";
+  $("#pitch").value = cam.pitch; $("#pitchv").textContent = Math.round(cam.pitch) + "°";
+  $("#bearing").value = cam.bearing; $("#bearv").textContent = Math.round(cam.bearing) + "°";
+  const m = Math.round(den / 25); $("#scaletxt").textContent = m >= 1000 ? (m / 1000).toFixed(1) + " km" : m + " m";
+  $("#ghost").textContent = "SIGHT LINE · " + String(Math.round((cam.bearing + 360) % 360)).padStart(3, "0") + "°";
+  drawCompass(); drawFrame();
+  G.fog.setAttribute("opacity", cam.pitch > 5 ? "1" : ".35");
+}
+$("#pitch").addEventListener("input", e => { cam.pitch = +e.target.value; applyCam(); });
+$("#bearing").addEventListener("input", e => { cam.bearing = +e.target.value; applyCam(); });
+function setMode(m) {
+  cam.pitch = m === "2d" ? 0 : m === "25d" ? 34 : 58;
+  cam.bearing = m === "2d" ? 0 : m === "25d" ? -14 : -28;
+  $$("#modeseg button").forEach(b => b.classList.toggle("on", b.dataset.mode === m));
+  $$('[data-mode]').forEach(b => { const t = b.querySelector(".tick"); if (t) t.textContent = b.dataset.mode === m ? "✓" : ""; });
+  if (m !== "2d" && G.build3d.dataset.off === "1") setVis("l-build3d", true);
+  applyCam(); toast("View set to " + m.toUpperCase());
+}
+$$("#modeseg button").forEach(b => b.onclick = () => setMode(b.dataset.mode));
+
+/* ---------------- frame ruler + reticle (signature) ---------------- */
+const frame = $("#frame"), reticle = $("#reticle");
+let showReticle = true;
+function drawFrame() {
+  const r = $("#mapwrap").getBoundingClientRect(), w = Math.round(r.width), h = Math.round(r.height);
+  if (!w || !h) return;
+  frame.setAttribute("viewBox", `0 0 ${w} ${h}`); reticle.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  frame.innerHTML = ""; reticle.innerHTML = "";
+  const A = "#2A2A2E", B = "#66666D";
+  el("rect", { x: 9.5, y: 9.5, width: w - 19, height: h - 19, fill: "none", stroke: A, "stroke-width": 1 }, frame);
+  for (let x = 10; x <= w - 10; x += 10) {
+    const maj = (x - 10) % 60 === 0;
+    el("line", { x1: x, y1: 10, x2: x, y2: maj ? 18 : 14, stroke: maj ? B : A, "stroke-width": 1 }, frame);
+    el("line", { x1: x, y1: h - 10, x2: x, y2: h - (maj ? 18 : 14), stroke: maj ? B : A, "stroke-width": 1 }, frame);
+    if (maj && showReticle) {
+      const deg = Math.round((((x - 10) / (w - 20)) * 90 - 45 + cam.bearing + 360)) % 360;
+      const t = el("text", { x, y: 28, "text-anchor": "middle", fill: "#66666D", "font-size": 9, "font-family": "IBM Plex Mono" }, frame);
+      t.textContent = String(deg).padStart(3, "0");
+    }
+  }
+  for (let y = 10; y <= h - 10; y += 10) {
+    const maj = (y - 10) % 60 === 0;
+    el("line", { x1: 10, y1: y, x2: maj ? 18 : 14, y2: y, stroke: maj ? B : A, "stroke-width": 1 }, frame);
+    el("line", { x1: w - 10, y1: y, x2: w - (maj ? 18 : 14), y2: y, stroke: maj ? B : A, "stroke-width": 1 }, frame);
+  }
+  if (!showReticle) return;
+  const cx = w / 2, cy = h / 2;
+  el("circle", { cx, cy, r: 26, fill: "none", stroke: "#4C8DFF", "stroke-opacity": .35, "stroke-width": 1 }, reticle);
+  el("circle", { cx, cy, r: 2, fill: "#4C8DFF", "fill-opacity": .8 }, reticle);
+  [[-1, 0], [1, 0], [0, -1], [0, 1]].forEach(([dx, dy]) => {
+    el("line", { x1: cx + dx * 12, y1: cy + dy * 12, x2: cx + dx * 46, y2: cy + dy * 46, stroke: "#4C8DFF", "stroke-opacity": .35, "stroke-width": 1 }, reticle);
+  });
+  el("line", { x1: cx, y1: 20, x2: cx, y2: h - 20, stroke: "#4C8DFF", "stroke-opacity": .09, "stroke-width": 1 }, reticle);
+}
+addEventListener("resize", drawFrame);
+
+/* compass */
+function drawCompass() {
+  const c = $("#compass"); c.innerHTML = "";
+  const s = document.createElementNS(SVGNS, "svg"); s.setAttribute("viewBox", "0 0 100 100"); c.appendChild(s);
+  const g = el("g", { transform: `rotate(${-cam.bearing} 50 50)` }, s);
+  for (let a = 0; a < 360; a += 15) {
+    const maj = a % 90 === 0, rad = (a - 90) * Math.PI / 180;
+    el("line", {
+      x1: 50 + Math.cos(rad) * (maj ? 33 : 37), y1: 50 + Math.sin(rad) * (maj ? 33 : 37),
+      x2: 50 + Math.cos(rad) * 41, y2: 50 + Math.sin(rad) * 41,
+      stroke: maj ? "#9A9AA0" : "#34343A", "stroke-width": maj ? 1.4 : 1
+    }, g);
+  }
+  el("path", { d: "M 50 16 L 57 52 L 50 46 L 43 52 Z", fill: "#4C8DFF" }, g);
+  el("path", { d: "M 50 84 L 43 48 L 50 54 L 57 48 Z", fill: "#34343A" }, g);
+  const t = el("text", { x: 50, y: 12, "text-anchor": "middle", fill: "#9A9AA0", "font-size": 11, "font-family": "IBM Plex Sans Condensed", "letter-spacing": 1 }, g);
+  t.textContent = "N";
+}
+
+/* overview map */
+(() => {
+  const s = document.createElementNS(SVGNS, "svg"); s.setAttribute("viewBox", "0 0 132 96"); $("#ovmap").appendChild(s);
+  el("rect", { x: 0, y: 0, width: 132, height: 96, fill: "#080809" }, s);
+  el("path", { d: "M -4 12 C 22 22 30 36 52 42 S 82 60 96 72 S 120 92 136 94", fill: "none", stroke: "#173A4A", "stroke-width": 2 }, s);
+  wards.forEach(w => {
+    el("polygon", { points: w.pts.map(p => (p[0] / W * 132).toFixed(1) + "," + (p[1] / H * 96).toFixed(1)).join(" "), fill: fillOf(w.density), "fill-opacity": .5, stroke: "#0A0A0B", "stroke-width": .3 }, s);
+  });
+  el("rect", { x: 38, y: 28, width: 56, height: 40, fill: "#4C8DFF", "fill-opacity": .1, stroke: "#4C8DFF", "stroke-width": 1 }, s);
+})();
+
+/* ---------------- layer visibility ---------------- */
+function setVis(gid, on) {
+  const g = document.getElementById(gid); if (!g) return;
+  g.setAttribute("opacity", on ? "1" : "0"); g.dataset.off = on ? "" : "1";
+  const node = $(`.node[data-vis="${gid}"]`);
+  if (node) {
+    node.classList.toggle("on", on); node.classList.toggle("off", !on);
+    node.querySelector(".eye use").setAttribute("href", on ? "#i-eye" : "#i-eyeoff");
+  }
+  $$(`[data-tog="${gid}"]`).forEach(c => { if (c.type === "checkbox") c.checked = on; const t = c.querySelector?.(".tick"); if (t) t.textContent = on ? "✓" : ""; });
+}
+$$(".node[data-vis]").forEach(n => {
+  n.querySelector(".eye")?.addEventListener("click", e => {
+    e.stopPropagation();
+    const on = n.classList.contains("on"); setVis(n.dataset.vis, !on);
+    toast((on ? "Hidden " : "Shown ") + n.querySelector(".nm").textContent.toLowerCase());
+  });
+  n.addEventListener("click", () => {
+    $$(".node").forEach(o => o.classList.remove("sel")); n.classList.add("sel");
+    $("#rlayer").textContent = n.querySelector(".nm").textContent;
+  });
+});
+$$(".node.grp").forEach(n => n.addEventListener("click", () => n.classList.toggle("closed")));
+$$("[data-tog]").forEach(c => c.addEventListener(c.tagName === "INPUT" ? "change" : "click", () => {
+  const gid = c.dataset.tog; const g = document.getElementById(gid);
+  setVis(gid, c.type === "checkbox" ? c.checked : g.dataset.off === "1");
+}));
+$("#layersearch").addEventListener("input", e => {
+  const q = e.target.value.toLowerCase();
+  $$("#p-layers .node").forEach(n => { n.style.display = !q || n.textContent.toLowerCase().includes(q) ? "" : "none"; });
+});
+$("#gratint").addEventListener("change", e => drawGraticule(parseFloat(e.target.value)));
+
+/* ---------------- panels, tabs, sections, menus ---------------- */
+$$("#rail .rbtn").forEach(b => b.onclick = () => {
+  $$("#rail .rbtn").forEach(o => o.classList.remove("on")); b.classList.add("on");
+  $$(".side.left .pane").forEach(p => p.classList.remove("on"));
+  $("#p-" + b.dataset.pane).classList.add("on");
+  $("#lefttitle").textContent = b.title;
+});
+$$("[data-rtab]").forEach(b => b.onclick = () => {
+  $$(".side.right .dtab").forEach(o => o.classList.toggle("on", o.dataset.rtab === b.dataset.rtab));
+  $$(".side.right .pane").forEach(p => p.classList.remove("on"));
+  $("#r-" + b.dataset.rtab).classList.add("on");
+  closeMenus();
+});
+$$("[data-dtab]").forEach(b => b.onclick = () => {
+  $$(".dock .dtab[data-dtab]").forEach(o => o.classList.toggle("on", o.dataset.dtab === b.dataset.dtab));
+  $$(".dock .dpane").forEach(p => p.classList.remove("on"));
+  $("#d-" + b.dataset.dtab).classList.add("on");
+  $("#dock").classList.remove("min"); closeMenus();
+});
+document.addEventListener("click", e => {
+  const h = e.target.closest(".shead"); if (h) h.parentElement.classList.toggle("closed");
+  const seg = e.target.closest(".seg button");
+  if (seg && !seg.closest("#modeseg") && !seg.closest("#rendseg")) { $$("button", seg.parentElement).forEach(b => b.classList.remove("on")); seg.classList.add("on"); }
+  const lg = e.target.closest(".logic button");
+  if (lg) { $$("button", lg.parentElement).forEach(b => b.classList.remove("on")); lg.classList.add("on"); }
+  const sw = e.target.closest("[data-sw]"); if (sw) sw.classList.toggle("on");
+});
+function closeMenus() { $$("#menubar > div").forEach(d => d.classList.remove("open")); }
+$$("#menubar > div").forEach(d => {
+  d.querySelector(".mtrig").addEventListener("click", e => {
+    e.stopPropagation(); const was = d.classList.contains("open"); closeMenus(); if (!was) d.classList.add("open");
+  });
+  d.addEventListener("mouseenter", () => { if ($("#menubar .open")) { closeMenus(); d.classList.add("open"); } });
+});
+document.addEventListener("click", e => { if (!e.target.closest("#menubar")) closeMenus(); });
+$$(".mi").forEach(b => b.addEventListener("click", () => {
+  if (b.dataset.mode) setMode(b.dataset.mode);
+  if (b.dataset.pane) $(`#rail [data-pane="${b.dataset.pane}"]`).click();
+  if (b.dataset.ui) toggleUI(b.dataset.ui);
+  if (!b.dataset.mode && !b.dataset.tog && !b.dataset.ui) {
+    const t = b.querySelector(".tick"); if (t && t.textContent === "✓") t.textContent = ""; else if (t && b.closest(".mpop").children.length && /^(Get|Use)/.test(b.textContent)) t.textContent = "✓";
+  }
+  closeMenus();
+}));
+
+/* UI element toggles */
+function toggleUI(k) {
+  const map = { scalebar: "#scalebar", compass: "#compass", ovmap: "#ovmap", legend: "#legend", timeline: "#timeline" };
+  if (k === "reticle") { showReticle = !showReticle; drawFrame(); syncUI("reticle", showReticle); return; }
+  if (k === "timeline") { const t = $("#timeline"); t.classList.toggle("hide"); syncUI(k, !t.classList.contains("hide")); setTimeout(drawFrame, 30); return; }
+  const n = $(map[k]); if (!n) return;
+  const on = n.style.display !== "none"; n.style.display = on ? "none" : "";
+  syncUI(k, !on);
+}
+function syncUI(k, on) {
+  $$(`[data-ui="${k}"]`).forEach(c => { if (c.type === "checkbox") c.checked = on; const t = c.querySelector?.(".tick"); if (t) t.textContent = on ? "✓" : ""; });
+}
+$$("[data-ui]").forEach(c => { if (c.tagName === "INPUT") c.addEventListener("change", () => toggleUI(c.dataset.ui)); else if (!c.classList.contains("mi")) c.addEventListener("click", () => toggleUI(c.dataset.ui)); });
+
+/* ---------------- actions ---------------- */
+const acts = {
+  add: () => $("#scrim").classList.add("on"),
+  save: () => toast("Project saved · schema project/3"),
+  share: () => { $(`#rail [data-pane="project"]`).click(); toast("Share link ready to copy"); },
+  copylink: () => toast("Link copied to the clipboard"),
+  addlayer: () => { $("#scrim").classList.remove("on"); toast("Layer added and served as vector tiles"); },
+  applystyle: () => toast("Style applied · 6 operations"),
+  dockmin: () => $("#dock").classList.toggle("min"),
+  panels: () => { $("#app").classList.toggle("no-left"); $("#app").classList.toggle("no-right"); setTimeout(drawFrame, 30); },
+  "reset-camera": () => { cam.pitch = 0; cam.bearing = 0; applyCam(); toast("Camera reset"); },
+  print: () => { $("#scrim2").classList.add("on"); drawPage(); },
+  doexport: () => { $("#scrim2").classList.remove("on"); toast("Rendering at 300 dpi · alidade-dushanbe.pdf"); },
+  cycle3d: () => { const cur = cam.pitch === 0 ? "25d" : cam.pitch < 45 ? "3d" : "2d"; setMode(cur); }
+};
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-act]"); if (b) acts[b.dataset.act]?.();
+  const z = e.target.closest("[data-z]"); if (z) { cam.zoom = Math.max(4, Math.min(19, cam.zoom + (+z.dataset.z) * .6)); applyCam(); }
+  const c = e.target.closest("[data-close]"); if (c) { c.dataset.close === "modal" ? $("#scrim").classList.remove("on") : $("#" + c.dataset.close).classList.remove("on"); }
+  const t = e.target.closest("[data-tool]");
+  if (t) { $$("[data-tool]").forEach(o => o.classList.remove("on")); t.classList.add("on"); toast(t.title); }
+});
+$("#scrim").addEventListener("click", e => { if (e.target.id === "scrim") $("#scrim").classList.remove("on"); });
+$("#scrim2").addEventListener("click", e => { if (e.target.id === "scrim2") $("#scrim2").classList.remove("on"); });
+$$("[data-scope]").forEach(b => b.addEventListener("click", () => {
+  if (b.classList.contains("dis")) { $(`#rail [data-pane="project"]`).click(); toast("Not in v1 — see what this version does"); }
+}));
+
+/* print layout preview */
+function drawPage() {
+  const v = $("#pgview"); v.innerHTML = "";
+  const land = $("#pgorient button.on").textContent === "Landscape";
+  v.setAttribute("viewBox", land ? "0 0 420 297" : "0 0 297 420");
+  const Wp = land ? 420 : 297, Hp = land ? 297 : 420;
+  el("rect", { x: 0, y: 0, width: Wp, height: Hp, fill: "#ffffff" }, v);
+  const mx = 16, my = 34, mw = Wp - 32, mh = Hp - my - 30;
+  const g = el("g", {}, v);
+  el("rect", { x: mx, y: my, width: mw, height: mh, fill: "#EDF1F5", stroke: "#93A2B4", "stroke-width": .6 }, g);
+  const cl = el("clipPath", { id: "pgclip" }, el("defs", {}, v));
+  el("rect", { x: mx, y: my, width: mw, height: mh }, cl);
+  const inner = el("g", { "clip-path": "url(#pgclip)" }, g);
+  const sx = mw / W, sy = mh / H, sc = Math.max(sx, sy);
+  const gi = el("g", { transform: `translate(${mx} ${my}) scale(${sc.toFixed(4)})` }, inner);
+  el("path", { d: riverD, fill: "none", stroke: "#9EC4D8", "stroke-width": 14 }, gi);
+  wards.forEach(w => el("polygon", {
+    points: w.pts.map(p => p.join(",")).join(" "),
+    fill: w.density == null ? "#D5D9DE" : fillOf(w.density), "fill-opacity": .9, stroke: "#ffffff", "stroke-width": 1.4
+  }, gi));
+  const title = el("g", { id: "pv-title" }, v);
+  let t = el("text", { x: mx, y: 20, fill: "#101317", "font-size": 13, "font-weight": 600, "font-family": "IBM Plex Sans" }, title);
+  t.textContent = $("#pgtitle").value;
+  t = el("text", { x: mx, y: 28, fill: "#5A6672", "font-size": 6.5, "font-family": "IBM Plex Sans" }, title);
+  t.textContent = "Census 1400 · wards_1400 · persons per square kilometre";
+  const lg = el("g", { id: "pv-legend" }, v);
+  const lw = 66, lh = 14 + nClass * 9;
+  el("rect", { x: mx + 6, y: my + mh - lh - 6, width: lw, height: lh, fill: "#ffffffE6", stroke: "#B6C0CB", "stroke-width": .5 }, lg);
+  t = el("text", { x: mx + 11, y: my + mh - lh + 3, fill: "#101317", "font-size": 5, "font-weight": 600, "font-family": "IBM Plex Sans" }, lg);
+  t.textContent = "PERSONS / KM²";
+  const cols = colorsFor(nClass), edges = [VMIN, ...breaks.slice(0, nClass - 1), VMAX];
+  for (let i = nClass - 1, k = 0; i >= 0; i--, k++) {
+    const yy = my + mh - lh + 8 + k * 9;
+    el("rect", { x: mx + 11, y: yy, width: 9, height: 6, fill: cols[i] }, lg);
+    const q = el("text", { x: mx + 23, y: yy + 5, fill: "#3C4650", "font-size": 4.8, "font-family": "IBM Plex Mono" }, lg);
+    q.textContent = fmt(Math.round(edges[i])) + " – " + fmt(Math.round(edges[i + 1]));
+  }
+  const sb = el("g", { id: "pv-scale" }, v);
+  el("rect", { x: Wp - mx - 62, y: my + mh - 14, width: 30, height: 3.4, fill: "#2A3038" }, sb);
+  el("rect", { x: Wp - mx - 32, y: my + mh - 14, width: 30, height: 3.4, fill: "none", stroke: "#2A3038", "stroke-width": .6 }, sb);
+  t = el("text", { x: Wp - mx - 62, y: my + mh - 16.5, fill: "#2A3038", "font-size": 4.4, "font-family": "IBM Plex Mono" }, sb);
+  t.textContent = "0                1                2 km";
+  const na = el("g", { id: "pv-north", transform: `translate(${Wp - mx - 20} ${my + 16})` }, v);
+  el("path", { d: "M 0 -9 L 4 6 L 0 3 L -4 6 Z", fill: "#2A3038" }, na);
+  t = el("text", { x: 0, y: 13, "text-anchor": "middle", fill: "#2A3038", "font-size": 5, "font-family": "IBM Plex Sans Condensed" }, na);
+  t.textContent = "N";
+  const gr = el("g", { id: "pv-grid" }, v);
+  for (let i = 1; i < 6; i++) {
+    el("line", { x1: mx + (mw / 6) * i, y1: my, x2: mx + (mw / 6) * i, y2: my + mh, stroke: "#8E9AA8", "stroke-width": .3, "stroke-dasharray": "2 2" }, gr);
+    el("line", { x1: mx, y1: my + (mh / 6) * i, x2: mx + mw, y2: my + (mh / 6) * i, stroke: "#8E9AA8", "stroke-width": .3, "stroke-dasharray": "2 2" }, gr);
+  }
+  const cr = el("g", { id: "pv-credit" }, v);
+  t = el("text", { x: mx, y: Hp - 14, fill: "#5A6672", "font-size": 4.6, "font-family": "IBM Plex Sans" }, cr);
+  t.textContent = "Data: municipal census 1400 · Rendered with Alidade · EPSG:4326, printed in EPSG:3857";
+  $$("[data-pv]").forEach(c => { const n = $("#" + c.dataset.pv); if (n) n.setAttribute("opacity", c.checked ? 1 : 0); });
+}
+$$("[data-pv]").forEach(c => c.addEventListener("change", () => { const n = $("#" + c.dataset.pv); if (n) n.setAttribute("opacity", c.checked ? 1 : 0); }));
+$("#pgtitle").addEventListener("input", drawPage);
+$$("#pgorient button").forEach(b => b.addEventListener("click", () => setTimeout(drawPage, 10)));
+$("#pgsize").addEventListener("change", drawPage);
+$$("#mtabs button").forEach(b => b.onclick = () => {
+  $$("#mtabs button").forEach(o => o.classList.remove("on")); b.classList.add("on");
+  $$(".mpane").forEach(p => p.classList.remove("on")); $("#m-" + b.dataset.mt).classList.add("on");
+});
+$$(".caps .cr").forEach(r => r.onclick = () => { $$(".cr", r.parentElement).forEach(o => o.classList.remove("sel")); r.classList.add("sel"); });
+
+/* toast */
+let tq = [];
+function toast(msg) {
+  const n = document.createElement("div"); n.className = "toast"; n.textContent = msg;
+  $("#toasts").appendChild(n); tq.push(n);
+  if (tq.length > 3) tq.shift().remove();
+  setTimeout(() => { n.remove(); tq = tq.filter(x => x !== n); }, 2600);
+}
+
+/* ---------------- symbology ---------------- */
+function renderRamp() {
+  const c = colorsFor(nClass);
+  $("#ramppv").style.background = `linear-gradient(90deg,${c.join(",")})`;
+}
+function counts() {
+  const arr = Array(nClass).fill(0);
+  wards.forEach(w => { if (w.density != null) arr[Math.min(classOf(w.density), nClass - 1)]++; });
+  return arr;
+}
+function renderClasses() {
+  const c = colorsFor(nClass), n = counts(), box = $("#classlist"); box.innerHTML = "";
+  const edges = [VMIN, ...breaks.slice(0, nClass - 1), VMAX];
+  for (let i = 0; i < nClass; i++) {
+    const row = document.createElement("div"); row.className = "classrow";
+    const rangeTxt = `${fmt(Math.round(edges[i]))} – ${fmt(Math.round(edges[i + 1]))}`;
+    row.innerHTML = `<label class="sw2" style="background:${c[i]}"><input type="color" value="${c[i]}" data-ci="${i}" style="position:absolute;opacity:0;width:0;height:0"></label>
+      <input type="text" class="rg" data-li="${i}" value="${labelOvr[i] ?? rangeTxt}" style="background:none;border:0;height:19px;padding:0">
+      <span class="ct">${n[i]}</span>`;
+    box.appendChild(row);
+  }
+  const lb = $("#legendbody"); lb.innerHTML = "";
+  for (let i = nClass - 1; i >= 0; i--) {
+    const r = document.createElement("div"); r.className = "lrow";
+    r.innerHTML = `<i style="background:${c[i]}"></i>${labelOvr[i] ?? (fmt(Math.round(edges[i])) + " – " + fmt(Math.round(edges[i + 1])))}<span>${showCount ? n[i] : ""}</span>`;
+    lb.appendChild(r);
+  }
+  const nd = document.createElement("div"); nd.className = "lrow";
+  nd.innerHTML = `<i style="background:#3A3A40"></i>No data<span>2</span>`; lb.appendChild(nd);
+  const lv = document.createElement("div"); lv.className = "lrow"; lv.style.marginTop = "4px";
+  lv.innerHTML = `<i style="background:#38D6C0;border-radius:50%"></i>Fleet asset<span>12</span>`; lb.appendChild(lv);
+}
+let showCount = true;
+function repaint() {
+  wards.forEach(w => shapes[w.id].setAttribute("fill", fillOf(w.density)));
+  renderRamp(); renderClasses();
+}
+/* histogram */
+const BINS = 36;
+function renderHisto() {
+  const bars = $("#bars"); bars.innerHTML = "";
+  const hist = Array(BINS).fill(0);
+  values.forEach(v => hist[Math.min(BINS - 1, Math.floor((v - VMIN) / (VMAX - VMIN) * BINS))]++);
+  const mx = Math.max(...hist);
+  hist.forEach(h => { const i = document.createElement("i"); i.style.height = (8 + (h / mx) * 88) + "%"; bars.appendChild(i); });
+  $$(".brk").forEach(b => b.remove());
+  breaks.slice(0, nClass - 1).forEach((v, i) => {
+    const d = document.createElement("div"); d.className = "brk";
+    d.style.left = ((v - VMIN) / (VMAX - VMIN) * 100) + "%"; d.dataset.i = i;
+    $("#histo").appendChild(d);
+  });
+  $("#hmin").textContent = fmt(VMIN); $("#hmax").textContent = fmt(VMAX);
+}
+let dragBrk = null;
+$("#histo").addEventListener("pointerdown", e => {
+  const b = e.target.closest(".brk"); if (!b) return;
+  dragBrk = b; b.classList.add("drag"); b.setPointerCapture(e.pointerId);
+});
+$("#histo").addEventListener("pointermove", e => {
+  if (!dragBrk) return;
+  const r = $("#histo").getBoundingClientRect();
+  const p = Math.max(.01, Math.min(.99, (e.clientX - r.left) / r.width));
+  const i = +dragBrk.dataset.i;
+  let v = Math.round(VMIN + p * (VMAX - VMIN));
+  const lo = i === 0 ? VMIN + 40 : breaks[i - 1] + 40, hi = i === nClass - 2 ? VMAX - 40 : breaks[i + 1] - 40;
+  v = Math.max(lo, Math.min(hi, v));
+  breaks[i] = v; dragBrk.style.left = ((v - VMIN) / (VMAX - VMIN) * 100) + "%";
+  $("#method").value = "Manual"; repaint();
+});
+addEventListener("pointerup", () => { if (dragBrk) { dragBrk.classList.remove("drag"); dragBrk = null; toast("Break moved · style reconciled"); } });
+
+function classify(method, n) {
+  const v = values, out = [];
+  if (method.startsWith("Equal")) for (let i = 1; i < n; i++) out.push(Math.round(VMIN + (VMAX - VMIN) * i / n));
+  else if (method.startsWith("Quantile")) for (let i = 1; i < n; i++) out.push(v[Math.floor(v.length * i / n)]);
+  else if (method.startsWith("Standard")) {
+    const m = v.reduce((a, b) => a + b, 0) / v.length;
+    const sd = Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / v.length);
+    for (let i = 1; i < n; i++) out.push(Math.round(m + sd * (i - n / 2) * 1.1));
+  } else for (let i = 1; i < n; i++) out.push(Math.round(v[Math.floor(v.length * Math.pow(i / n, 1.35))]));
+  return out.map(x => Math.max(VMIN + 40, Math.min(VMAX - 40, x))).sort((a, b) => a - b);
+}
+$("#method").addEventListener("change", e => { breaks = classify(e.target.value, nClass); renderHisto(); repaint(); toast("Classified · " + e.target.value.toLowerCase()); });
+$("#nclass").addEventListener("input", e => {
+  nClass = +e.target.value; $("#nclassv").textContent = nClass; ovr = {}; labelOvr = {};
+  breaks = classify($("#method").value, nClass); renderHisto(); repaint();
+});
+$("#rampsel").addEventListener("change", e => { rampName = e.target.value; ovr = {}; repaint(); });
+$("#revramp").addEventListener("click", () => { reversed = !reversed; ovr = {}; repaint(); });
+$("#classlist").addEventListener("input", e => {
+  if (e.target.dataset.ci !== undefined) { ovr[+e.target.dataset.ci] = e.target.value; repaint(); }
+  if (e.target.dataset.li !== undefined) { labelOvr[+e.target.dataset.li] = e.target.value; renderClasses(); }
+});
+$("#classifybtn").addEventListener("click", () => { labelOvr = {}; breaks = classify($("#method").value, nClass); renderHisto(); repaint(); toast("Classified into " + nClass + " classes"); });
+$("#addclass").addEventListener("click", () => { if (nClass < 7) { $("#nclass").value = ++nClass; $("#nclass").dispatchEvent(new Event("input")); } });
+$("#delclass").addEventListener("click", () => { if (nClass > 3) { $("#nclass").value = --nClass; $("#nclass").dispatchEvent(new Event("input")); } });
+$("#cntlegend").addEventListener("change", e => { showCount = e.target.checked; renderClasses(); });
+$("#lyrop").addEventListener("input", e => { $("#lyropv").textContent = e.target.value + "%"; G.density.style.opacity = e.target.value / 100; });
+$("#blend").addEventListener("change", e => { G.density.style.mixBlendMode = e.target.value.toLowerCase(); });
+$("#renderchk").addEventListener("change", e => { $("#mapsvg").style.visibility = e.target.checked ? "" : "hidden"; toast(e.target.checked ? "Rendering resumed" : "Rendering suspended"); });
+$("#fillop").addEventListener("input", e => { $("#fillopv").textContent = e.target.value + "%"; G.density.setAttribute("opacity", e.target.value / 100); });
+$("#symfield").addEventListener("change", e => toast("Classifying on " + e.target.value));
+$$("#rendseg button, #r-sym .seg button[data-r]").forEach(b => b.onclick = () => {
+  $$("[data-r]").forEach(o => o.classList.remove("on")); b.classList.add("on");
+  toast("Renderer set to " + b.textContent.toLowerCase());
+});
+$("#labsize").addEventListener("input", e => {
+  $("#labsizev").textContent = e.target.value + " px";
+  wards.forEach(w => w.label.setAttribute("font-size", e.target.value));
+});
+$("#labtpl").addEventListener("input", e => {
+  const t = e.target.value;
+  wards.forEach(w => { w.label.textContent = t.replace("{name}", w.name).replace("{density}", w.density ?? "–").replace("{ward_id}", w.id).replace("{pop_2024}", w.pop); });
+});
+
+/* ---------------- attribute table ---------------- */
+let sortKey = "density", sortDir = -1, selectedId = wards[16].id;
+function renderTable(q = "") {
+  const rows = wards
+    .filter(w => !q || (w.name + w.id).toLowerCase().includes(q.toLowerCase()))
+    .slice().sort((a, b) => {
+      const A = a[sortKey === "ward_id" ? "id" : sortKey === "pop_2024" ? "pop" : sortKey === "area_km2" ? "area" : sortKey === "growth_pct" ? "growth" : sortKey === "updated_at" ? "updated" : sortKey];
+      const B = b[sortKey === "ward_id" ? "id" : sortKey === "pop_2024" ? "pop" : sortKey === "area_km2" ? "area" : sortKey === "growth_pct" ? "growth" : sortKey === "updated_at" ? "updated" : sortKey];
+      return (A > B ? 1 : A < B ? -1 : 0) * sortDir;
+    });
+  const tb = $("#attrbody"); tb.innerHTML = "";
+  rows.forEach(w => {
+    const tr = document.createElement("tr");
+    tr.dataset.id = w.id; tr.className = w.id === selectedId ? "sel" : "";
+    tr.innerHTML = `<td class="mono">${w.id}</td><td>${w.name}</td>
+      <td class="n">${w.density == null ? "—" : fmt(w.pop)}</td>
+      <td class="n">${w.area.toFixed(1)}</td>
+      <td class="n ${w.id === selectedId ? "edit" : ""}">${w.density == null ? "NULL" : fmt(w.density)}</td>
+      <td class="n" style="color:${w.growth < 0 ? "#F0616B" : "var(--txt)"}">${w.growth > 0 ? "+" : ""}${w.growth}</td>
+      <td class="mono">${w.updated}</td>`;
+    tr.onclick = () => selectWard(w.id, false);
+    tb.appendChild(tr);
+  });
+  $("#selcount").textContent = "1 selected · " + rows.length + " rows";
+}
+$$("#attrtable th").forEach(th => th.onclick = () => {
+  if (sortKey === th.dataset.s) sortDir *= -1; else { sortKey = th.dataset.s; sortDir = 1; }
+  $$("#attrtable th .srt").forEach(s => s.remove());
+  const s = document.createElement("span"); s.className = "srt"; s.textContent = sortDir > 0 ? "▴" : "▾"; th.appendChild(s);
+  renderTable($("#tsearch").value);
+});
+$("#tsearch").addEventListener("input", e => renderTable(e.target.value));
+function selectWard(id, fromMap) {
+  selectedId = id; const w = wards.find(x => x.id === id);
+  selRing.setAttribute("points", w.pts.map(p => p.join(",")).join(" "));
+  $$("#attrbody tr").forEach(tr => tr.classList.toggle("sel", tr.dataset.id === id));
+  renderTable($("#tsearch").value);
+  const row = $(`#attrbody tr[data-id="${id}"]`); if (row && fromMap) row.scrollIntoView({ block: "nearest" });
+  $("#idbody").innerHTML = [
+    ["ward_id", w.id], ["name", w.name], ["pop_2024", w.density == null ? "—" : fmt(w.pop)],
+    ["area_km²", w.area.toFixed(1)], ["density", w.density == null ? "NULL" : fmt(w.density)],
+    ["growth_pct", (w.growth > 0 ? "+" : "") + w.growth], ["updated_at", w.updated],
+    ["lon / lat", x2lon(w.cx).toFixed(4) + " · " + y2lat(w.cy).toFixed(4)]
+  ].map(([k, v]) => `<div class="irow"><b>${k}</b><span>${v}</span></div>`).join("");
+  $("#identify").classList.add("on");
+}
+
+/* fields, popup rows, stats */
+const FIELDS = [["ward_id", "text", "pk"], ["name", "text", ""], ["pop_2024", "integer", ""], ["area_km2", "numeric", ""], ["density", "numeric", "indexed"], ["updated_at", "date", ""]];
+$("#fieldlist").innerHTML = FIELDS.map(([n, t, x]) =>
+  `<div class="asset"><span class="nm">${n}</span><span class="tag mono">${t}</span>${x ? `<span class="tag b">${x}</span>` : ""}</div>`).join("");
+$("#poprows").innerHTML = FIELDS.map(([n]) =>
+  `<div class="asset"><label class="chk" style="flex:1"><input type="checkbox" ${n === "updated_at" ? "" : "checked"}>${n}</label>
+   <select style="width:88px;height:20px;font-size:10px"><option>Plain</option><option>Number</option><option>Date</option></select></div>`).join("");
+const mean = values.reduce((a, b) => a + b, 0) / values.length;
+const sd = Math.sqrt(values.reduce((a, b) => a + (b - mean) ** 2, 0) / values.length);
+$("#statgrid").innerHTML = [
+  ["Count", values.length, ""], ["Minimum", fmt(VMIN), "p/km²"], ["Maximum", fmt(VMAX), "p/km²"],
+  ["Mean", fmt(Math.round(mean)), "p/km²"], ["Median", fmt(values[values.length >> 1]), "p/km²"],
+  ["Std deviation", fmt(Math.round(sd)), ""], ["Sum of pop", fmt(wards.reduce((a, w) => a + (w.density ? w.pop : 0), 0)), ""],
+  ["Null values", 2, "rows"]
+].map(([k, v, u]) => `<div class="stat"><div class="cap">${k}</div><b>${v}</b><i>${u}</i></div>`).join("");
+
+/* assets list + feed */
+$("#assetlist").innerHTML = ASSETS.map(a =>
+  `<div class="asset"><i class="pin ${a.stale ? "stale" : ""}"></i><span class="nm">${a.id}</span><span class="sp">${a.speed} km/h</span></div>`).join("") +
+  `<div class="hint" style="margin-top:6px">6 more assets outside the current view.</div>`;
+const feed = $("#feedbody"), logb = $("#logbody");
+function stamp(t) { const d = new Date(t); return d.toTimeString().slice(0, 8); }
+function pushFeed() {
+  const a = ASSETS[Math.floor(R() * ASSETS.length)];
+  const line = document.createElement("div"); line.className = "fline";
+  line.innerHTML = `<span class="t">${stamp(Date.now())}</span><span class="id">${a.id}</span><span class="lvl ok">POS</span>
+    <span>${y2lat(a.y || 500).toFixed(5)}, ${x2lon(a.x || 800).toFixed(5)} · ${a.speed} km/h · hdg ${Math.round(R() * 359)}°</span>`;
+  feed.prepend(line); while (feed.children.length > 60) feed.lastChild.remove();
+}
+const OPS = ['{ t:"layer.paint", id:"alidade:density:fill", key:"fill-color", value:[…] }',
+  '{ t:"layer.order", id:"alidade:wards:line", before:"alidade:labels" }',
+  '{ t:"source.data", id:"alidade:live", features:12 }',
+  '{ t:"layer.filter", id:"alidade:density:fill", value:["all",…] }',
+  '{ t:"layout.visibility", id:"alidade:build3d", value:"visible" }'];
+function pushLog() {
+  const line = document.createElement("div"); line.className = "fline";
+  line.innerHTML = `<span class="t">${stamp(Date.now())}</span><span class="lvl">OP</span><span>${OPS[Math.floor(R() * OPS.length)]}</span>`;
+  logb.prepend(line); while (logb.children.length > 60) logb.lastChild.remove();
+}
+for (let i = 0; i < 14; i++) { pushFeed(); pushLog(); }
+
+/* timeline */
+$("#tticks").innerHTML = Array(19).fill("<i></i>").join("");
+$("#timeslider").addEventListener("input", e => {
+  const p = +e.target.value; $("#tfill").style.width = p + "%";
+  const mins = 13 * 60 + Math.round(p * .9);
+  $("#tnow").textContent = String(Math.floor(mins / 60)).padStart(2, "0") + ":" + String(mins % 60).padStart(2, "0") + ":07";
+});
+$$("[data-tp]").forEach(b => b.onclick = () => {
+  if (b.dataset.tp === "play") {
+    playing = !playing;
+    $("#playbtn").innerHTML = `<svg><use href="#${playing ? "i-pause" : "i-play"}"/></svg>`;
+    toast(playing ? "Playing" : "Paused");
+  } else {
+    const s = $("#timeslider"); s.value = Math.max(0, Math.min(100, +s.value + (b.dataset.tp === "fwd" ? 4 : -4)));
+    s.dispatchEvent(new Event("input"));
+  }
+});
+$("#speed").addEventListener("change", e => { speedMul = parseFloat(e.target.value); });
+$("#trail").addEventListener("input", e => { trailLen = +e.target.value; $("#trailv").textContent = Math.round(trailLen / 11) + " min"; });
+$("#trailon").addEventListener("change", e => ASSETS.forEach(a => a.trail.setAttribute("opacity", e.target.checked ? 1 : 0)));
+$("#playbtn").innerHTML = `<svg><use href="#i-pause"/></svg>`;
+
+/* coordinate readout */
+const CRS = { "EPSG:4326": p => p, "EPSG:3857": null, "EPSG:32642": null };
+let coordFmt = "Decimal degrees";
+$("#coordfmt").addEventListener("change", e => coordFmt = e.target.value);
+function dms(v, pos, neg) {
+  const s = v < 0 ? neg : pos; v = Math.abs(v);
+  const d = Math.floor(v), m = Math.floor((v - d) * 60), sec = (((v - d) * 60 - m) * 60).toFixed(1);
+  return `${d}° ${String(m).padStart(2, "0")}′ ${sec}″ ${s}`;
+}
+$("#mapwrap").addEventListener("mousemove", e => {
+  const r = $("#mapwrap").getBoundingClientRect();
+  const lon = x2lon((e.clientX - r.left) / r.width * W), lat = y2lat((e.clientY - r.top) / r.height * H);
+  const c = $("#crssel")?.value || "EPSG:4326";
+  let s;
+  if (coordFmt.startsWith("Degrees")) s = dms(lat, "N", "S") + " · " + dms(lon, "E", "W");
+  else if (coordFmt.startsWith("UTM") || c === "EPSG:32642") s = fmt(Math.round(480000 + (lon - 68.66) * 87000)) + " E · " + fmt(Math.round(4263000 + (lat - 38.47) * 111000)) + " N";
+  else s = lat.toFixed(4) + "° N · " + lon.toFixed(4) + "° E";
+  $("#coords").textContent = s;
+});
+$("#crsbtn").addEventListener("click", () => {
+  const opts = ["EPSG:4326", "EPSG:3857", "EPSG:32642"];
+  const cur = $("#crsbtn b").textContent, next = opts[(opts.indexOf(cur) + 1) % opts.length];
+  $("#crsbtn b").textContent = next; if ($("#crssel")) $("#crssel").value = next;
+  toast("Coordinates now read out in " + next);
+});
+
+/* basemap gallery */
+const BMS = [["Graphite", "#0B0B0C", "#242428", "#0F2129"], ["Carbon", "#050505", "#1B1B1E", "#0C1C24"],
+["Slate", "#111114", "#2A2A30", "#14303C"], ["Blueprint", "#0A1420", "#1B2A38", "#123040"],
+["Satellite", "#0F110E", "#22261E", "#16303A"], ["No basemap", "#050505", "#0D0D0E", "#0D0D0E"]];
+$("#bmgrid").innerHTML = BMS.map(([n, a, b, c], i) => `
+  <div class="bm ${i === 0 ? "on" : ""}" data-bm="${i}">
+    <svg class="th" viewBox="0 0 100 48" preserveAspectRatio="none">
+      <rect width="100" height="48" fill="${a}"/>
+      <path d="M -5 32 C 20 24 34 40 56 30 S 88 18 105 24" stroke="${c}" stroke-width="5" fill="none"/>
+      <path d="M 0 14 H 100 M 30 0 V 48" stroke="${b}" stroke-width="2"/>
+      <circle cx="70" cy="36" r="7" fill="${b}"/>
+    </svg><div class="nm">${n}</div></div>`).join("");
+$$(".bm").forEach(b => b.onclick = () => {
+  $$(".bm").forEach(o => o.classList.remove("on")); b.classList.add("on");
+  const [n, a, bb, c] = BMS[+b.dataset.bm];
+  G.base.querySelector("rect").setAttribute("fill", a);
+  $$("#l-roads path").forEach((p, i) => p.setAttribute("stroke", i % 2 ? bb : a));
+  $$("#l-water path, #l-water ellipse").forEach(p => p.setAttribute("stroke", c));
+  toast("Basemap: " + n + " · layers kept");
+});
+
+/* language */
+const FA = {
+  "#lefttitle": "لایه‌ها", '[data-rtab="sym"]': "نمادگذاری", '[data-rtab="lab"]': "برچسب‌ها",
+  '[data-rtab="flt"]': "فیلتر", '[data-rtab="fld"]': "فیلدها", '[data-rtab="pop"]': "پاپ‌آپ",
+  '[data-dtab="attr"]': "جدول اطلاعات", '[data-dtab="stats"]': "آمار", '[data-dtab="feed"]': "خوراک زنده", '[data-dtab="log"]': "عملیات"
+};
+let lang = "en"; const EN = {};
+Object.keys(FA).forEach(k => { const n = $(k); if (n) EN[k] = n.childNodes[n.childNodes.length - 1].textContent; });
+function setLang(l) {
+  lang = l; document.documentElement.dir = l === "fa" ? "rtl" : "ltr";
+  Object.keys(FA).forEach(k => { const n = $(k); if (!n) return; n.childNodes[n.childNodes.length - 1].textContent = l === "fa" ? FA[k] : EN[k]; });
+  $$("#langsw button").forEach(b => b.classList.toggle("on", b.dataset.lang === l));
+  if ($("#langsel")) $("#langsel").value = l;
+  setTimeout(drawFrame, 60);
+  toast(l === "fa" ? "زبان فارسی · چیدمان راست‌به‌چپ" : "Interface language: English");
+}
+$$("#langsw button").forEach(b => b.onclick = () => setLang(b.dataset.lang));
+$("#langsel").addEventListener("change", e => setLang(e.target.value));
+
+/* keyboard */
+addEventListener("keydown", e => {
+  if (e.target.matches("input,select,textarea")) return;
+  if (e.key === "1") setMode("2d"); if (e.key === "2") setMode("25d"); if (e.key === "3") setMode("3d");
+  if (e.key === "Escape") { $("#scrim").classList.remove("on"); $("#scrim2").classList.remove("on"); closeMenus(); }
+  if (e.key.toLowerCase() === "p" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); acts.print(); }
+  if (e.key === "\\" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); acts.panels(); }
+});
+
+/* ---------------- boot ---------------- */
+renderHisto(); repaint(); renderTable(); selectWard(selectedId, false); applyCam();
+setTimeout(drawFrame, 60);
+let last = performance.now(), acc = 0;
+function loop(t) {
+  const dt = Math.min(.05, (t - last) / 1000); last = t;
+  if (playing) { stepAssets(dt); acc += dt; if (acc > 1.1) { acc = 0; pushFeed(); if (R() > .6) pushLog(); } }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

@@ -180,13 +180,15 @@ Four things have to be here, because the compose file bind-mounts them:
 scp deploy/docker-compose.prod.yml deploy@SERVER:/opt/alidade/
 scp deploy/Caddyfile               deploy@SERVER:/opt/alidade/
 scp deploy/.env.prod.example       deploy@SERVER:/opt/alidade/.env
-scp data/init/01_schema.sql        deploy@SERVER:/opt/alidade/init/
+scp data/init/*.sql                deploy@SERVER:/opt/alidade/init/
 ```
 
-`init/` is the one that bites. Postgres runs it exactly once, on a first-boot
-empty volume. Miss it and the API starts, connects, and returns 500 on every
-request, because there is no `layers` table and no PostGIS extension — and
-fixing it afterwards means destroying the volume.
+`init/` is the one that bites. Postgres runs everything in there exactly once,
+in filename order, on a first-boot empty volume — and never again. Copy all of
+them, not just the schema: `01_schema.sql` creates the layer registry and the
+PostGIS extension, `02_imagery.sql` the raster catalogue. Miss any of it and
+the API starts, connects, and returns 500 on every request, and fixing it
+afterwards means destroying the volume and the data on it.
 
 Then edit `/opt/alidade/.env`: `GHCR_OWNER`, `ACME_EMAIL`, and a real password.
 

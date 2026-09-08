@@ -1,6 +1,8 @@
 node_modules/
 dist/
 .env
+deploy/.env
+deploy/portfolio/
 __pycache__/
 *.pyc
 .venv/

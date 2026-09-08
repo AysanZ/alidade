@@ -1,14 +1,6 @@
-# deploy/docker-compose.prod.yml
-#
-# The server never builds. Both images arrive from GHCR already built by CI, so
-# a deployment is `pull` + `up -d` and nothing else — no checkout, no node, no
-# 3 GB bundler peak on a 2 GB box.
-#
+# Production. Images are built in CI and pulled by tag; the server never builds.
 #   docker compose --env-file .env -f docker-compose.prod.yml up -d
-#
-# Only Caddy publishes ports. Postgres and the API are reachable on the
-# internal networks and nowhere else, which is the single most important
-# difference from the development compose file.
+# Only Caddy publishes ports.
 
 name: alidade
 
@@ -19,7 +11,6 @@ x-logging: &logging
     max-file: "3"
 
 services:
-  # ------------------------------------------------------------------- edge
   caddy:
     image: caddy:2.8-alpine
     restart: unless-stopped
@@ -28,17 +19,16 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "443:443/udp"      # HTTP/3
+      - "443:443/udp"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./portfolio:/srv/portfolio:ro
-      - caddy_data:/data          # certificates live here — never delete this
+      - caddy_data:/data          # certificates
       - caddy_config:/config
     networks: [edge]
     mem_limit: 192m
     logging: *logging
 
-  # ------------------------------------------------------------------- web
   web:
     image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER in .env}/alidade-web:${TAG:-latest}
     restart: unless-stopped
@@ -51,7 +41,6 @@ services:
     mem_limit: 192m
     logging: *logging
 
-  # ------------------------------------------------------------------- api
   api:
     image: ghcr.io/${GHCR_OWNER}/alidade-api:${TAG:-latest}
     restart: unless-stopped
@@ -61,17 +50,11 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-alidade}
       POSTGRES_HOST: postgis
       POSTGRES_PORT: 5432
-      # Ten connections fighting over two cores is slower than five that are
-      # not. asyncpg queues the rest; it does not drop them.
       DB_POOL_MIN: ${DB_POOL_MIN:-1}
       DB_POOL_MAX: ${DB_POOL_MAX:-5}
-      # A week. Nginx caches tiles too; this is the header the browser sees.
       TILE_CACHE_SECONDS: ${TILE_CACHE_SECONDS:-604800}
       CORS_ORIGINS: ${CORS_ORIGINS:?set CORS_ORIGINS in .env}
       MODELS_DIR: /srv/models
-      # 200 MB is a development default. On a public demo it is a stranger
-      # holding a core for a minute inside ogr2ogr, so this is 10 and nginx
-      # refuses anything larger before it reaches Python at all.
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
       LIVE_FLEET_SIZE: ${LIVE_FLEET_SIZE:-60}
       LIVE_CENTRE_LON: ${LIVE_CENTRE_LON:-51.39}
@@ -83,12 +66,10 @@ services:
       postgis:
         condition: service_healthy
     networks: [backend]
-    # The one limit that earns its keep: ogr2ogr on a large upload is the only
-    # thing here that can balloon. Capped, it dies alone. Uncapped, the kernel
-    # picks a victim and it is usually Postgres, because Postgres is biggest.
+    # Caps ogr2ogr on a large upload so it dies alone rather than taking Postgres.
     mem_limit: 768m
     healthcheck:
-      # python:3.12-slim ships no curl and no wget.
+      # No curl or wget in python:3.12-slim.
       test: ["CMD", "python", "-c",
              "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4).status==200 else 1)"]
       interval: 30s
@@ -97,7 +78,6 @@ services:
       retries: 5
     logging: *logging
 
-  # -------------------------------------------------------------- database
   postgis:
     image: postgis/postgis:16-3.4
     restart: unless-stopped
@@ -108,10 +88,10 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./init:/docker-entrypoint-initdb.d:ro
-    # No `ports:`. This is deliberate and is the difference between a database
-    # on your private network and a database on the internet.
+    # No ports. Reachable on the backend network only.
     networks: [backend]
     shm_size: 128mb
+    # Tuned for 2 GB and 2 cores.
     command:
       - postgres
       - -c
@@ -124,11 +104,8 @@ services:
       - max_connections=20
       - -c
       - effective_cache_size=768MB
-      # SSD, so a random read is not eight times a sequential one.
       - -c
       - random_page_cost=1.1
-      # Parallel query on two cores, while the same two cores are also encoding
-      # tiles, costs more in workers than it saves in scan time.
       - -c
       - max_parallel_workers_per_gather=0
       - -c
@@ -144,12 +121,9 @@ services:
     logging: *logging
 
 networks:
-  # Caddy reaches web, and nothing else. Add a new project's container here to
-  # put it behind the same certificate machinery.
   edge:
     name: edge
-  # web reaches api, api reaches postgis. Not marked `internal`, because ingest
-  # from a URL and WMS GetCapabilities both need to leave the box.
+  # Not internal: ingest from a URL and WMS GetCapabilities need egress.
   backend:
 
 volumes:

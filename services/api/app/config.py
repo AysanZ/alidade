@@ -8,9 +8,7 @@ class Settings(BaseSettings):
     postgres_host: str = "localhost"
     postgres_port: int = 5432
     tile_cache_seconds: int = 300
-    # Connections held against Postgres. Ten of them competing for two
-    # cores is slower than five that are not, and `max_connections` on the
-    # server is 20, shared with psql and anything else that attaches.
+    # Kept below the server's max_connections.
     db_pool_min: int = 1
     db_pool_max: int = 10
     cors_origins: str = "http://localhost:5173"
