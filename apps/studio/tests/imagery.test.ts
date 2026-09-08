@@ -15,6 +15,8 @@ function image(over: Partial<ImageRecord> & { id: string }): ImageRecord {
     cloudCover: null,
     bands: 4,
     dtype: "UInt16",
+    width: 10980,
+    height: 10980,
     bbox: [51.2, 35.6, 51.5, 35.8],
     footprint: [
       [51.22, 35.6],

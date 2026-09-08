@@ -8,6 +8,8 @@ import {
   type Overlap,
 } from "@alidade/core";
 
+import { asLonLat, defaultImagery } from "@alidade/core";
+
 import { dateLabel, gsdLabel, provenance, type ImageEdit } from "../imagery";
 import { Field, Section, Segmented } from "./Field";
 
@@ -209,8 +211,25 @@ function Rendering({
   const set = (change: Partial<ImagerySettings["render"]>) =>
     onSettings((s) => ({ ...s, render: { ...s.render, ...change } }));
 
+  const fresh = defaultImagery().render;
+  const changed =
+    render.mode !== fresh.mode ||
+    render.expression !== undefined ||
+    render.bands !== undefined ||
+    render.rescale !== undefined ||
+    render.colormap !== undefined ||
+    render.resampling !== fresh.resampling;
+
   return (
     <Section title="Rendering" extra="layer">
+      {/*
+        A way back.
+        
+        Rendering has five controls that interact, and some combinations draw
+        nothing — an expression naming a band the file does not have, a stretch
+        with its ends the wrong way round. Being able to undo the lot in one
+        click is the difference between experimenting and being afraid to.
+      */}
 
       <Field label="Mode">
         <Segmented
@@ -318,6 +337,16 @@ function Rendering({
           <option value="cubic">Cubic</option>
         </select>
       </Field>
+
+      <div className="pair">
+        <button
+          className="btn"
+          disabled={!changed}
+          onClick={() => onSettings((s) => ({ ...s, render: defaultImagery().render }))}
+        >
+          Reset rendering
+        </button>
+      </div>
     </Section>
   );
 }
@@ -390,6 +419,28 @@ function ImageFacts({
       </p>
 
       <dl className="facts">
+        {/*
+          The extent, written out.
+          
+          A GIS panel should show where a thing is, and this one earns its place
+          twice over: when the camera goes somewhere unexpected, the first
+          question is whether the registry knows where the image is, and this is
+          the answer without a database client.
+        */}
+        <div style={{ gridColumn: "1 / -1" }}>
+          <dt>Extent</dt>
+          <dd className="mono">
+            {asLonLat(image.bbox)
+              .map((n) => n.toFixed(4))
+              .join(", ")}
+          </dd>
+        </div>
+        <div>
+          <dt>Raster</dt>
+          <dd className="mono">
+            {image.width && image.height ? `${image.width} × ${image.height}` : "size unknown"}
+          </dd>
+        </div>
         <div>
           <dt>File</dt>
           <dd className="mono">{image.file}</dd>

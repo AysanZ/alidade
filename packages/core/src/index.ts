@@ -73,6 +73,7 @@ export {
   MEHRABAD_29L,
   PHASES,
   approachAt,
+  approachCamera,
   approachExtent,
   approachFrame,
 } from "./approach";
@@ -198,6 +199,8 @@ export {
   contributing,
   defaultImagery,
   estimateCoverage,
+  asLonLat,
+  frameFor,
   imageryQuery,
   imagerySource,
   imageryTileUrl,

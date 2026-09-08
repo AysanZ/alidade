@@ -25,6 +25,10 @@ interface Props {
   project: (position: [number, number]) => { x: number; y: number } | null;
   onSelect: (id: string) => void;
   onHover: (id: string | null) => void;
+  /** The position someone pressed and held, if there is one. */
+  at?: [number, number] | null;
+  /** The area being searched, or the one being dragged out. */
+  area?: { west: number; south: number; east: number; north: number } | null;
 }
 
 export function FootprintOverlay(props: Props) {
@@ -38,6 +42,20 @@ export function FootprintOverlay(props: Props) {
       image.id === props.hovered ? 3 : image.id === props.selected ? 2 : props.drawn.has(image.id) ? 1 : 0;
     return rank(a) - rank(b);
   });
+
+  // Where the question was asked. Without it the panel reports on a position the
+  // user can no longer point to, and panning makes it a mystery.
+  const pin = props.at ? props.project(props.at) : null;
+
+  const area = props.area
+    ? (() => {
+        const a = props.project([props.area.west, props.area.north]);
+        const b = props.project([props.area.east, props.area.south]);
+        return a && b
+          ? { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) }
+          : null;
+      })()
+    : null;
 
   return (
     <svg className="footprints" aria-hidden>
@@ -76,6 +94,23 @@ export function FootprintOverlay(props: Props) {
           </polygon>
         );
       })}
+
+      {area && (
+        <rect
+          className="searcharea"
+          x={area.x}
+          y={area.y}
+          width={area.w}
+          height={area.h}
+        />
+      )}
+
+      {pin && (
+        <g className="pin" transform={`translate(${pin.x} ${pin.y})`}>
+          <circle r="13" />
+          <path d="M-9 0h5M4 0h5M0 -9v5M0 4v5" />
+        </g>
+      )}
     </svg>
   );
 }

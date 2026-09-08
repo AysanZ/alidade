@@ -145,6 +145,35 @@ async def get(raster_id: str) -> Raster | None:
     return _row(row) if row else None
 
 
+async def containing(
+    lon: float,
+    lat: float,
+    limit: int = 200,
+) -> list[Raster]:
+    """
+    Every image whose footprint covers one position.
+
+    A different question from "what covers this view", and worth its own query
+    rather than a very small bounding box: the coverage figure would come back
+    as 100% for everything, which is true of a ten-metre box and tells nobody
+    anything. Coverage is left null here and the panel says so.
+
+    Against the footprint, not the bounding box — asking whether a point is
+    inside a rotated scene is exactly the case where the two disagree, because
+    the corners the box adds are the nodata corners the scene does not have.
+    """
+    sql = f"""
+        SELECT {COLUMNS}, NULL::double precision AS coverage
+        FROM rasters
+        WHERE ST_Intersects(footprint, ST_SetSRID(ST_MakePoint($1, $2), 4326))
+        ORDER BY captured_at DESC NULLS LAST
+        LIMIT $3
+    """
+    async with pool().acquire() as conn:
+        rows = await conn.fetch(sql, lon, lat, max(1, min(limit, 1000)))
+    return [_row(r) for r in rows]
+
+
 async def search(
     bbox: tuple[float, float, float, float] | None = None,
     start: datetime | None = None,

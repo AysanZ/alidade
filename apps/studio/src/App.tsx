@@ -6,6 +6,9 @@ import type { Bookmark, Extent, LayerNode, Model3D, Projection, Selection } from
 import {
   GLOBE_IS_ROUND_BELOW,
   contributing,
+  asLonLat,
+  frameFor,
+  nativeZoom,
   denominatorAt,
   findModel,
   formatCoordinate,
@@ -18,7 +21,7 @@ import {
   utmCell,
   viewForExtent,
   MEHRABAD_29L,
-  approachExtent,
+  approachCamera,
   defaultAssets,
   withMinimumSize,
   withModel,
@@ -44,6 +47,7 @@ import { LayerMenu, moveWithinSlot } from "./components/LayerMenu";
 import { BasemapGallery } from "./components/BasemapGallery";
 import { DrawOverlay } from "./components/DrawOverlay";
 import { FootprintOverlay } from "./components/FootprintOverlay";
+import { ImageryBrowser } from "./components/ImageryBrowser";
 import { ImageryDock } from "./components/ImageryDock";
 import { ImageryPanel } from "./components/ImageryPanel";
 import { DrawPanel } from "./components/DrawPanel";
@@ -143,6 +147,29 @@ export default function App() {
   const [viewport, setViewport] = useState<Extent | null>(null);
   const [image, setImage] = useState<string | null>(null);
   const [hoveredImage, setHoveredImage] = useState<string | null>(null);
+  const [imageryAttributes, setImageryAttributes] = useState(false);
+  const [imageryScope, setImageryScope] = useState<"view" | "all">("view");
+  /*
+   * A position somebody pressed and held on the map.
+   *
+   * Its own state rather than a third value of the scope, because it outranks
+   * the scope while it is set and has to be given back when it is cleared —
+   * "what covers this view" is where the panel returns to, and it should return
+   * to whichever of the two the user was on.
+   */
+  const [imageryAt, setImageryAt] = useState<[number, number] | null>(null);
+  /** A box the user drew, and the one being dragged out right now. */
+  const [imageryArea, setImageryArea] = useState<Extent | null>(null);
+  const [drawingArea, setDrawingArea] = useState(false);
+  /*
+   * The rubber band is a div, positioned by the pointer handler itself.
+   *
+   * It was React state updated on every pointermove, which re-rendered the
+   * whole application sixty times a second to move one rectangle — and made the
+   * band depend on a render landing before the next move, which on a busy frame
+   * it did not. A ref and four style properties cannot miss.
+   */
+  const marquee = useRef<HTMLDivElement | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [presenting, setPresenting] = useState(false);
@@ -938,7 +965,28 @@ export default function App() {
    * part of the question and the whole thing can be tested.
    */
   const flyTo = useCallback(
-    (extent: Extent, onlyIfItHelps = false) => {
+    (
+      extent: Extent,
+      /*
+       * Options rather than four positional flags. `flyTo(e, false, 16, true)`
+       * is unreadable at the call site and one transposition away from framing
+       * a runway at zoom sixteen degrees.
+       */
+      options: {
+        /** Only move if the extent is not already comfortably on screen. */
+        onlyIfItHelps?: boolean;
+        maxZoom?: number;
+        minZoom?: number;
+        /** Let a globe be framed past the point where it flattens. */
+        allowFlattening?: boolean;
+      } = {},
+    ) => {
+      const {
+        onlyIfItHelps = false,
+        maxZoom = 16,
+        minZoom = 0,
+        allowFlattening = false,
+      } = options;
       const map = mapRef.current;
       if (!map) return;
       const canvas = map.getCanvas();
@@ -963,7 +1011,13 @@ export default function App() {
           pitch: map.getPitch(),
           bearing: map.getBearing(),
         },
-        { projection: project.environment.projection, maxZoom: 16, padding: 0.1 },
+        {
+          projection: project.environment.projection,
+          maxZoom,
+          minZoom,
+          padding: 0.1,
+          allowFlattening,
+        },
       );
       map.easeTo({ ...view, duration: 800 });
     },
@@ -1033,9 +1087,24 @@ export default function App() {
     });
 
     setSelectedModel(plane.id);
-    flyTo(approachExtent());
+
+    /*
+     * A stated camera, not a framed extent.
+     *
+     * Framing the approach path answers "fit all of this on the screen", and the
+     * answer to that is a camera overhead and level — the one view from which a
+     * jet on final is a two-pixel cross and the bank this exists to show cannot
+     * be seen at all. Where to stand is a position, not a fit.
+     *
+     * `easeTo` directly rather than through `flyTo`: `flyTo` computes a view
+     * from an extent, and this view is already known. It also reads the
+     * projection from the render it was made in, and the edit above — which
+     * forces mercator — has not landed yet.
+     */
+    const map = mapRef.current;
+    if (map) map.easeTo({ ...approachCamera(), duration: 1400 });
     approach.start();
-  }, [edit, flyTo, approach]);
+  }, [edit, approach]);
 
   /**
    * Selecting from the table.
@@ -1135,12 +1204,253 @@ export default function App() {
   );
   // Nothing is fetched until there is a layer to draw it with, so an install
   // with no imagery does not poll a catalogue on every pan.
-  const imagery = useImagery(imageryLayer ? viewport : null);
+  const imagery = useImagery(
+    imageryAt
+      ? { kind: "point", at: imageryAt }
+      : imageryArea
+        ? { kind: "area", bbox: imageryArea }
+        : imageryScope === "all"
+          ? { kind: "all" }
+          : { kind: "view", bbox: viewport },
+    { enabled: imageryLayer !== undefined },
+  );
   const images = imagery.data ?? [];
   const showingImagery = imageryLayer !== undefined && selected === imageryLayer.id;
   const drawnImages = new Set(
     imageryLayer?.imagery ? contributing(images, imageryLayer.imagery.rule).map((i) => i.id) : [],
   );
+
+  /**
+   * Choosing an image takes the camera with it.
+   *
+   * An airfield at ten centimetres is a few hundred metres of ground, which at a
+   * continental zoom is smaller than the cursor. Selecting one and leaving the
+   * camera where it was meant lighting an outline nobody could see and drawing
+   * tiles nobody could reach — the picture was on the map the whole time, four
+   * zoom levels down.
+   *
+   * It frames every time rather than only when it would help. Clicking a
+   * thumbnail is an explicit "show me this one", and a click that sometimes
+   * moves the camera and sometimes does not reads as a click that did not
+   * register.
+   */
+  /**
+   * Press and hold on the map to ask what imagery covers that spot.
+   *
+   * A long press rather than a click because a click on the map already means
+   * several things — picking a feature, dropping a vertex, finishing a shape —
+   * and taking one of them away to add this would be a poor trade. Holding
+   * still is the gesture nothing else uses.
+   *
+   * It cancels the moment the pointer moves more than a few pixels, so a drag
+   * that begins slowly is a pan and not a query; the map would otherwise answer
+   * a question about wherever the pan started.
+   */
+  useEffect(() => {
+    const map = mapRef.current;
+    const canvas = map?.getCanvasContainer();
+    // While an area is being drawn, holding still is how you start a corner.
+    if (!map || !canvas || !showingImagery || drawingArea) return;
+
+    const HOLD_MS = 450;
+    const SLOP_PX = 6;
+    let timer: number | undefined;
+    let from: { x: number; y: number } | null = null;
+
+    const cancel = () => {
+      window.clearTimeout(timer);
+      timer = undefined;
+      from = null;
+    };
+
+    const down = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      from = { x: event.clientX, y: event.clientY };
+      timer = window.setTimeout(() => {
+        if (!from) return;
+        const box = canvas.getBoundingClientRect();
+        const at = map.unproject([from.x - box.left, from.y - box.top]);
+        setImageryAt([Number(at.lng.toFixed(6)), Number(at.lat.toFixed(6))]);
+        cancel();
+      }, HOLD_MS);
+    };
+
+    const move = (event: PointerEvent) => {
+      if (!from) return;
+      if (Math.hypot(event.clientX - from.x, event.clientY - from.y) > SLOP_PX) cancel();
+    };
+
+    canvas.addEventListener("pointerdown", down);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", cancel);
+    window.addEventListener("pointercancel", cancel);
+    return () => {
+      cancel();
+      canvas.removeEventListener("pointerdown", down);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", cancel);
+      window.removeEventListener("pointercancel", cancel);
+    };
+  }, [showingImagery, drawingArea]);
+
+  /**
+   * Drag out a box, and search inside it.
+   *
+   * Panning is disabled while this is armed, because a drag has to mean one
+   * thing at a time: a map that sometimes pans and sometimes draws depending on
+   * a mode you cannot see does the wrong one half the time. The cursor changes,
+   * the button stays lit and a banner sits over the map, so the mode is never
+   * invisible.
+   *
+   * Listeners go on the map's own container rather than its canvas: the canvas
+   * is beneath the overlays, and a pointerdown that lands on the footprint layer
+   * or the scale bar would never reach it.
+   */
+  useEffect(() => {
+    const map = mapRef.current;
+    const container = map?.getContainer();
+    if (!map || !container || !drawingArea) return;
+
+    map.dragPan.disable();
+    map.doubleClickZoom.disable();
+    container.classList.add("drawing-area");
+
+    let from: { x: number; y: number } | null = null;
+
+    /*
+     * Held inside the map.
+     *
+     * A pointer that leaves the map still reports its position, so the band
+     * would be drawn across the sidebars and the box would take in ground the
+     * user never dragged over — including, at the top, ground that is not on
+     * the screen at all. Clamping is done to the pointer rather than to the
+     * rectangle so that the box and the search agree: whatever is drawn is
+     * exactly what is asked for.
+     */
+    const inside = (point: { x: number; y: number }) => {
+      const box = container.getBoundingClientRect();
+      return {
+        x: Math.min(Math.max(point.x, box.left + 1), box.right - 1),
+        y: Math.min(Math.max(point.y, box.top + 1), box.bottom - 1),
+      };
+    };
+
+    const band = () => marquee.current;
+    const hide = () => {
+      const element = band();
+      if (element) element.style.display = "none";
+    };
+
+    const show = (a: { x: number; y: number }, b: { x: number; y: number }) => {
+      const element = band();
+      if (!element) return;
+      /*
+       * Measured against whatever the band is actually positioned by, not
+       * against the map. They are the same rectangle today because the canvas
+       * fills its wrapper, and the day something gains a border they are not —
+       * and the band would sit a few pixels off with nothing to explain it.
+       */
+      const host = (element.offsetParent as HTMLElement | null) ?? container;
+      const box = host.getBoundingClientRect();
+      element.style.display = "block";
+      element.style.left = `${Math.min(a.x, b.x) - box.left}px`;
+      element.style.top = `${Math.min(a.y, b.y) - box.top}px`;
+      element.style.width = `${Math.abs(b.x - a.x)}px`;
+      element.style.height = `${Math.abs(b.y - a.y)}px`;
+    };
+
+    const extentOf = (a: { x: number; y: number }, b: { x: number; y: number }): Extent => {
+      const box = container.getBoundingClientRect();
+      const one = map.unproject([a.x - box.left, a.y - box.top]);
+      const two = map.unproject([b.x - box.left, b.y - box.top]);
+      return {
+        west: Math.min(one.lng, two.lng),
+        south: Math.min(one.lat, two.lat),
+        east: Math.max(one.lng, two.lng),
+        north: Math.max(one.lat, two.lat),
+      };
+    };
+
+    const down = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      from = inside({ x: event.clientX, y: event.clientY });
+      show(from, from);
+    };
+    const move = (event: PointerEvent) => {
+      if (from) show(from, inside({ x: event.clientX, y: event.clientY }));
+    };
+    const up = (event: PointerEvent) => {
+      if (!from) return;
+      const start = from;
+      const finish = inside({ x: event.clientX, y: event.clientY });
+      from = null;
+      hide();
+      // A box of a few pixels is a click that wandered, not an area. Searching
+      // it returns nothing and looks like a fault.
+      if (Math.hypot(finish.x - start.x, finish.y - start.y) < 8) return;
+      setImageryArea(extentOf(start, finish));
+      setDrawingArea(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      from = null;
+      hide();
+      setDrawingArea(false);
+    };
+
+    container.addEventListener("pointerdown", down, true);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("keydown", escape);
+    return () => {
+      map.dragPan.enable();
+      map.doubleClickZoom.enable();
+      container.classList.remove("drawing-area");
+      hide();
+      container.removeEventListener("pointerdown", down, true);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("keydown", escape);
+    };
+  }, [drawingArea]);
+
+  const pickImage = useCallback(
+    (id: string) => {
+      setImage(id);
+      const found = images.find((entry) => entry.id === id);
+      if (!found) return;
+
+      /*
+       * A footprint that is not in degrees is a registry row written from a
+       * projected file's corner coordinates, and flying to it frames half a
+       * continent. Say so instead: the map staying put with a message is a
+       * smaller lie than the map going somewhere wrong.
+       */
+      const [west, south, east, north] = frameFor(found);
+      if (
+        !Number.isFinite(west + south + east + north) ||
+        Math.abs(west) > 180 || Math.abs(east) > 180 ||
+        Math.abs(south) > 90 || Math.abs(north) > 90
+      ) {
+        setProblem(
+          `${found.title} has no usable extent. Re-import it: gdalinfo could not report a lon/lat extent for that file.`,
+        );
+        return;
+      }
+      // Close enough to read. A 63 cm image is worth zoom 18; framing every
+      // image to the same ceiling shows a runway as a smudge.
+      // Past the globe's flattening point if that is what it takes: this is an
+      // explicit "show me this image", not an automatic frame.
+      flyTo(
+        { west, south, east, north },
+        { maxZoom: nativeZoom(found.gsd), allowFlattening: true },
+      );
+    },
+    [images, flyTo, setProblem],
+  );
+
 
   /*
    * The hover tooltip.
@@ -1210,11 +1520,29 @@ export default function App() {
   const recall = (bookmark: Bookmark) =>
     mapRef.current?.flyTo({ ...bookmark.view, duration: 1200 });
 
+  /**
+   * Draw this layer and nothing else in its slot.
+   *
+   * Alt-clicking an eye does this in QGIS and in Photoshop, and it is the
+   * most-used shortcut a layer list has: twenty layers on, one thing to check.
+   * A second alt-click puts the others back, because a shortcut that cannot be
+   * undone by repeating it is a shortcut nobody risks.
+   */
+  const solo = (id: string) => {
+    edit((d) => {
+      const peers = d.tree.filter((node) => node.type === "layer" || node.type === "group");
+      const alone = peers.every((node) => (node.id === id ? node.visible : !node.visible));
+      for (const node of peers) node.visible = alone ? true : node.id === id;
+      return d;
+    });
+  };
+
   const runAction = (id: string, action: string) => {
     const layer = findLayer(project, id);
     switch (action) {
       case "zoom":
-        if (layer?.metadata?.extent) flyTo(layer.metadata.extent);
+        // Explicit too, and for the same reason.
+        if (layer?.metadata?.extent) flyTo(layer.metadata.extent, { allowFlattening: true });
         else setProblem("That layer has no recorded extent to zoom to.");
         break;
       case "attributes":
@@ -1307,13 +1635,70 @@ export default function App() {
               }}
               edit={edit}
               onMenu={(id, at) => setMenu({ id, at })}
+              onAction={runAction}
+              onSolo={solo}
               onAdd={() => setAdding(true)}
-              onFlyTo={(extent) => flyTo(extent, true)}
+              onFlyTo={(extent) => flyTo(extent, { onlyIfItHelps: true })}
               denominator={denominator}
               feed={feed.status.state}
             />
           )}
-          {pane === "layers" && <Showcase items={showpieces} />}
+          {pane === "layers" && showingImagery && imageryLayer?.imagery && (
+            <ImageryBrowser
+              images={images}
+              loading={imagery.isFetching}
+              selected={image}
+              rule={imageryLayer.imagery.rule}
+              area={imageryArea}
+              drawingArea={drawingArea}
+              onDrawArea={() => {
+                setImageryAt(null);
+                setDrawingArea((was) => !was);
+              }}
+              onClearArea={() => {
+                setImageryArea(null);
+                setDrawingArea(false);
+              }}
+              scope={imageryScope}
+              onScope={(next) => {
+                setImageryAt(null);
+                setImageryArea(null);
+                setImageryScope(next);
+              }}
+              at={imageryAt}
+              onClearPoint={() => setImageryAt(null)}
+              /*
+               * Clicking a scene draws that scene.
+               *
+               * It used to select and fly without changing what the mosaic rule
+               * drew, so choosing a 2011 image over an airfield that also has a
+               * 2018 one flew you to a picture the map was not showing — and
+               * nothing said why. In a browser, clicking a thing shows the
+               * thing; the rule dropdown is how you go back to a mosaic.
+               */
+              onSelect={(id) => {
+                /*
+                 * Edit first, fly afterwards, and not in the same frame.
+                 *
+                 * The camera move is an eased 800 ms animation and the edit
+                 * goes through the reconciler, which is allowed to set the
+                 * camera — a document whose stored view differs from where the
+                 * map is will say so, and jump. Starting the ease before the
+                 * edit lands means racing it. Starting it after means there is
+                 * nothing left to race.
+                 */
+                editImagery(edit, (s) => ({ ...s, rule: { kind: "lock", image: id } }));
+                requestAnimationFrame(() => pickImage(id));
+              }}
+              onLock={(id) => {
+                editImagery(edit, (s) => ({ ...s, rule: { kind: "lock", image: id } }));
+                requestAnimationFrame(() => pickImage(id));
+              }}
+              onHover={setHoveredImage}
+              onAttributes={() => setImageryAttributes(true)}
+            />
+          )}
+          {pane === "layers" && !showingImagery && <Showcase items={showpieces} />}
           {pane === "basemaps" && <BasemapGallery project={project} edit={edit} />}
           {pane === "scene" && (
             <ScenePanel
@@ -1438,6 +1823,16 @@ export default function App() {
             Live feedback sits above the canvas rather than in the style. The
             rubber band follows the mouse, and the mouse is not part of the map.
           */}
+          {/* The rubber band, positioned by the pointer handler itself. */}
+          <div className="marquee" ref={marquee} />
+
+          {drawingArea && (
+            <div className="drawbanner">
+              Drag a box on the map to search inside it
+              <button onClick={() => setDrawingArea(false)}>Cancel</button>
+            </div>
+          )}
+
           {showingImagery && (
             <FootprintOverlay
               images={images}
@@ -1605,27 +2000,18 @@ export default function App() {
               setSelectedModel(null);
               setTable(id);
             }}
-            onFlyTo={(extent) => flyTo(extent, true)}
+            onFlyTo={(extent) => flyTo(extent, { onlyIfItHelps: true })}
           />
         )}
       </div>
 
-      {showingImagery && imageryLayer?.imagery && (
+      {showingImagery && imageryLayer?.imagery && imageryAttributes && (
         <ImageryDock
           images={images}
-          loading={imagery.isFetching}
           selected={image}
-          comparing={null}
-          rule={imageryLayer.imagery.rule}
-          onSelect={setImage}
-          onLock={(id) => {
-            setImage(id);
-            editImagery(edit, (s) => ({ ...s, rule: { kind: "lock", image: id } }));
-          }}
-          onCompare={setImage}
+          onSelect={pickImage}
           onHover={setHoveredImage}
-          onAddDate={setImage}
-          onClose={() => setSelected(null)}
+          onClose={() => setImageryAttributes(false)}
         />
       )}
 

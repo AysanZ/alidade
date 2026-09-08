@@ -125,3 +125,65 @@ describe("spansMostOfTheWorld", () => {
     expect(spansMostOfTheWorld({ west: 51.2, south: 35.6, east: 51.6, north: 35.83 })).toBe(false);
   });
 });
+
+describe("framing something small on a globe", () => {
+  const viewport = { width: 1300, height: 900 };
+  const now = { center: [0, 0] as [number, number], zoom: 3, pitch: 0, bearing: 0 };
+  /* Incirlik: about 2.9 km across. */
+  const airbase = { west: 35.415, south: 37.002, east: 35.444, north: 37.025 };
+
+  /*
+   * The cap is right for framing a layer — you asked to see Portugal, not to
+   * leave the globe — and wrong for "take me to this image". With it, choosing
+   * an image panned the camera onto it and stopped at 5.5, so the map moved and
+   * never zoomed, and the status bar read exactly 5.5 every time.
+   */
+  it("stops at the flattening point by default", () => {
+    const view = viewForExtent(airbase, viewport, now, { projection: "globe", maxZoom: 18 });
+    expect(view.zoom).toBeCloseTo(5.5, 5);
+  });
+
+  it("goes in when the caller says it may", () => {
+    const view = viewForExtent(airbase, viewport, now, {
+      projection: "globe",
+      maxZoom: 18,
+      allowFlattening: true,
+    });
+    expect(view.zoom).toBeGreaterThan(12);
+  });
+
+  it("changes nothing in mercator, which never had a cap", () => {
+    const capped = viewForExtent(airbase, viewport, now, { projection: "mercator", maxZoom: 18 });
+    const free = viewForExtent(airbase, viewport, now, {
+      projection: "mercator",
+      maxZoom: 18,
+      allowFlattening: true,
+    });
+    expect(free.zoom).toBe(capped.zoom);
+  });
+});
+
+describe("a floor as well as a ceiling", () => {
+  const viewport = { width: 1300, height: 900 };
+  const now = { center: [0, 0] as [number, number], zoom: 3, pitch: 0, bearing: 0 };
+
+  /*
+   * The approach demonstration needs this. A followed model only stands in for
+   * its asset from `fromZoom` in, and framing the approach path can land a level
+   * short of it — which gives an aeroplane that is placed, lit, followed, and
+   * never drawn.
+   */
+  it("does not frame further out than asked", () => {
+    const wide = { west: 50.9, south: 35.4, east: 51.8, north: 36.0 };
+    const free = viewForExtent(wide, viewport, now, { projection: "mercator" });
+    const floored = viewForExtent(wide, viewport, now, { projection: "mercator", minZoom: 12 });
+    expect(free.zoom).toBeLessThan(12);
+    expect(floored.zoom).toBe(12);
+  });
+
+  it("leaves an extent that already clears the floor alone", () => {
+    const tight = { west: 51.33, south: 35.67, east: 51.35, north: 35.69 };
+    const view = viewForExtent(tight, viewport, now, { projection: "mercator", minZoom: 12 });
+    expect(view.zoom).toBeGreaterThan(12);
+  });
+});

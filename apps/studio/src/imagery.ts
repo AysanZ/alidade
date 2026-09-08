@@ -53,6 +53,8 @@ function fromItem(item: StacItem): ImageRecord {
     cloudCover: num("eo:cloud_cover"),
     bands: num("alidade:bands") ?? 1,
     dtype: str("alidade:dtype") ?? "Byte",
+    width: num("alidade:width"),
+    height: num("alidade:height"),
     bbox: item.bbox.slice(0, 4) as [number, number, number, number],
     footprint: (item.geometry?.coordinates?.[0] ?? []) as [number, number][],
     coverage: num("alidade:coverage") ?? undefined,
@@ -69,13 +71,35 @@ async function json<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
 }
 
+/** Where the catalogue is being asked about. */
+export type Scope =
+  | { kind: "view"; bbox: Extent | null }
+  | { kind: "all" }
+  /** One position, from pressing and holding on the map. */
+  | { kind: "point"; at: [number, number] }
+  /**
+   * A box the user drew.
+   *
+   * Sent as an ordinary bbox search, so coverage comes back meaning "of the area
+   * you drew" rather than "of the screen" — which is the more useful of the two
+   * and the reason to draw one at all.
+   */
+  | { kind: "area"; bbox: Extent };
+
 export async function searchImagery(
-  bbox: Extent | null,
+  scope: Scope,
   signal?: AbortSignal,
 ): Promise<ImageRecord[]> {
-  const query = bbox
-    ? `?bbox=${[bbox.west, bbox.south, bbox.east, bbox.north].join(",")}`
-    : "";
+  const box = (extent: Extent) =>
+    `?bbox=${[extent.west, extent.south, extent.east, extent.north].join(",")}`;
+  const query =
+    scope.kind === "point"
+      ? `?intersects=${scope.at[0]},${scope.at[1]}`
+      : scope.kind === "area"
+        ? box(scope.bbox)
+        : scope.kind === "view" && scope.bbox
+          ? box(scope.bbox)
+          : "";
   const found = await json<{ features: StacItem[] }>(
     await fetch(`/api/rasters/search${query}`, { signal }),
   );
@@ -121,14 +145,29 @@ export async function removeImage(id: string): Promise<void> {
  * `keepPreviousData` so the strip does not empty and refill while the map is
  * still moving.
  */
-export function useImagery(bbox: Extent | null): UseQueryResult<ImageRecord[]> {
+export function useImagery(
+  scope: Scope,
+  options: { enabled?: boolean } = {},
+): UseQueryResult<ImageRecord[]> {
   const round = (n: number) => Math.round(n * 1000) / 1000;
-  const key = bbox ? [round(bbox.west), round(bbox.south), round(bbox.east), round(bbox.north)] : null;
+  const key =
+    scope.kind === "point"
+      ? ["point", round(scope.at[0] * 100), round(scope.at[1] * 100)]
+      : scope.kind === "area"
+        ? ["area", scope.bbox.west, scope.bbox.south, scope.bbox.east, scope.bbox.north]
+        : scope.kind === "all"
+        ? ["all"]
+        : scope.bbox
+          ? ["view", round(scope.bbox.west), round(scope.bbox.south), round(scope.bbox.east), round(scope.bbox.north)]
+          : ["view", null];
   return useQuery({
     queryKey: ["imagery", "search", key],
-    queryFn: ({ signal }) => searchImagery(bbox, signal),
+    queryFn: ({ signal }) => searchImagery(scope, signal),
     placeholderData: keepPreviousData,
     staleTime: 30_000,
+    // A null box means the whole catalogue, which is a real question; not
+    // wanting to ask at all is a different one, and it is `enabled`.
+    enabled: options.enabled ?? true,
   });
 }
 

@@ -46,6 +46,9 @@ export interface ImageRecord {
   cloudCover: number | null;
   bands: number;
   dtype: string;
+  /** Raster size in pixels. With `gsd` this gives the true ground size. */
+  width: number | null;
+  height: number | null;
   /** Bounding box in lon/lat, west south east north. */
   bbox: [number, number, number, number];
   /**
@@ -146,10 +149,19 @@ export interface ImagerySettings {
 
 export const IMAGERY_ENDPOINT = "/api/rasters";
 
+/**
+ * What an imagery layer does before anybody configures it.
+ *
+ * No bands. Naming 1, 2, 3 looks like a sensible default and is not: a
+ * catalogue is rarely all one sensor, and asking a single-band elevation raster
+ * for its second and third bands is an error rather than a plain-looking
+ * picture. Sending nothing lets the reader use whatever the file declares, which
+ * is right for every file, and the panel is there for when it is not.
+ */
 export const defaultImagery = (): ImagerySettings => ({
   rule: { kind: "newest" },
   overlap: "first",
-  render: { mode: "rgb", bands: [1, 2, 3], resampling: "bilinear" },
+  render: { mode: "rgb", resampling: "bilinear" },
 });
 
 /* ---------------------------------------------------------------- ordering */
@@ -264,7 +276,20 @@ export function imageryQuery(settings: ImagerySettings): [string, string][] {
   }
 
   for (const [low, high] of render.rescale ?? []) params.push(["rescale", `${low},${high}`]);
-  if (render.colormap) params.push(["colormap_name", render.colormap]);
+
+  /*
+   * A colour ramp only means anything for one band of numbers.
+   *
+   * This used to be sent whenever a ramp was set, whatever the mode. Choosing a
+   * ramp in expression mode and switching back to RGB then kept sending it, the
+   * tiler refused to map a ramp over three bands, and every tile came back an
+   * error — so the imagery vanished and putting the ramp back did not bring it
+   * back, because the ramp was never the thing that was wrong. A setting that is
+   * inert in the current mode must not be transmitted.
+   */
+  if (render.colormap && render.mode !== "rgb") {
+    params.push(["colormap_name", render.colormap]);
+  }
   if (render.resampling && render.resampling !== "nearest") {
     params.push(["resampling", render.resampling]);
   }
@@ -326,6 +351,103 @@ export function imagerySource(
  * zoom 21. Clamped to the pyramid, and rounded up, because half a zoom of
  * slightly-too-much detail is invisible and half a zoom too little is not.
  */
+/**
+ * The extent to frame in order to see an image properly.
+ *
+ * Derived from the pixel count and the resolution rather than taken from the
+ * stored bounding box, because those two facts can be checked against each
+ * other and a bounding box cannot be checked against anything. A row written
+ * from a projected file's corner coordinates carries a box thousands of times
+ * too wide, and framing it puts an airfield in the middle of a continent —
+ * centred correctly, and at a zoom that shows nothing.
+ *
+ * Falls back to the box when the size is unknown, and keeps the box when the
+ * two agree, so an ordinary row is unaffected.
+ */
+/** The furthest web mercator reaches, in metres, on either axis. */
+const MERCATOR_EDGE = 20_037_508.34;
+
+/**
+ * A bounding box in degrees, repairing one written in metres.
+ *
+ * Rows imported before the registry checked its own footprints hold web
+ * mercator metres, because `gdalinfo` reports corner coordinates in the file's
+ * own CRS and the file had been warped to 3857 by then. Those rows are not
+ * broken beyond use — the numbers are right, the units are wrong — and the
+ * inverse transform is exact.
+ *
+ * Repairing on read rather than refusing means an install that already has
+ * imagery in it keeps working. New imports cannot produce this: the registry
+ * now refuses a footprint whose coordinates are not degrees.
+ */
+export function asLonLat(
+  bbox: [number, number, number, number],
+): [number, number, number, number] {
+  const degrees = bbox.every(
+    (n, i) => Number.isFinite(n) && Math.abs(n) <= (i % 2 === 0 ? 180 : 90),
+  );
+  if (degrees) return bbox;
+
+  const metres = bbox.every((n) => Number.isFinite(n) && Math.abs(n) <= MERCATOR_EDGE * 1.001);
+  if (!metres) return bbox;
+
+  const lon = (x: number) => (x / MERCATOR_EDGE) * 180;
+  const lat = (y: number) =>
+    (Math.atan(Math.exp(((y / MERCATOR_EDGE) * 180 * Math.PI) / 180)) * 360) / Math.PI - 90;
+  return [lon(bbox[0]), lat(bbox[1]), lon(bbox[2]), lat(bbox[3])];
+}
+
+export function frameFor(image: ImageRecord): [number, number, number, number] {
+  const [west, south, east, north] = asLonLat(image.bbox);
+  const centre: [number, number] = [(west + east) / 2, (south + north) / 2];
+
+  /*
+   * A ceiling the resolution alone can justify, for when the pixel count is
+   * missing.
+   *
+   * Without a width there is nothing to check the box against, and a box that
+   * spans ten degrees frames half a continent with the image as one green dot in
+   * the middle — which is what a registry row written before the footprint check
+   * will do. But resolution alone still bounds the answer: nobody holds a single
+   * 63 cm scene fifty thousand pixels across, so thirty kilometres is already
+   * generous, and framing thirty kilometres of ground shows the image even when
+   * it is only three.
+   */
+  if (!image.width || !image.height || !(image.gsd > 0)) {
+    if (!(image.gsd > 0)) return [west, south, east, north];
+    const metresPerDegreeFallback = 111_320;
+    const cap = (image.gsd * 50_000) / 2;
+    const capLat = cap / metresPerDegreeFallback;
+    const capLon =
+      cap / (metresPerDegreeFallback * Math.cos((centre[1] * Math.PI) / 180) || 1);
+    if (east - west <= capLon * 2 && north - south <= capLat * 2) {
+      return [west, south, east, north];
+    }
+    return [centre[0] - capLon, centre[1] - capLat, centre[0] + capLon, centre[1] + capLat];
+  }
+
+  // Metres to degrees. Longitude narrows with the cosine of the latitude, and
+  // an airfield at 33° is a third narrower in degrees than one at the equator.
+  const metresPerDegree = 111_320;
+  const halfLat = (image.height * image.gsd) / 2 / metresPerDegree;
+  const halfLon =
+    (image.width * image.gsd) / 2 / (metresPerDegree * Math.cos((centre[1] * Math.PI) / 180) || 1);
+
+  /*
+   * Always the pixel arithmetic when the size is known, never the box.
+   *
+   * The first version believed the box unless it was more than eight times too
+   * wide, which let a merely somewhat-wrong box through — and somewhat too wide
+   * is still two zoom levels out. Width times resolution is a fact about the
+   * file that cannot be wrong in a way the file agrees with; a bounding box can.
+   *
+   * What this gives up is the rotation: a scene's real footprint is a
+   * quadrilateral and this frames the upright rectangle of the same ground size.
+   * For aiming a camera that is not a difference anybody can see.
+   */
+  return [centre[0] - halfLon, centre[1] - halfLat, centre[0] + halfLon, centre[1] + halfLat];
+}
+
 export function nativeZoom(gsd: number): number {
   if (!(gsd > 0)) return 22;
   return Math.max(0, Math.min(22, Math.ceil(Math.log2(156543.03392 / gsd))));

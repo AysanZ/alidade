@@ -31,19 +31,36 @@ export interface Runway {
 }
 
 /**
- * Mehrabad's 29L, near enough.
+ * Mehrabad's 29L.
  *
- * Chosen because the demo feed already flies around Tehran and an arrival at an
+ * Chosen because the demo feed already flies around Tehran, and an arrival at an
  * airport on the other side of the world from everything else would need the
- * camera moved twice. The numbers are read off open charts and are good to
- * about a hundred metres, which is the right accuracy for a demonstration and
- * the wrong accuracy for a flight, and nobody should confuse the two.
+ * camera moved twice.
+ *
+ * The first version of these numbers put the threshold north of the aerodrome
+ * reference point, which is the wrong side of the field: landing on 29 you are
+ * heading roughly west-north-west, so the left-hand runway is the southern one.
+ * The aeroplane touched down on 29R's centreline and taxied through a terminal.
+ *
+ * Derived instead from the published reference point — 35.68917N 51.31361E,
+ * 1208 m — and 11R/29L's stated length of 4041 m, with the threshold at the
+ * eastern end of the southern runway. Good to about a hundred metres, which is
+ * the right accuracy for a demonstration and the wrong accuracy for a flight.
  */
 export const MEHRABAD_29L: Runway = {
-  threshold: [51.3396, 35.6975],
-  heading: 292,
-  length: 4000,
-  elevation: 1200,
+  threshold: [51.3331, 35.6772],
+  /*
+   * True, not magnetic.
+   *
+   * A runway is named for its magnetic heading rounded to ten degrees, and 29L
+   * is about 293° magnetic. The map is in true north, and Tehran's declination
+   * is roughly four and a half degrees east — so a heading of 293 here would
+   * fly the aeroplane down a line four degrees off the tarmac, which over four
+   * kilometres is most of the runway's width.
+   */
+  heading: 297,
+  length: 4041,
+  elevation: 1208,
 };
 
 /**
@@ -311,6 +328,66 @@ export function approachFrame(
 }
 
 /** Where the camera should sit to watch the whole thing. */
+/**
+ * Where to stand to watch the arrival.
+ *
+ * Framing the approach path put the camera overhead and level, which is the one
+ * view an aeroplane cannot be seen from: from directly above, a jet on final is
+ * a cross the length of two pixels, and the bank the whole demonstration exists
+ * to show is invisible. It has to be watched from beside the path and from low
+ * down, the way it would be watched from the ground.
+ *
+ * Worked out from the runway rather than written down, so pointing the demo at a
+ * different strip moves the camera with it.
+ */
+export function approachCamera(runway: Runway = MEHRABAD_29L): {
+  center: [number, number];
+  zoom: number;
+  pitch: number;
+  bearing: number;
+} {
+  const { intercept } = legs(runway);
+  /* Where the aeroplane actually is when the demonstration starts. */
+  const start = approachAt(0, runway).position;
+
+  /*
+   * Standing near the touchdown zone, looking back up the approach.
+   *
+   * The first version looked the other way — along the final, towards the
+   * runway — which put the aeroplane behind the camera at the start: it was out
+   * of frame for the first few seconds and then arrived from nowhere. Watching
+   * an arrival means standing where it is going and looking at where it is
+   * coming from.
+   */
+  const center = between(runway.threshold, intercept, 0.2);
+
+  /*
+   * Aimed at the aeroplane, then turned a little off it.
+   *
+   * Dead-on puts it nose-first and hides the wings, and the bank is the whole
+   * point. Eighteen degrees is enough to show the plan of the wing and small
+   * enough to keep the whole approach in frame from the first second.
+   */
+  const towards = bearing(center, start);
+  const camera = (towards + 18) % 360;
+
+  return {
+    center,
+    /*
+     * Close enough to be an aeroplane rather than a dot, and past zoom 12,
+     * below which the 3D scene is not drawn at all.
+     */
+    zoom: 14,
+    /*
+     * Almost along the ground, and no further: the map's own ceiling is 85, and
+     * asking for more than the ceiling is clamped without a word. Level would be
+     * all sky; overhead shows a two-pixel cross.
+     */
+    pitch: 82,
+    bearing: camera > 180 ? camera - 360 : camera,
+  };
+}
+
 export function approachExtent(runway: Runway = MEHRABAD_29L): {
   west: number;
   south: number;

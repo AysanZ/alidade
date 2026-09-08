@@ -21,6 +21,16 @@ interface Props {
   onSelect: (id: string) => void;
   edit: (change: (draft: MapProject) => MapProject) => void;
   onMenu: (id: string, at: { x: number; y: number }) => void;
+  /**
+   * The same verbs the context menu runs.
+   *
+   * The row's buttons are shortcuts to menu entries, not a second
+   * implementation of them: two paths to "zoom to layer" is two places for it to
+   * go wrong, and they would not go wrong at the same time.
+   */
+  onAction: (id: string, action: string) => void;
+  /** Draw only this layer, for alt-clicking the eye. */
+  onSolo: (id: string) => void;
   onAdd: () => void;
   onFlyTo: (extent: Extent) => void;
   /** The scale the map is at, so a layer that is not drawn at it can say so. */
@@ -43,6 +53,8 @@ export function LayerTree({
   onSelect,
   edit,
   onMenu,
+  onAction,
+  onSolo,
   onAdd,
   onFlyTo,
   denominator,
@@ -150,6 +162,8 @@ export function LayerTree({
                 depth={0}
                 selected={selected}
                 onSelect={onSelect}
+                onAction={onAction}
+                onSolo={onSolo}
                 edit={edit}
                 onMenu={onMenu}
                 dragging={dragging}
@@ -242,30 +256,48 @@ function LiveRow({
       >
         <span className="grip" aria-hidden="true" />
         <span className="fold" aria-hidden="true" />
-        <button
-          className="eye"
-          aria-label={assets.visible ? "Hide live assets" : "Show live assets"}
-          onClick={(e) => {
-            e.stopPropagation();
-            toggle();
-          }}
-        >
-          {assets.visible ? <EyeOpen /> : <EyeShut />}
-        </button>
-
         <span className="swatch" style={{ background: assets.color, borderRadius: "50%" }} />
 
-        <span className="name" title={describeFeed(feed, total, stale)}>
-          Live assets
+        <span className="rowtext">
+          <span className="name">Live assets</span>
+          {/*
+            Forty assets of which twelve have gone quiet is a different map from
+            forty assets, and it is the one you act on — so it goes on the second
+            line in colour rather than into a six-character tag.
+          */}
+          <span className="sub" title={describeFeed(feed, total, stale)}>
+            {/*
+              One reading of the feed, not three tags competing for the row.
+              "40 assets, 12 quiet" is the whole state in six words, and the
+              colour goes on the number rather than on a phrase — a row shouting
+              in amber about two stale assets reads like a fault.
+            */}
+            <em>{FEED_TITLES[feed].toLowerCase()}</em>
+            {feed !== "off" && (
+              <em>
+                {total} asset{total === 1 ? "" : "s"}
+                {stale > 0 && (
+                  <>
+                    , <b className="quiet">{stale} quiet</b>
+                  </>
+                )}
+              </em>
+            )}
+          </span>
         </span>
 
-        {/*
-          The count is the tag, and a count of what has gone quiet outranks it
-          when there is one: forty assets of which twelve are stale is a
-          different map from forty assets, and it is the fact you act on.
-        */}
-        <span className={stale > 0 ? "tag flag" : "tag"} title={describeFeed(feed, total, stale)}>
-          {feed === "off" ? "off" : stale > 0 ? `${stale} old` : String(total)}
+        <span className="tail">
+          <button
+            className={`ico eye${assets.visible ? " on" : ""}`}
+            aria-pressed={assets.visible}
+            aria-label={assets.visible ? "Hide live assets" : "Show live assets"}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggle();
+            }}
+          >
+            {assets.visible ? <EyeOpen /> : <EyeShut />}
+          </button>
         </span>
       </div>
     </>
@@ -294,6 +326,8 @@ interface NodeProps {
   onSelect: (id: string) => void;
   edit: Props["edit"];
   onMenu: Props["onMenu"];
+  onAction: Props["onAction"];
+  onSolo: Props["onSolo"];
   dragging: string | null;
   over: string | null;
   setDragging: (id: string | null) => void;
@@ -312,6 +346,8 @@ function Node(props: NodeProps) {
     onSelect,
     edit,
     onMenu,
+    onAction,
+    onSolo,
     dragging,
     over,
     setDragging,
@@ -397,50 +433,118 @@ function Node(props: NodeProps) {
         ) : (
           <span className="fold" aria-hidden="true" />
         )}
-        <button
-          className="eye"
-          aria-label={node.visible ? `Hide ${node.name}` : `Show ${node.name}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            toggle();
-          }}
-        >
-          {node.visible ? <EyeOpen /> : <EyeShut />}
-        </button>
-
         {/* The layer's real symbology, not a colour chip. */}
         <LayerSymbol node={node} />
 
-        <span className="name" title={`${node.name} · ${describe(node)}`}>
-          {node.name}
+        {/*
+          Two lines. The first is what the layer is called and the second is what
+          it is — geometry, how it is classified, whether it is filtered. Those
+          are the facts somebody scans a table of contents looking for, and on
+          one line there was room for none of them.
+        */}
+        <span className="rowtext">
+          <span className="name" title={`${node.name} · ${describe(node)}`}>
+            {node.name}
+          </span>
+          <span className="sub">
+            {outOfScale && (
+              <em className="flag" title="Not drawn at this scale">
+                not drawn here
+              </em>
+            )}
+            {describe(node)
+              .split(" · ")
+              .map((part) => (
+                <em key={part} className={part === "filtered" ? "warn" : undefined}>
+                  {part}
+                </em>
+              ))}
+          </span>
         </span>
 
         {/*
-          One tag, not two. The row is 272px wide and a second one costs about
-          six characters of layer name, which is the more useful of the two.
-          "Not drawn here" outranks "five classes" when both are true.
+          Zoom, drawn-or-not, and everything else. Zoom is here rather than in
+          the menu because it is the thing a table of contents is used for most,
+          and two clicks for it is one too many.
         */}
-        {outOfScale ? (
-          <span className="tag flag" title="Not drawn at this scale">
-            scale
-          </span>
-        ) : (
-          <span className="tag">{badge(node)}</span>
-        )}
+        <span className="tail">
+          {node.type === "layer" && (
+            <button
+              className="ico"
+              title="Zoom to layer"
+              aria-label={`Zoom to ${node.name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onAction(node.id, "zoom");
+              }}
+            >
+              <ZoomToIcon />
+            </button>
+          )}
 
-        <button
-          className="more"
-          aria-label={`Actions for ${node.name}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onSelect(node.id);
-            const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
-            onMenu(node.id, { x: box.right + 4, y: box.top });
-          }}
-        >
-          ⋯
-        </button>
+          {/*
+            Teal, not blue. Blue is selection everywhere else in this interface,
+            and a selected hidden layer and an unselected drawn one would
+            otherwise carry the same colour in two different places.
+
+            Alt-click draws this layer and nothing else, the way it does in
+            QGIS and in Photoshop — the most-used shortcut a layer list has.
+          */}
+          <button
+            className={`ico eye${node.visible ? " on" : ""}`}
+            aria-pressed={node.visible}
+            aria-label={node.visible ? `Hide ${node.name}` : `Show ${node.name}`}
+            title={
+              node.visible
+                ? "Drawn — click to hide, alt-click to hide everything else"
+                : "Hidden — click to draw"
+            }
+            onClick={(e) => {
+              e.stopPropagation();
+              if (e.altKey) onSolo(node.id);
+              else toggle();
+            }}
+          >
+            {node.visible ? <EyeOpen /> : <EyeShut />}
+          </button>
+
+          <button
+            className="ico more"
+            aria-label={`Actions for ${node.name}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect(node.id);
+              const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              onMenu(node.id, { x: box.right + 4, y: box.top });
+            }}
+          >
+            ⋯
+          </button>
+        </span>
       </div>
+
+      {/*
+        The one row you are working on can afford twenty more pixels, and the
+        others cannot. A strip on every row would be five buttons per row on a
+        panel 272 pixels wide; a strip on the selected row is one row growing,
+        once, when you deliberately chose it.
+
+        Words rather than glyphs, because "Browse 23 images" says what it does
+        and how much of it there is, which no icon does.
+      */}
+      {node.type === "layer" && selected === node.id && (
+        <div className="rowacts">
+          {node.geometry === "raster" && node.imagery ? (
+            <button className="primary" onClick={() => onSelect(node.id)}>
+              Browse images
+            </button>
+          ) : (
+            <button onClick={() => onAction(node.id, "attributes")}>Attributes</button>
+          )}
+          <button onClick={() => onSelect(node.id)}>Style</button>
+          <button onClick={() => onAction(node.id, "duplicate")}>Duplicate</button>
+        </div>
+      )}
 
       {node.type === "group" && !folded && (
         <div className="kids">
@@ -505,6 +609,17 @@ export function reorder(draft: MapProject, moving: string, target: string): MapP
   walk(draft.tree);
   return draft;
 }
+
+/** A framing bracket, not a magnifier: this moves the camera, it does not search. */
+const ZoomToIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+    <path
+      d="M3 8V4h4M21 8V4h-4M3 16v4h4M21 16v4h-4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
 
 const EyeOpen = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">

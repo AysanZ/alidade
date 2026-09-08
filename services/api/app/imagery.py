@@ -178,6 +178,19 @@ def footprint_of(info: dict) -> dict:
     if not (lower and upper):
         raise ImageryError("The file has no georeferencing that GDAL could read.")
     west, south, east, north = lower[0], lower[1], upper[0], upper[1]
+
+    # `cornerCoordinates` are in the file's own CRS, and after the warp that is
+    # web mercator — metres, not degrees. Storing those as a lon/lat footprint
+    # gives a bounding box millions of units across, which is why an airfield
+    # would frame to half a continent instead of to a runway. Better to refuse:
+    # a file whose extent cannot be read is a file to fix, not to place wrongly.
+    if not (-180 <= west <= 180 and -180 <= east <= 180):
+        raise ImageryError(
+            "GDAL reported no lon/lat extent for this file, and its corners are "
+            "not degrees. Check that it has a CRS: gdalinfo -json <file>."
+        )
+    if not (-90 <= south <= 90 and -90 <= north <= 90):
+        raise ImageryError("The file's latitudes are outside ±90°, so its CRS is not what it claims.")
     return {
         "type": "Polygon",
         "coordinates": [

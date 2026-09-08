@@ -18,6 +18,19 @@ export interface FrameOptions {
   padding?: number;
   maxZoom?: number;
   minZoom?: number;
+  /**
+   * Allow a round projection to be framed past the point where it flattens.
+   *
+   * The globe cap below exists so that framing a *layer* does not silently land
+   * in mercator — you asked to see Portugal, not to leave the globe. But "take
+   * me to this image" is a different request: the image is three kilometres
+   * across, the answer is zoom fourteen, and refusing to go past 5.5 centres the
+   * camera on it and then shows a continent.
+   *
+   * This defect had a symptom worth remembering: the map panned and did not
+   * zoom, and the status bar read exactly 5.5 every time.
+   */
+  allowFlattening?: boolean;
   /** The zoom below which a sphere stops filling the screen. */
   globeFloor?: number;
 }
@@ -76,7 +89,7 @@ export function frameExtent(
    * because MapLibre's `globe` stops being a sphere on the way in and framing a
    * country would silently land back in mercator.
    */
-  const round = projection !== "mercator";
+  const round = projection !== "mercator" && !options.allowFlattening;
   if (round) {
     /*
      * Capped so framing a country does not zoom past the point where MapLibre's

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!--
+    An alidade: the sighting rule of a plane table, which is what the project is
+    named after. A circle for the limb, a diametral rule across it, and the two
+    vanes it is sighted through — drawn rather than lettered, because a letter A
+    in a dark square is every other application's icon.
+  -->
+  <rect width="32" height="32" rx="7" fill="#0E0E10"/>
+  <circle cx="16" cy="16" r="10.5" fill="none" stroke="#2E2E36" stroke-width="1.6"/>
+  <path d="M16 5.5v21" stroke="#2E2E36" stroke-width="1.2"/>
+  <path d="M5.5 16h21" stroke="#4C8DFF" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M7.5 11.5v9M24.5 11.5v9" stroke="#4C8DFF" stroke-width="1.8" stroke-linecap="round"/>
+  <circle cx="16" cy="16" r="2.4" fill="#38D6C0"/>
+</svg>

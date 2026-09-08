@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { APPROACH_SECONDS, MEHRABAD_29L, approachAt, approachFrame } from "../src/approach";
+import {
+  APPROACH_SECONDS,
+  MEHRABAD_29L,
+  approachAt,
+  approachCamera,
+  approachFrame,
+} from "../src/approach";
 import { bankFor, pathAngle, shortestTurn } from "../src/live";
-import { distance } from "../src/measure";
+import { bearing as bearingBetween, distance } from "../src/measure";
 
 const every = (step: number) => {
   const out = [];
@@ -141,5 +147,61 @@ describe("the approach", () => {
     expect(approachAt(APPROACH_SECONDS + 60).position).toEqual(
       approachAt(APPROACH_SECONDS).position,
     );
+  });
+});
+
+describe("where to stand to watch the arrival", () => {
+  /*
+   * Framing the approach path answered "fit all of this on the screen", which
+   * put the camera overhead and level — the one view from which a jet on final
+   * is a two-pixel cross and the bank the demonstration exists to show cannot be
+   * seen at all.
+   */
+  it("is low and to one side, not overhead", () => {
+    const view = approachCamera();
+    expect(view.pitch).toBeGreaterThan(70);
+    // The map is built with `maxPitch: 85`, and asking for more than the ceiling
+    // is clamped without a word — so the camera must stay under it deliberately.
+    expect(view.pitch).toBeLessThanOrEqual(85);
+  });
+
+  it("clears the zoom below which no 3D is drawn", () => {
+    expect(approachCamera().zoom).toBeGreaterThan(12);
+  });
+
+  /*
+   * The defect this exists for: the camera looked down the approach towards the
+   * runway, which put the aeroplane behind it. For the first few seconds there
+   * was nothing on screen, and then the aircraft arrived from nowhere.
+   */
+  it("is pointing at the aeroplane when the demonstration starts", () => {
+    const view = approachCamera();
+    const start = approachAt(0).position;
+    const towards = bearingBetween(view.center, start);
+    /* Both wrapped to ±180 before comparing, so 359° and 1° are two apart. */
+    const off = Math.abs(((view.bearing - towards + 540) % 360) - 180);
+    // Within a normal field of view of dead ahead.
+    expect(off).toBeLessThan(30);
+  });
+
+  it("is not pointing straight at it, so the wings are not edge-on", () => {
+    const view = approachCamera();
+    const towards = bearingBetween(view.center, approachAt(0).position);
+    const off = Math.abs(((view.bearing - towards + 540) % 360) - 180);
+    expect(off).toBeGreaterThan(5);
+  });
+
+  it("stands between the touchdown zone and the approach, not out at the pattern", () => {
+    const view = approachCamera();
+    expect(distance(view.center, MEHRABAD_29L.threshold)).toBeLessThan(3000);
+    expect(distance(view.center, approachAt(0).position)).toBeLessThan(20000);
+  });
+
+
+
+  it("follows the runway rather than being written down", () => {
+    const elsewhere = approachCamera({ ...MEHRABAD_29L, threshold: [0, 0] });
+    expect(Math.abs(elsewhere.center[0])).toBeLessThan(1);
+    expect(Math.abs(elsewhere.center[1])).toBeLessThan(1);
   });
 });

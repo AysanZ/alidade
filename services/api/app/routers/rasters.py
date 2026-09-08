@@ -111,6 +111,7 @@ def _window(value: str | None):
 @router.get("/search")
 async def search(
     bbox: str | None = None,
+    intersects: str | None = None,
     datetime_: str | None = Query(None, alias="datetime"),
     limit: int = 200,
 ) -> dict:
@@ -122,7 +123,18 @@ async def search(
     QGIS's STAC plugin can read the catalogue without being told about Alidade.
     """
     start, end = _window(datetime_)
-    found = await rasters.search(bbox=_bbox(bbox), start=start, end=end, limit=limit)
+    if intersects:
+        # STAC's own name for this: `intersects` takes a geometry, and a point is
+        # the geometry somebody has when they have clicked on the map.
+        try:
+            lon, lat = (float(p) for p in intersects.split(","))
+        except ValueError as error:
+            raise HTTPException(422, "intersects is lon,lat.") from error
+        if not (-180 <= lon <= 180 and -90 <= lat <= 90):
+            raise HTTPException(422, "intersects is outside the world.")
+        found = await rasters.containing(lon, lat, limit=limit)
+    else:
+        found = await rasters.search(bbox=_bbox(bbox), start=start, end=end, limit=limit)
     return {
         "type": "FeatureCollection",
         "features": [r.as_item() for r in found],
@@ -354,11 +366,12 @@ async def tile(
                 expression=expression,
                 nodata=nodata,
                 resampling_method=resampling,
-                # A couple of pixels past the edge, cropped after resampling.
-                # Without it every tile boundary carries a faint seam, and a
-                # regular grid over the whole image reads as a rendering bug
-                # because it is one.
-                buffer=0.5,
+                # No buffer. rio-tiler's `buffer` adds its pixels to the output
+                # rather than cropping them away, so `buffer=0.5` returned a
+                # 257x257 tile for a source declaring 256 — which the renderer
+                # scales to fit, putting every tile very slightly out of
+                # register with its neighbours. Killing the resampling seam is
+                # worth doing, but not by lying about the tile size.
             )
 
     method = getattr(
@@ -387,7 +400,12 @@ async def tile(
         img.rescale(in_range=[(s.min, s.max) for s in stats.values()])
 
     colormap = None
-    if colormap_name:
+    # A ramp maps one band of numbers to colours, so it is meaningless over a
+    # three-band composite and rio-tiler refuses it. Ignoring it here rather than
+    # failing means a setting that does not apply costs nothing: the alternative
+    # was every tile returning an error and the whole layer disappearing until
+    # somebody worked out which control had done it.
+    if colormap_name and img.array.shape[0] == 1:
         from rio_tiler.colormap import cmap
 
         try:
@@ -434,6 +452,60 @@ async def point(lon: float, lat: float, rule: str = "newest", image: str | None 
         "bands": [float(v) for v in values.array.tolist()],
         "band_names": list(values.band_names),
     }
+
+
+@router.get("/{raster_id}/preview.png")
+async def preview(raster_id: str, size: int = 256) -> Response:
+    """
+    A small picture of the whole image.
+
+    The browser strip is unusable without this. Cards distinguished only by a
+    colour derived from the filename all look the same at a glance, which is the
+    one thing a thumbnail exists to prevent — the point of the strip is telling
+    an airfield from a coastline without clicking either.
+
+    It is a read of the COG's own overviews rather than a resample of the full
+    raster, so a 200 MB scene answers in milliseconds, and it is cached hard
+    because a converted image never changes.
+    """
+    from rio_tiler.io import Reader
+
+    raster = await rasters.get(raster_id)
+    if raster is None or not path_of(raster).is_file():
+        raise HTTPException(404, f"No image named {raster_id}.")
+
+    size = max(48, min(size, 1024))
+    try:
+        with Reader(str(path_of(raster))) as src:
+            img = src.preview(max_size=size, indexes=_visible_bands(raster))
+    except Exception as error:  # noqa: BLE001 - a bad file is data, not a crash
+        logger.warning("preview for %s failed: %s", raster_id, error)
+        raise HTTPException(422, f"No preview could be made: {error}") from error
+
+    if img.array.dtype != "uint8":
+        # A 16-bit band drawn with an 8-bit stretch is a white rectangle, which
+        # reads as a broken thumbnail rather than as a missing setting.
+        stats = img.statistics()
+        img.rescale(in_range=[(s.min, s.max) for s in stats.values()])
+
+    return Response(
+        content=img.render(img_format="PNG"),
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
+
+
+def _visible_bands(raster) -> list[int] | None:
+    """
+    Something sensible to look at, whatever the sensor wrote.
+
+    Four bands is usually blue, green, red, near infrared in that order, and
+    rendering the first three of those gives a blue-cast image that looks broken.
+    Three or fewer is taken as it comes.
+    """
+    if raster.bands >= 4:
+        return [3, 2, 1]
+    return None
 
 
 @router.get("/{raster_id}/tilejson.json")

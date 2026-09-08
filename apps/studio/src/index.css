@@ -449,7 +449,10 @@ input, select, textarea { font: inherit; color: inherit; }
 .ops em { font-style: normal; color: var(--txt-2); }
 
 /* map */
-.mapwrap { position: relative; min-width: 0; background: var(--void); }
+/* `overflow: hidden` as well as clamping the pointer: the rubber band is
+   absolutely positioned in here, and one bug away from painting over the
+   panels either side. */
+.mapwrap { position: relative; min-width: 0; background: var(--void); overflow: hidden; }
 /*
  * Behind the map rather than on it.
  *
@@ -1905,156 +1908,149 @@ input.doc:focus { border-color: var(--accent); color: var(--txt); outline: none;
 .assets li.stale .name { color: var(--txt-3); }
 
 /* ==================================================================
-   Imagery
+   Imagery browser, in the sidebar
    ================================================================== */
 
-.imagery-dock {
-  background: var(--panel);
-  border-top: 1px solid var(--line);
-  display: flex; flex-direction: column;
-  height: 172px; flex: none;
+/*
+ * Two columns down the side rather than a strip along the bottom. A horizontal
+ * row shows six thumbnails and hides the rest behind a scroll nobody discovers;
+ * a column shows a dozen, which is the number that makes a gap in a date range
+ * visible at all.
+ */
+.browser { border-top: 1px solid var(--line); margin-top: 8px; padding: 10px 10px 16px; }
+.browser > header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 9px; }
+.browser > header .cap { color: var(--txt-2); }
+.browser .count { font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--txt-3); }
+.browser .count em { font-style: normal; opacity: 0.7; }
+.browser .attrs {
+  margin-inline-start: auto; border: 0; background: none; cursor: pointer;
+  color: var(--txt-3); font-size: 10.5px;
 }
-.idtabs {
-  height: 31px; flex: none;
-  display: flex; align-items: center; gap: 1px;
-  padding-inline: 8px; border-bottom: 1px solid var(--line);
-}
-.idtabs > button {
-  height: 31px; padding-inline: 11px;
-  color: var(--txt-3); font-size: 11.5px;
-  border: 0; background: none; border-bottom: 2px solid transparent;
-  display: flex; align-items: center; gap: 6px; cursor: pointer;
-}
-.idtabs > button:hover { color: var(--txt); }
-.idtabs > button.on { color: var(--txt); border-bottom-color: var(--accent); }
-.idtabs .n {
-  font-family: "IBM Plex Mono", monospace; font-size: 9.5px;
-  color: var(--txt-3); background: var(--raise); border-radius: 2px; padding: 0 4px;
-}
-.idright { margin-inline-start: auto; display: flex; align-items: center; gap: 9px; }
-.idclose {
-  width: 22px; height: 22px; border: 0; background: none;
-  border-radius: 2px; color: var(--txt-3); cursor: pointer;
-}
-.idclose:hover { background: var(--raise); color: var(--txt); }
+.browser .attrs:hover { color: var(--accent); text-decoration: underline; }
 
-.idbar {
-  height: 30px; flex: none;
-  display: flex; align-items: center; gap: 7px;
-  padding-inline: 11px; border-bottom: 1px solid var(--line-soft);
+.browser .filters { display: grid; gap: 6px; margin-bottom: 10px; }
+.browser .dates { display: flex; align-items: center; gap: 5px; }
+.browser .dates input { flex: 1; min-width: 0; font-size: 10.5px; }
+.browser .line { display: flex; align-items: center; gap: 6px; }
+.browser .line select { flex: 1; font-size: 10.5px; }
+.browser .clear {
+  border: 0; background: none; cursor: pointer; color: var(--txt-3); font-size: 10.5px;
 }
-.idsep { width: 1px; height: 15px; background: var(--line); }
-.idchip {
-  height: 20px; padding-inline: 8px; border-radius: 10px;
-  border: 1px solid transparent; background: none;
-  color: var(--txt-3); font-size: 10.5px; cursor: pointer;
+.browser .clear:hover { color: var(--txt); text-decoration: underline; }
+.browser .undated {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10.5px; color: var(--txt-3); cursor: pointer;
 }
-.idchip:hover { color: var(--txt); background: var(--raise); }
-.idchip.on { color: var(--txt); background: var(--raise-2); border-color: var(--line); }
-.idbar select, .idbar input { height: 21px; font-size: 10.5px; width: auto; }
-.idbar input { width: 132px; }
+.browser .pad { padding: 6px 2px; }
 
-.idempty { flex: 1; display: grid; place-items: center; color: var(--txt-3); font-size: 11px; }
-
-.idcards {
-  flex: 1; min-height: 0;
-  display: flex; align-items: stretch; gap: 8px;
-  padding: 10px 12px; overflow-x: auto; overflow-y: hidden;
+.thumbs {
+  list-style: none; padding: 0; margin: 0;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 7px;
 }
-.idgroup { display: flex; align-items: stretch; gap: 8px; flex: none; }
-.iddivider {
-  display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 4px; padding-inline: 4px;
+.thumb {
+  border: 1px solid var(--line); border-radius: 3px;
+  background: var(--void); overflow: hidden; cursor: pointer;
+  transition: border-color 0.14s, box-shadow 0.14s;
 }
-.iddivider i { width: 1px; flex: 1; background: var(--line-soft); }
-.iddivider span {
-  font-family: "IBM Plex Sans Condensed", sans-serif; font-size: 9px;
-  letter-spacing: 0.12em; text-transform: uppercase; color: var(--txt-3);
-  writing-mode: vertical-rl; transform: rotate(180deg);
-}
-
-.idcard {
-  flex: none; width: 158px; border-radius: 4px;
-  background: var(--void); border: 1px solid var(--line);
-  overflow: hidden; cursor: pointer; position: relative;
-  transition: border-color 0.16s, transform 0.16s;
-}
-.idcard:hover { border-color: #4a4a52; transform: translateY(-2px); }
-.idcard.sel { border-color: #38d6c0; box-shadow: 0 0 0 1px rgba(56, 214, 192, 0.3); }
-.idcard.cmp { border-color: var(--accent); }
-/* Which cards the mosaic rule is actually drawing with. */
-.idcard.drawn::after {
+.thumb:hover { border-color: #4a4a52; }
+.thumb.sel { border-color: #38d6c0; box-shadow: 0 0 0 1px rgba(56, 214, 192, 0.3); }
+/* Which of them the mosaic rule is actually drawing with. */
+.thumb.drawn .shot::after {
   content: ""; position: absolute; inset-inline-start: 0; top: 0; bottom: 0;
-  width: 2px; background: #38d6c0; opacity: 0.7;
+  width: 2px; background: #38d6c0;
 }
-.idthumb { height: 56px; position: relative; }
-.idgsd, .idcov {
-  position: absolute; top: 5px;
-  font-family: "IBM Plex Mono", monospace; font-size: 9px;
-  padding: 1px 4px; border-radius: 2px; background: rgba(5, 5, 5, 0.62);
+.thumb .shot { position: relative; aspect-ratio: 4 / 3; background: #111114; }
+.thumb .shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb .broken {
+  width: 100%; height: 100%; display: grid; place-items: center;
+  color: var(--txt-3); font-size: 9.5px;
 }
-.idgsd { inset-inline-start: 5px; color: #c8c8ce; }
-.idcov { inset-inline-end: 5px; color: #38d6c0; }
-.idcov.low { color: #e8b14c; }
-.idacts {
-  position: absolute; bottom: 4px; inset-inline-end: 4px;
-  display: flex; gap: 2px; opacity: 0; transition: opacity 0.14s;
+.thumb .gsd, .thumb .cov {
+  position: absolute; top: 4px;
+  font-family: "IBM Plex Mono", monospace; font-size: 8.5px;
+  padding: 1px 3px; border-radius: 2px; background: rgba(5, 5, 5, 0.68);
 }
-.idcard:hover .idacts { opacity: 1; }
-.idacts button {
-  width: 19px; height: 19px; border: 0; border-radius: 2px;
-  background: rgba(5, 5, 5, 0.72); color: var(--txt-3);
-  font-size: 9.5px; cursor: pointer;
+.thumb .gsd { inset-inline-start: 4px; color: #c8c8ce; }
+.thumb .cov { inset-inline-end: 4px; color: #38d6c0; }
+.thumb .cov.low { color: #e8b14c; }
+.thumb .caption { padding: 5px 6px 6px; display: grid; gap: 1px; }
+.thumb .date {
+  font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--txt-2);
 }
-.idacts button:hover { color: var(--txt); }
-.idmeta { padding: 6px 8px 7px; display: grid; gap: 3px; }
-.idname { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.idrow { display: flex; align-items: center; gap: 6px; }
-.iddate { font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--txt-2); }
-/* A date the user typed reads differently from one the file stated. */
-.iddate.mine { color: #38d6c0; }
-.idadddate {
-  font-size: 10px; color: #e8b14c;
-  border: 1px dashed rgba(232, 177, 76, 0.4); border-radius: 2px;
-  padding: 0 5px; height: 16px; background: none; cursor: pointer;
-}
-.idadddate:hover { background: rgba(232, 177, 76, 0.12); border-style: solid; }
-.idsensor {
-  font-family: "IBM Plex Mono", monospace; font-size: 9px; color: var(--txt-3);
-  margin-inline-start: auto; max-width: 68px;
+/* A date somebody typed reads differently from one the file stated. */
+.thumb .date.mine { color: #38d6c0; }
+.thumb .date.none { color: #e8b14c; }
+.thumb .name {
+  font-size: 9.5px; color: var(--txt-3);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-.idtable { flex: 1; overflow: auto; }
-.idtable table { border-collapse: collapse; width: 100%; font-size: 11px; }
+.imagery-dock .idtabs .cap { color: var(--txt-2); }
+.imagery-dock .idtabs .n {
+  font-family: "IBM Plex Mono", monospace; font-size: 9.5px;
+  color: var(--txt-3); background: var(--raise); border-radius: 2px; padding: 0 4px;
+}
+.idtable th.sortable { cursor: pointer; }
+.idtable th.sortable:hover { color: var(--txt); }
+.idtable th .srt { color: var(--accent); margin-inline-start: 4px; }
+
+/* The imagery table is the same furniture as the layer attribute table, so it
+   inherits `.dock`; only the cell types differ. */
+.imagery-dock header .n {
+  font-family: "IBM Plex Mono", monospace; font-size: 9.5px;
+  color: var(--txt-3); background: var(--raise); border-radius: 2px; padding: 0 4px;
+}
+.imagery-dock header .spacer { flex: 1; }
+.idtable table { border-collapse: collapse; width: max-content; min-width: 100%; font-size: 11px; }
 .idtable thead th {
   position: sticky; top: 0; z-index: 1; background: #131315;
   border-bottom: 1px solid var(--line); padding: 5px 9px;
-  text-align: start; white-space: nowrap;
+  /* Header and cell centred together, so a column reads as one column —
+     the same rule the layer attribute table already follows. */
+  text-align: center; white-space: nowrap;
   font-family: "IBM Plex Sans Condensed", sans-serif; font-size: 9.5px;
   letter-spacing: 0.1em; text-transform: uppercase; color: var(--txt-3);
 }
+.idtable th.sortable { cursor: pointer; }
+.idtable th.sortable:hover { color: var(--txt); }
+.idtable th .srt { color: var(--accent); margin-inline-start: 4px; }
 .idtable tbody td {
   padding: 4px 9px; border-bottom: 1px solid var(--line-soft);
-  white-space: nowrap; color: var(--txt-2);
+  white-space: nowrap; color: var(--txt-2); text-align: center;
 }
 .idtable tbody tr { cursor: pointer; }
 .idtable tbody tr:hover td { background: rgba(76, 141, 255, 0.05); }
 .idtable tbody tr.sel td { background: rgba(56, 214, 192, 0.09); color: var(--txt); }
 .idtable td.m { font-family: "IBM Plex Mono", monospace; }
-.idtable td.n { font-family: "IBM Plex Mono", monospace; text-align: end; color: var(--txt); }
+.idtable td.n { font-family: "IBM Plex Mono", monospace; color: var(--txt); }
 .idtable td.small { font-size: 10px; color: var(--txt-3); }
 .idtable td .none { color: #e8b14c; }
 
-/* Footprints over the canvas. Not layers in the style: this is a function of
-   what the server answered for the current view, so it is not in the document
-   and costs no operations. */
-.footprints { position: absolute; inset: 0; z-index: 3; pointer-events: none; overflow: visible; }
+/* Footprints over the canvas. Not layers in the style: a function of what the
+   server answered for the current view, so it costs no operations. */
+/*
+ * Clipped to the map, not overflowing it.
+ *
+ * `overflow: visible` was there so a footprint larger than the screen still drew
+ * its visible edges — but an SVG that overflows paints over whatever is next to
+ * it, so zooming into an image sent its outline across the sidebars and the
+ * inspector. Clipping loses nothing: the part of an outline that is off the map
+ * is not on the map.
+ */
+.footprints { position: absolute; inset: 0; z-index: 3; pointer-events: none; overflow: hidden; }
 .footprint { fill: none; stroke-width: 1; pointer-events: stroke; cursor: pointer; }
 .footprint.other { stroke: rgba(154, 154, 160, 0.28); stroke-dasharray: 5 4; }
 .footprint.drawn { stroke: rgba(56, 214, 192, 0.5); }
-.footprint.sel { stroke: #38d6c0; stroke-width: 1.8; fill: rgba(56, 214, 192, 0.07); }
-.footprint.hover { stroke: #fff; stroke-width: 1.8; fill: rgba(255, 255, 255, 0.07); }
+/*
+ * Outline only, never a wash.
+ *
+ * The selected footprint used to carry a 7% teal fill, which over a satellite
+ * image is a green cast across the whole scene — and the one thing imagery must
+ * not do is lie about its colour. The stroke says which one is selected without
+ * touching a pixel of the picture.
+ */
+.footprint.sel { stroke: #38d6c0; stroke-width: 2; fill: none; }
+.footprint.hover { stroke: #fff; stroke-width: 2; fill: none; }
 
 /* How much of the view the mosaic rule actually fills. */
 .coverage { margin: 9px 0 4px; }
@@ -2062,7 +2058,6 @@ input.doc:focus { border-color: var(--accent); color: var(--txt); outline: none;
 .covbar i { display: block; height: 100%; background: #38d6c0; transition: width 0.25s; }
 .covbar.part i { background: #e8b14c; }
 
-/* Whether a setting belongs to the layer or to one image. */
 .sect .scope {
   font-family: "IBM Plex Sans Condensed", sans-serif;
   font-size: 8.5px; letter-spacing: 0.1em; text-transform: uppercase;
@@ -2088,6 +2083,34 @@ input.doc:focus { border-color: var(--accent); color: var(--txt); outline: none;
   text-overflow: ellipsis; white-space: nowrap; font-size: 11px;
 }
 
+/* The scope switch and the filter disclosure. */
+.browser .scope {
+  display: flex; background: var(--void); border: 1px solid var(--line);
+  border-radius: 3px; padding: 1px; gap: 1px; margin-bottom: 7px;
+}
+.browser .scope button {
+  flex: 1; height: 21px; border: 0; border-radius: 2px; background: none;
+  color: var(--txt-3); font-size: 10.5px; cursor: pointer;
+}
+.browser .scope button:hover { color: var(--txt); }
+.browser .scope button.on {
+  background: var(--raise-2); color: var(--txt); box-shadow: inset 0 0 0 1px #2e2e33;
+}
+.browser .disclose {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  border: 0; background: none; cursor: pointer; padding: 4px 0;
+  color: var(--txt-2); font-size: 10.5px;
+}
+.browser .disclose:hover { color: var(--txt); }
+.browser .disclose .chev { color: var(--txt-3); font-size: 9px; width: 9px; }
+.browser .disclose .badge {
+  font-family: "IBM Plex Mono", monospace; font-size: 9px;
+  background: var(--accent-soft, rgba(76, 141, 255, 0.13)); color: var(--accent);
+  border-radius: 8px; padding: 0 5px;
+}
+.browser .filters.shut { display: none; }
+.browser .clear:disabled { opacity: 0.35; cursor: default; text-decoration: none; }
+
 /* ==================================================================
    Showcase
    ================================================================== */
@@ -2110,9 +2133,12 @@ input.doc:focus { border-color: var(--accent); color: var(--txt); outline: none;
 .showcase ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
 .showcase li {
   position: relative;
+  /* The drawing and the words side by side. A stacked card is twice as tall for
+     the same content, and four of those bury the layer tree above them. */
   display: grid;
   grid-template-columns: 96px minmax(0, 1fr);
   gap: 10px;
+  align-items: start;
   border: 1px solid var(--line);
   border-radius: 3px;
   background: var(--void);
@@ -2123,10 +2149,9 @@ input.doc:focus { border-color: var(--accent); color: var(--txt); outline: none;
 .showcase .shot {
   border: 0; padding: 0; background: none; cursor: pointer;
   border-radius: 2px; overflow: hidden; line-height: 0;
-  align-self: start;
 }
 .showcase .shot svg { display: block; border-radius: 2px; }
-.showcase .words { min-width: 0; padding-inline-end: 16px; }
+.showcase .words { min-width: 0; padding-inline-end: 14px; }
 .showcase b { font-size: 11.5px; font-weight: 500; display: block; margin-bottom: 3px; }
 .showcase p { font-size: 10.5px; color: var(--txt-3); line-height: 1.5; margin: 0 0 7px; }
 .showcase .try {
@@ -2144,3 +2169,502 @@ input.doc:focus { border-color: var(--accent); color: var(--txt); outline: none;
   background: none; color: var(--txt-3); font-size: 10.5px; cursor: pointer;
 }
 .showcase .dismiss:hover { background: var(--raise); color: var(--txt); }
+
+/* ------------------------------------------------------------------ fixes */
+
+/*
+ * The inspector is a fixed column, so anything inside it that can be wider than
+ * the column has to be told it cannot be. A monospaced filename and a two-up
+ * grid of facts are both wider than 308 pixels given the chance, and a grid
+ * item's default `min-width: auto` lets them take it.
+ */
+.inspector .facts { min-width: 0; }
+.inspector .facts div { min-width: 0; overflow: hidden; }
+.inspector .facts dd { overflow-wrap: anywhere; word-break: break-word; }
+.inspector textarea,
+.inspector input,
+.inspector select { max-width: 100%; box-sizing: border-box; }
+.inspector .stack { min-width: 0; }
+.inspector .pair { min-width: 0; }
+
+/* A dot that is always in the layout, lit when the catalogue is being read. */
+.browser .pulse {
+  width: 6px; height: 6px; border-radius: 50%; flex: none;
+  background: transparent; transition: background 0.2s;
+}
+.browser .pulse.on { background: #38d6c0; box-shadow: 0 0 0 2px rgba(56, 214, 192, 0.15); }
+
+.browser .legend {
+  display: flex; align-items: baseline; gap: 6px;
+  font-size: 10px; color: var(--txt-3); line-height: 1.5;
+  margin: 0 0 8px;
+}
+.browser .legend i {
+  flex: none; width: 2px; height: 10px; background: #38d6c0; border-radius: 1px;
+  position: relative; top: 1px;
+}
+
+/* ==================================================================
+   Table of contents — two-line rows
+   ================================================================== */
+
+/*
+ * A row now says what the layer is as well as what it is called. Geometry, how
+ * it is classified, whether it is filtered, whether it is drawn at this scale:
+ * the things somebody scans a table of contents looking for. On one line there
+ * was room for none of them and a six-character tag had to choose between them.
+ */
+.node {
+  height: auto;
+  min-height: 44px;
+  align-items: center;
+  padding-block: 6px;
+  gap: 7px;
+}
+
+.node .rowtext { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.node .name {
+  flex: none;
+  font-size: 11.5px;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.node .sub {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 5px;
+  overflow: hidden;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 9.5px;
+  line-height: 1.3;
+  color: var(--txt-3);
+}
+.node .sub em {
+  font-style: normal;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Separators between the facts, not before the first one. */
+.node .sub em + em::before { content: "· "; color: #3a3a40; }
+.node .sub .warn { color: #e8b14c; }
+.node .sub .flag { color: #f0616b; }
+.node.on .sub { color: var(--txt-2); }
+
+/* A hidden layer is dimmed whole, so the state reads from across the panel and
+   not only from the switch. */
+.node.off { opacity: 0.55; }
+.node.off .name { color: var(--txt-3); text-decoration: none; }
+
+/* The menu is a permanent affordance. Revealed on hover it is invisible to
+   anyone who has not already found it, which is everybody at first. */
+.node .more { opacity: 1; color: var(--txt-3); }
+.node:hover .more, .node.on .more { opacity: 1; color: var(--txt-2); }
+.node .more:hover { background: var(--raise-2); color: var(--txt); }
+
+/* The tag moved to the second line, so the old slot is gone. */
+.node > .tag { display: none; }
+
+/*
+ * Anything sitting straight inside a section rather than in a `.row`.
+ *
+ * `.sbody` has no horizontal padding — the inset comes from `.row`'s own
+ * `padding: 3px 11px`. So a paragraph, a full-width input or a grid of facts
+ * placed at section level ran to both edges of the panel while the labelled
+ * rows above it sat neatly inset, which read as a broken panel rather than as a
+ * missing rule.
+ */
+.inspector .sbody > .hint,
+.inspector .sbody > .stack,
+.inspector .sbody > .facts,
+.inspector .sbody > .pair,
+.inspector .sbody > .coverage,
+.inspector .sbody > .seg { padding-inline: 11px; }
+
+.inspector .sbody > .stack { margin-block: 7px; }
+.inspector .sbody > .facts { margin-top: 10px; }
+.inspector .sbody > .hint + .hint { margin-top: 6px; }
+
+/* ------------------------------------------------------- the row's tail */
+
+/*
+ * Nothing on the left but the layer itself: the grip, the symbol, the name.
+ * The controls live at the trailing edge, which is where the eye ends its pass
+ * across a row and where a pointer already is after reading one.
+ */
+.node .tail { display: flex; align-items: center; gap: 1px; flex: none; }
+.node .ico {
+  width: 25px;
+  height: 25px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  display: grid;
+  place-items: center;
+  color: var(--txt-3);
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+}
+.node .ico svg { width: 14px; height: 14px; }
+.node .ico:hover { background: var(--raise-2); color: var(--txt); }
+.node .ico.more { font-size: 13px; }
+
+/*
+ * Teal for drawn, not blue.
+ *
+ * Blue is selection everywhere in this interface — the selected row, the accent
+ * edge, the focus ring. If "drawn" were blue as well, a selected hidden layer
+ * and an unselected drawn one would carry the same colour in two places and
+ * mean opposite things. Teal is already what the imagery panel uses for "this
+ * is what is on the map".
+ */
+.node .ico.eye.on { color: var(--signal, #38d6c0); }
+.node .ico.eye { color: #45454d; }
+.node .ico.eye:hover { background: var(--raise-2); color: var(--txt-2); }
+.node .ico.eye.on:hover { color: #5fe6d3; }
+
+/*
+ * A hidden layer, said four ways at once: the icon changes shape, its colour
+ * drops out, the row dims, and a hatch runs behind it. One signal in a small
+ * box was what made the previous version unreadable across twenty rows — the
+ * answer has to arrive before you have focused on anything.
+ *
+ * The hatch is the part that does the work. It is below notice on one row and
+ * unmistakable as a block of four.
+ */
+.node.off {
+  opacity: 0.62;
+  background: repeating-linear-gradient(
+    135deg,
+    transparent 0 7px,
+    rgba(255, 255, 255, 0.016) 7px 14px
+  );
+}
+.node.off:hover {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--raise) 0 7px,
+    rgba(255, 255, 255, 0.03) 7px 14px
+  );
+}
+.node.off .swatch, .node.off .symbol { opacity: 0.3; filter: grayscale(1); }
+.node.off .name { color: var(--txt-3); text-decoration: none; }
+
+/* --------------------------------------------- the selected row's actions */
+
+/*
+ * A strip under the row you are working on, and only that one.
+ *
+ * A table of contents has exactly one row in play at a time, and that is the
+ * row that can afford twenty more pixels. Five buttons on every row would be a
+ * panel of icons; five buttons on one row is one row growing, once, when you
+ * deliberately chose it.
+ *
+ * Words rather than glyphs: "Browse images" says what it will do, and no icon
+ * does.
+ */
+.rowacts {
+  display: flex;
+  gap: 5px;
+  padding: 0 9px 8px 34px;
+  background: rgba(76, 141, 255, 0.13);
+  border-inline-start: 2px solid var(--accent);
+}
+.rowacts button {
+  height: 20px;
+  padding-inline: 8px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--raise);
+  box-shadow: inset 0 0 0 1px #26262c;
+  color: var(--txt-3);
+  font-size: 10px;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s, box-shadow 0.12s;
+}
+.rowacts button:hover { background: var(--raise-2); color: var(--txt); box-shadow: inset 0 0 0 1px #3d3d46; }
+/* The one that is specific to this kind of layer reads first. */
+.rowacts button.primary { background: var(--raise-2); color: var(--txt-2); box-shadow: inset 0 0 0 1px #2e2e36; }
+.rowacts button.primary:hover { color: var(--txt); box-shadow: inset 0 0 0 1px var(--accent); }
+
+/* ----------------------------------------------- atoms the imagery panels use */
+
+/*
+ * These were used from the first imagery commit and never given a rule, so the
+ * buttons in the inspector rendered as bare text and the upload progress bar as
+ * nothing at all. Neither shows up in a typecheck or a build; only in looking.
+ */
+.mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+
+.btn {
+  height: 24px;
+  padding-inline: 9px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--raise);
+  color: var(--txt-2);
+  font-size: 11px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.btn:hover { background: var(--raise-2); color: var(--txt); border-color: #3a3a40; }
+.btn.danger:hover { color: #f0616b; border-color: rgba(240, 97, 107, 0.4); }
+.btn:disabled { opacity: 0.4; cursor: default; }
+
+/* Conversion progress while a GeoTIFF is being warped. */
+.bar { height: 3px; background: var(--line-soft); border-radius: 2px; overflow: hidden; margin-top: 6px; }
+.bar i { display: block; height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s; }
+
+/* --------------------------------------------------- selection, and inputs */
+
+/*
+ * No accent bar on the selected row.
+ *
+ * The row already changes background, and the inspector on the other side of
+ * the window is showing that layer — two signals for one state. The bar also
+ * competed with the hatch and the tail for the same glance, and an edge that
+ * means "selected" next to an edge that means "drawn" is two vocabularies.
+ */
+.node.on, .node.sel { border-inline-start-color: transparent; }
+.node { border-inline-start-width: 0; padding-inline-start: 9px; }
+.rowacts { border-inline-start: 0; padding-inline-start: 34px; }
+
+/*
+ * The browser's filters, in the application's own input style.
+ *
+ * They were written with bare element selectors and so inherited the browser's
+ * defaults — a different height, a different radius and a light-mode date
+ * picker in a dark panel. `.text` is what every other input here uses.
+ */
+.browser input[type="text"],
+.browser input[type="date"],
+.browser select {
+  width: 100%;
+  height: 24px;
+  background: var(--void);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding-inline: 7px;
+  font-size: 11px;
+  color: var(--txt);
+  font-family: inherit;
+  transition: border-color 0.12s;
+}
+.browser input:hover, .browser select:hover { border-color: #3a3a40; }
+.browser input:focus, .browser select:focus { border-color: var(--accent); outline: none; }
+
+/* The picker button is white on white otherwise. */
+.browser input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.62);
+  cursor: pointer;
+  opacity: 0.7;
+}
+.browser input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+
+.browser select {
+  appearance: none;
+  cursor: pointer;
+  padding-inline-end: 22px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--txt-3) 50%),
+    linear-gradient(135deg, var(--txt-3) 50%, transparent 50%);
+  background-position: calc(100% - 13px) 10px, calc(100% - 9px) 10px;
+  background-size: 4px 4px;
+  background-repeat: no-repeat;
+}
+.browser .dates { gap: 6px; }
+.browser .dates input { flex: 1; min-width: 0; }
+.browser .between { color: var(--txt-3); flex: none; }
+
+/* The feed's state, said once. Colour on the number, not on a phrase. */
+.node .sub .quiet { color: var(--warn); font-weight: 400; }
+
+/* -------------------------------------------------------- placeholder text */
+
+/*
+ * A placeholder is a hint, not a value, and it was being rendered at whatever
+ * size its control used — so a 24px input in the inspector and a 21px one in
+ * the dock printed the same words at different sizes on the same screen. One
+ * size, one colour, everywhere.
+ */
+input::placeholder,
+textarea::placeholder {
+  font-size: 10.5px;
+  color: var(--txt-3);
+  opacity: 1;
+}
+.browser input::placeholder { font-size: 10.5px; }
+.idbar input::placeholder { font-size: 10.5px; }
+
+/* A scene the rule is not drawing, said on the card rather than by omission. */
+.thumb .hidden {
+  position: absolute;
+  bottom: 4px;
+  inset-inline-start: 4px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 8.5px;
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: rgba(5, 5, 5, 0.7);
+  color: var(--txt-3);
+}
+.thumb.sel .hidden, .thumb.drawn .hidden { display: none; }
+
+/* The tree's own scroll container. It had no rule at all, so the panel relied
+   on `.pbody` above it and the layer list could not scroll independently of the
+   showcase and the imagery browser below. */
+.tree { display: flex; flex-direction: column; min-height: 0; }
+
+/* ------------------------------------------- the inspector cannot overflow */
+
+/*
+ * A fixed-width column with a monospaced filename in it will be wider than the
+ * column unless it is told otherwise, because a flex or grid item's default
+ * `min-width` is `auto` — large enough for its content. That is what put a
+ * horizontal scrollbar under the imagery panel and pushed the facts grid off
+ * the right-hand edge.
+ *
+ * Stated once, at the panel, rather than per component: any child added later
+ * is covered by the same rule instead of reintroducing the same bug.
+ */
+.inspector { overflow-x: hidden; }
+.inspector .pbody { overflow-x: hidden; }
+.inspector .sect, .inspector .sbody { min-width: 0; max-width: 100%; }
+.inspector .row { min-width: 0; flex-wrap: nowrap; }
+.inspector .row > * { min-width: 0; }
+.inspector .row .k { flex: none; }
+.inspector .grow { flex: 1; min-width: 0; }
+.inspector input, .inspector select, .inspector textarea { min-width: 0; max-width: 100%; }
+
+/* Long values wrap instead of widening their container. */
+.inspector .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.inspector .facts dd { overflow-wrap: anywhere; word-break: break-word; }
+.inspector .mono { overflow-wrap: anywhere; }
+.inspector .seg { min-width: 0; }
+.inspector .seg button { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* ------------------------------------------------- imagery at a position */
+
+/* Where the question was asked, so panning does not make it a mystery. */
+.footprints .pin { fill: none; stroke: #38d6c0; stroke-width: 1.6; stroke-linecap: round; }
+.footprints .pin circle { stroke-dasharray: 3 4; opacity: 0.8; }
+
+.browser .atpoint {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 25px;
+  padding-inline: 8px;
+  margin-bottom: 7px;
+  border-radius: 3px;
+  background: rgba(56, 214, 192, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(56, 214, 192, 0.28);
+}
+.browser .atpoint .pin { color: #38d6c0; font-size: 11px; }
+.browser .atpoint .coords {
+  flex: 1;
+  min-width: 0;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--txt-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.browser .atpoint button {
+  width: 18px; height: 18px; border: 0; border-radius: 2px; background: none;
+  color: var(--txt-3); font-size: 10px; cursor: pointer; flex: none;
+}
+.browser .atpoint button:hover { background: rgba(56, 214, 192, 0.16); color: var(--txt); }
+/* The hold gesture has to be findable; nothing else on the map uses it. */
+.browser .legend.gesture { color: var(--txt-3); margin-bottom: 6px; }
+.browser .legend i.none { background: transparent; }
+
+/* --------------------------------------------------- searching a drawn area */
+
+/* The box on the map: dashed while it is under the pointer, solid once set. */
+.footprints .searcharea {
+  fill: rgba(56, 214, 192, 0.06);
+  stroke: #38d6c0;
+  stroke-width: 1.4;
+}
+
+
+/* A third answer to "which ground is this reporting on", beside the two scopes. */
+.browser .scope button.draw {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-inline: 7px;
+  border-inline-start: 1px solid var(--line);
+  border-radius: 0 2px 2px 0;
+}
+.browser .scope button.draw svg { width: 12px; height: 12px; }
+.browser .scope button.draw.on { color: #38d6c0; background: rgba(56, 214, 192, 0.14); box-shadow: none; }
+
+.browser .atpoint.area .pin { font-size: 12px; }
+.browser .atpoint button.on { color: #38d6c0; background: rgba(56, 214, 192, 0.18); }
+.browser .legend.drawing { color: #38d6c0; }
+.browser .legend.drawing i { background: #38d6c0; }
+
+/*
+ * The rubber band while a box is being dragged out.
+ *
+ * A plain div moved by the pointer handler. It has to be above the canvas and
+ * below nothing that matters, and it must never take a pointer event — the
+ * handler is listening on the container and a band that swallowed the move
+ * would freeze itself the moment it appeared.
+ */
+.marquee {
+  position: absolute;
+  display: none;
+  z-index: 6;
+  pointer-events: none;
+  border: 1.5px dashed #38d6c0;
+  background: rgba(56, 214, 192, 0.1);
+  box-shadow: 0 0 0 1px rgba(5, 5, 5, 0.5), 0 0 14px rgba(56, 214, 192, 0.25);
+}
+
+/* The mode, said over the map as well as in the panel. A drag that means
+   something different from usual should not depend on noticing a lit button in
+   a sidebar. */
+.drawbanner {
+  position: absolute;
+  top: 14px;
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 28px;
+  padding-inline: 12px;
+  border-radius: 14px;
+  background: rgba(12, 12, 13, 0.92);
+  backdrop-filter: blur(8px);
+  box-shadow: inset 0 0 0 1px rgba(56, 214, 192, 0.45);
+  color: var(--txt-2);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.drawbanner button {
+  border: 0;
+  background: none;
+  color: #38d6c0;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}
+.drawbanner button:hover { text-decoration: underline; }
+
+/* Crosshair everywhere over the map, including over MapLibre's own canvas,
+   which sets its cursor from its own classes. */
+.drawing-area, .drawing-area canvas, .drawing-area .maplibregl-canvas-container {
+  cursor: crosshair !important;
+}
