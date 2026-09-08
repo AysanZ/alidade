@@ -1,7 +1,7 @@
 # Deployment
 
 Alidade in production on a single small VPS — 2 GB of RAM, 2 cores, 50 GB of
-SSD — behind `aysan.dev`, sharing the box with a portfolio and whatever comes
+SSD — behind `aysanz.dev`, sharing the box with a portfolio and whatever comes
 next.
 
 The server runs containers and nothing else. Both images are built by GitHub
@@ -18,7 +18,7 @@ survive. Building elsewhere is what makes the small instance viable at all.
                      └──────────────────────┬─────────────────────────┘
                                             │ ssh: pull, up -d
                                             ▼
-  :443 ──► caddy ──┬──► /srv/portfolio                     aysan.dev
+  :443 ──► caddy ──┬──► /srv/portfolio                     aysanz.dev
                    └──► web (nginx + dist) ──► api ──► postgis
                         tile cache on disk     GDAL     no published port
 ```
@@ -93,7 +93,7 @@ overrides that and the push fails with a 403.
 
 ## 2 · DNS
 
-Three A records on `aysan.dev`, all pointing at the server:
+Three A records on `aysanz.dev`, all pointing at the server:
 
 | Type | Name | Value | TTL |
 |---|---|---|---|
@@ -108,7 +108,7 @@ hostname, and failed challenges count against a limit of five per week per
 domain.
 
 ```bash
-dig +short aysan.dev alidade.aysan.dev
+dig +short aysanz.dev alidade.aysanz.dev
 ```
 
 > `.dev` is on the HSTS preload list. Browsers refuse plain HTTP to it before a
@@ -195,7 +195,7 @@ openssl rand -base64 32 | tr -d '/+=' | head -c 32; echo
 chmod 600 /opt/alidade/.env
 ```
 
-Put a holding page at `portfolio/index.html` so `aysan.dev` is not a 404 while
+Put a holding page at `portfolio/index.html` so `aysanz.dev` is not a 404 while
 the real thing is being built.
 
 ---
@@ -218,9 +218,9 @@ docker compose -f docker-compose.prod.yml logs -f caddy   # watch the certificat
 Then check it:
 
 ```bash
-curl -s  https://alidade.aysan.dev/api/health     # {"status":"ok", ...}
-curl -I  https://aysan.dev
-curl -sI https://alidade.aysan.dev/api/tiles/LAYER/6/40/25.mvt | grep X-Cache
+curl -s  https://alidade.aysanz.dev/api/health     # {"status":"ok", ...}
+curl -I  https://aysanz.dev
+curl -sI https://alidade.aysanz.dev/api/tiles/LAYER/6/40/25.mvt | grep X-Cache
 #   MISS on the first request, HIT on the second. That header is the whole
 #   point of the tile cache and the quickest confirmation it is working.
 ```
@@ -279,7 +279,7 @@ outcome than a demo that forgets overnight. Keep a clean dump, restore it at
 |---|---|
 | Caddy loops on `obtaining certificate` | DNS has not propagated, or the provider blocks 80/443 upstream of ufw. `dig` first, then `nc -zv IP 80` from somewhere else. |
 | `no such host: web` in Caddy's log | Caddy and web are not both on the `edge` network. |
-| API calls fail in the browser, `curl` works | `CORS_ORIGINS` is not an exact match. `https://alidade.aysan.dev`, no trailing slash. |
+| API calls fail in the browser, `curl` works | `CORS_ORIGINS` is not an exact match. `https://alidade.aysanz.dev`, no trailing slash. |
 | Live feed connects, then drops every 60 seconds | Something between Caddy and nginx is not passing the upgrade. Caddy does it by default; nginx needs the three `proxy_set_header` lines, which are in `default.conf` as shipped. |
 | `exec format error` at `up` | amd64 image, ARM host. See §3. |
 | Push to GHCR returns 403 | Workflow permissions are read-only at the organisation level. See §1. |

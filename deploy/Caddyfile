@@ -2,7 +2,7 @@
 #
 # Caddy gets a certificate per hostname from Let's Encrypt on first request and
 # renews without being asked. `.dev` is on the HSTS preload list, so browsers
-# refuse plain HTTP for aysan.dev whatever we do — there is no working
+# refuse plain HTTP for aysanz.dev whatever we do — there is no working
 # http-only fallback to keep as a safety net, which is worth knowing before the
 # first deploy rather than after it.
 
@@ -27,7 +27,7 @@
 }
 
 # ------------------------------------------------------------- the portfolio
-aysan.dev {
+aysanz.dev {
 	import common
 	root * /srv/portfolio
 	try_files {path} {path}/ /index.html
@@ -38,12 +38,12 @@ aysan.dev {
 	header /index.html Cache-Control "no-cache"
 }
 
-www.aysan.dev {
-	redir https://aysan.dev{uri} permanent
+www.aysanz.dev {
+	redir https://aysanz.dev{uri} permanent
 }
 
 # ------------------------------------------------------------------ alidade
-alidade.aysan.dev {
+alidade.aysanz.dev {
 	import common
 	# Caddy proxies a WebSocket upgrade without being told to, so the live feed
 	# needs no special case here the way it does in nginx.
@@ -57,7 +57,7 @@ alidade.aysan.dev {
 # Every further project is one block. Put its container on the `edge` network
 # in docker-compose.prod.yml and add:
 #
-# thing.aysan.dev {
+# thing.aysanz.dev {
 # 	import common
 # 	reverse_proxy thing-web:80
 # }
@@ -65,7 +65,7 @@ alidade.aysan.dev {
 # A static project needs no container at all — drop the build into
 # ./portfolio/thing/ and serve it from a path, or give it its own root:
 #
-# thing.aysan.dev {
+# thing.aysanz.dev {
 # 	import common
 # 	root * /srv/portfolio/thing
 # 	try_files {path} {path}/ /index.html
