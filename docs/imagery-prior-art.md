@@ -1,8 +1,13 @@
 # Prior art
 
 Imagery in a web GIS is a solved problem with a mature vocabulary, and most of what the
-strip design needs already has a name, a specification and a reference implementation.
-This is what the field does, and which parts of it are worth taking.
+browser needed already had a name, a specification and a reference implementation. This
+is what the field does, which parts of it were taken, and what is still outstanding.
+
+Most of the first half of this document has since been built — footprints, coverage,
+STAC field names, band maths, the sorting rules and the search endpoint. [The imagery
+notes](imagery.md) describe what exists; this describes where it came from and what it
+was weighed against. The table at the end says which is which.
 
 ---
 
@@ -113,16 +118,15 @@ Sorting runs on `ZOrder` first, then pixel size, then the chosen method.
 **Mosaic operator** — how overlapping *pixels* resolve once sorted: First, Last, Min,
 Max, Mean, Blend, Sum.
 
-**What to take.** The strip as mocked up is Lock Raster and nothing else: the user picks
-one file and sees one file. That is the right default and it is not enough. When four
-images each cover part of the view, picking one means looking at a mostly empty map,
-and the user has to hunt through the strip for the one that happens to cover the corner
-they care about.
+**What was taken.** The mockup had Lock Raster and nothing else: the user picks one file
+and sees one file. That is a reasonable default and it is not enough. When four images
+each cover part of the view, picking one means looking at a mostly empty map, and the
+user has to hunt the list for the one that happens to cover the corner they care about.
 
-Adding *sort by date, closest to*, *sharpest first* and *closest to centre* as an
-alternative to picking a single image means the map shows the best available imagery
-everywhere at once, and the strip becomes a way to override that rather than the only
-way to see anything. Two controls, both already named by somebody else.
+So *newest*, *closest to a date*, *sharpest* and *closest to centre* sit beside *lock*,
+and the map shows the best available imagery everywhere at once; picking one image is
+now a way to override that rather than the only way to see anything. Two controls, both
+named by somebody else, and the pixel operator alongside them.
 
 The other thing to take is the **footprint**. A satellite scene is a rotated
 quadrilateral with nodata in the corners; its bounding box is meaningfully larger than
@@ -202,32 +206,39 @@ that a hard edge cuts straight through.
 sun elevation, and *only show images that fully cover the area of interest*. Each result
 reports what percentage of the area it actually covers.
 
-That coverage figure is the single most useful thing on this list for Alidade's strip.
-"9 images here" is ambiguous between nine images of this ground and nine images that
-clip one corner of the view, and those are completely different answers.
+That coverage figure was the single most useful thing on this list, and it is why the
+registry stores a footprint. "9 images here" is ambiguous between nine images of this
+ground and nine that clip one corner of the view, and those are completely different
+answers.
 
 **Timelapse.** Pick a date range and a frequency, and the tool assembles the available
 scenes into an animation to download.
 
 ---
 
-## What to add, in order
+## Where each of these ended up
 
-| | Change | Why now |
+| | | State |
 |---|---|---|
-| **1** | Footprint geometry per image, not a bbox | Everything below is a lie without it: coverage, sorting, "covers this view" |
-| **2** | Coverage % of the current view, on every card | Turns an ambiguous count into a real one |
-| **3** | STAC field names and a nullable `datetime` | Free today, unbuyable later |
-| **4** | `expression` for band maths | NDVI and every other index, with no new files |
-| **5** | TileJSON for raster sources | Bounds, zoom range and attribution stop going stale |
-| **6** | Opacity blend beside the swipe | Half the comparisons the swipe cannot show |
-| **7** | `bbox`/`datetime` search endpoint returning STAC | The strip's own query, and interoperability for nothing |
-| **8** | Sorting rules — closest to date, sharpest, closest to centre | The map fills in instead of showing one scene's worth |
-| **9** | Pins: scene + visualisation + view, shareable | The compare panel gets something to compare |
-| **10** | MosaicJSON behind the sorting rules | Only once 8 exists and is being used |
-| **11** | WMTS output | QGIS and ArcGIS can then read Alidade's imagery |
-| **12** | Timelapse export | The demo that makes the feature obvious |
-| **13** | `cog://` for pasted links | Remote COGs without a copy |
+| **1** | Footprint geometry per image, not a bbox | **Done.** A `geometry(Polygon, 4326)` with a GIST index. Everything else depended on it |
+| **2** | Coverage % of the current view, on every card | **Done.** Exact on the server against the real footprint, estimated on the client for a set |
+| **3** | STAC field names and a nullable `datetime` | **Done.** The registry stores them and `/search` answers an ItemCollection |
+| **4** | `expression` for band maths | **Done.** NDVI and every other index, with no new files |
+| **5** | TileJSON for raster sources | **Half.** The endpoint answers; the source still carries a `tiles` array |
+| **6** | Opacity blend beside the swipe | Not started. Neither half of compare exists yet |
+| **7** | `bbox`/`datetime` search endpoint returning STAC | **Done.** It is the sidebar's own query on every map move |
+| **8** | Sorting rules — closest to date, sharpest, closest to centre | **Done**, with `lock` and the pixel operator beside them |
+| **9** | Pins: scene + visualisation + view, shareable | Not started. `Bookmark` is the camera half of it |
+| **10** | MosaicJSON behind the sorting rules | Not started, and correctly so: the rules are answered from PostGIS today, and a quadkey index is worth it only once the catalogue is large enough to hurt |
+| **11** | WMTS output | Not started |
+| **12** | Timelapse export | Not started |
+| **13** | `cog://` for pasted links | Not started. The Link tab still reads vector data only |
 
-One to four are the ones that change the data model, so they are the ones that are
-expensive to add later. The rest can arrive in any order.
+One to four were the ones that changed the data model, which is why they were done
+first and why they were worth arguing about at this length. What is left can arrive in
+any order.
+
+Two things on this list turned out differently in the building, and both are argued in
+[the imagery notes](imagery.md): the *series* was dropped in favour of the rule, and
+`buffer`/`padding` was tried and reverted, because `rio-tiler` adds those pixels to the
+output rather than cropping them away and the tiles came back 257 across.

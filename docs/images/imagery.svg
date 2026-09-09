@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 600" width="1000" height="600" font-family="'IBM Plex Sans', system-ui, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#4C8DFF"/>
+    </marker>
+    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#66666D"/>
+    </marker>
+  </defs>
+
+  <rect width="1000" height="600" fill="#0A0A0B"/>
+
+  <text x="34" y="46" fill="#E4E4E6" font-size="19" font-weight="600">Imagery</text>
+  <text x="146" y="46" fill="#66666D" font-size="13">many files over the same ground, and a rule that says which of them the tile is drawn from</text>
+
+  <!-- ================= catalogue ================= -->
+  <rect x="34" y="80" width="300" height="304" rx="3" fill="#0E0E10" stroke="#252528"/>
+  <text x="52" y="106" fill="#9A9AA0" font-size="11" font-weight="600" letter-spacing="1.1">CATALOGUE</text>
+  <text x="52" y="122" fill="#66666D" font-size="11">one row per GeoTIFF; the pixels are on a volume</text>
+
+  <rect x="52" y="136" width="264" height="44" rx="3" fill="#161618" stroke="#1A1A1C"/>
+  <text x="66" y="156" fill="#E4E4E6" font-size="11.5" font-family="'IBM Plex Mono', ui-monospace, monospace">orchard_north_2026-01-04.tif</text>
+  <text x="66" y="172" fill="#66666D" font-size="11">4 Jan 2026 · 63 cm · 3 bands · from the tag</text>
+
+  <rect x="52" y="188" width="264" height="44" rx="3" fill="#161618" stroke="#1A1A1C"/>
+  <text x="66" y="208" fill="#E4E4E6" font-size="11.5" font-family="'IBM Plex Mono', ui-monospace, monospace">orchard_north_2025-06-18.tif</text>
+  <text x="66" y="224" fill="#66666D" font-size="11">18 Jun 2025 · 63 cm · 3 bands · from the name</text>
+
+  <rect x="52" y="240" width="264" height="44" rx="3" fill="#161618" stroke="#1A1A1C"/>
+  <text x="66" y="260" fill="#E4E4E6" font-size="11.5" font-family="'IBM Plex Mono', ui-monospace, monospace">S2_T39SVB_20250712.tif</text>
+  <text x="66" y="276" fill="#66666D" font-size="11">12 Jul 2025 · 10 m · 12 bands · uint16</text>
+
+  <rect x="52" y="292" width="264" height="44" rx="3" fill="#161618" stroke="#4C8DFF" stroke-opacity=".35"/>
+  <text x="66" y="312" fill="#E4E4E6" font-size="11.5" font-family="'IBM Plex Mono', ui-monospace, monospace">survey_flight.tif</text>
+  <text x="66" y="328" fill="#66666D" font-size="11">no date — legal, drawn, and sorts last</text>
+
+  <text x="52" y="358" fill="#66666D" font-size="10.5" font-family="'IBM Plex Mono', ui-monospace, monospace">GET /search?bbox=…&amp;datetime=…</text>
+  <text x="52" y="373" fill="#66666D" font-size="10.5">answers a STAC ItemCollection — QGIS reads it as is</text>
+
+  <!-- ================= the view ================= -->
+  <rect x="358" y="80" width="284" height="304" rx="3" fill="#0E0E10" stroke="#252528"/>
+  <text x="376" y="106" fill="#9A9AA0" font-size="11" font-weight="600" letter-spacing="1.1">THE VIEW</text>
+  <text x="376" y="122" fill="#66666D" font-size="11">footprints, not bounding boxes</text>
+
+  <rect x="376" y="136" width="248" height="176" rx="2" fill="#111114" stroke="#252528"/>
+  <path d="M376 180 H624 M376 224 H624 M376 268 H624 M438 136 V312 M500 136 V312 M562 136 V312"
+        stroke="#1A1A1C" stroke-width="1"/>
+
+  <!-- a scene is a rotated quadrilateral with nodata in the corners -->
+  <polygon points="392,168 528,150 542,242 406,262" fill="#4C8DFF" fill-opacity=".16" stroke="#4C8DFF" stroke-opacity=".7"/>
+  <polygon points="470,196 606,178 618,272 484,292" fill="#38D6C0" fill-opacity=".13" stroke="#38D6C0" stroke-opacity=".6"/>
+  <polygon points="428,232 500,224 508,290 436,298" fill="#E4E4E6" fill-opacity=".07" stroke="#66666D" stroke-dasharray="3 3"/>
+
+  <text x="398" y="186" fill="#4C8DFF" font-size="10.5">4 Jan 2026 · 71%</text>
+  <text x="492" y="284" fill="#38D6C0" font-size="10.5">18 Jun 2025 · 58%</text>
+  <text x="440" y="248" fill="#9A9AA0" font-size="10.5">survey · 12%</text>
+
+  <text x="376" y="336" fill="#66666D" font-size="11">A box would claim the corners the file has no</text>
+  <text x="376" y="351" fill="#66666D" font-size="11">pixels for, and then report covering the view.</text>
+  <text x="376" y="373" fill="#38D6C0" font-size="11">three here · 100% of the view between them</text>
+
+  <!-- ================= the rule ================= -->
+  <rect x="666" y="80" width="300" height="304" rx="3" fill="#0E0E10" stroke="#4C8DFF" stroke-opacity=".45"/>
+  <text x="684" y="106" fill="#4C8DFF" font-size="11" font-weight="600" letter-spacing="1.1">THE RULE</text>
+  <text x="684" y="122" fill="#66666D" font-size="11">sort the candidates, then resolve the pixels</text>
+
+  <rect x="684" y="136" width="264" height="72" rx="3" fill="#161618" stroke="#1A1A1C"/>
+  <text x="698" y="157" fill="#E4E4E6" font-size="13" font-weight="500">Sort</text>
+  <text x="698" y="176" fill="#66666D" font-size="11">newest · closest to a date · sharpest</text>
+  <text x="698" y="192" fill="#66666D" font-size="11">best covering · lock to one image</text>
+
+  <rect x="684" y="216" width="264" height="56" rx="3" fill="#161618" stroke="#1A1A1C"/>
+  <text x="698" y="237" fill="#E4E4E6" font-size="13" font-weight="500">Overlap</text>
+  <text x="698" y="256" fill="#66666D" font-size="11">first · blend · mean · max</text>
+
+  <rect x="684" y="280" width="264" height="88" rx="3" fill="#161618" stroke="#1A1A1C"/>
+  <text x="698" y="301" fill="#E4E4E6" font-size="13" font-weight="500">Render</text>
+  <text x="698" y="320" fill="#66666D" font-size="11">three bands, or one band and a ramp,</text>
+  <text x="698" y="336" fill="#66666D" font-size="11">or arithmetic on the bands:</text>
+  <text x="698" y="356" fill="#38D6C0" font-size="11.5" font-family="'IBM Plex Mono', ui-monospace, monospace">(b8-b4)/(b8+b4)</text>
+
+  <path d="M340 232 L354 232" stroke="#66666D" stroke-width="1.3" marker-end="url(#g)"/>
+  <path d="M648 232 L662 232" stroke="#4C8DFF" stroke-width="1.4" marker-end="url(#a)"/>
+
+  <!-- ================= the tile ================= -->
+  <rect x="34" y="416" width="932" height="150" rx="3" fill="#0E0E10" stroke="#252528"/>
+  <text x="52" y="442" fill="#9A9AA0" font-size="11" font-weight="600" letter-spacing="1.1">THE TILE</text>
+
+  <rect x="52" y="456" width="580" height="42" rx="3" fill="#0A0A0B" stroke="#4C8DFF" stroke-opacity=".4"/>
+  <text x="68" y="482" fill="#4C8DFF" font-size="12" font-family="'IBM Plex Mono', ui-monospace, monospace">/api/rasters/tiles/{z}/{x}/{y}.png?rule=newest&amp;overlap=first&amp;bidx=4&amp;bidx=3&amp;bidx=2</text>
+
+  <text x="52" y="522" fill="#66666D" font-size="11">The settings are the map and the catalogue is what the server holds today, so the template is</text>
+  <text x="52" y="538" fill="#66666D" font-size="11">derived at compile time and never authored. A project reopened next month shows what is there then.</text>
+
+  <path d="M638 477 L664 477" stroke="#4C8DFF" stroke-width="1.4" marker-end="url(#a)"/>
+
+  <rect x="670" y="456" width="278" height="42" rx="3" fill="#161618" stroke="#1A1A1C"/>
+  <text x="686" y="473" fill="#E4E4E6" font-size="12">rio-tiler reads the chosen COGs</text>
+  <text x="686" y="489" fill="#66666D" font-size="11">six at most; the rest are never seen anyway</text>
+
+  <rect x="670" y="508" width="278" height="42" rx="3" fill="#0A0A0B" stroke="#38D6C0" stroke-opacity=".35"/>
+  <text x="686" y="525" fill="#38D6C0" font-size="12">PNG · X-Alidade-Images</text>
+  <text x="686" y="541" fill="#66666D" font-size="11">outside every footprint: 204, not 404</text>
+</svg>

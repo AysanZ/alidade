@@ -13,11 +13,8 @@ export interface ManagerOptions {
 }
 
 /**
- * Holds the current project and keeps the renderer in step with it.
- *
- * setStyle destroys every layer that was added to the map. Rather than patching
- * that per feature, the manager can replay the whole project against a fresh
- * style, so a basemap swap is a redraw and not a rebuild of the application.
+ * Holds the project and keeps the renderer in step. `setStyle` destroys every
+ * added layer, so the whole project can be replayed against a fresh style.
  */
 export class MapManager {
   #project: MapProject;
@@ -52,11 +49,8 @@ export class MapManager {
   }
 
   /**
-   * Record where the user dragged the map to, without emitting anything.
-   *
-   * Panning is the one edit the renderer makes first and the project learns about
-   * second. If the project is not told, the next camera operation jumps the map
-   * back to wherever the document still thinks it is.
+   * Where the user dragged to, emitting nothing. Untold, the next camera
+   * operation jumps the map back to where the document still thinks it is.
    */
   syncView(view: MapProject["view"]): void {
     this.#project = { ...this.#project, view };

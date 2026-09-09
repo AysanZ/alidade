@@ -21,7 +21,9 @@ app = FastAPI(title="Alidade API", version="0.3.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.origins,
-    allow_methods=["GET", "POST", "DELETE"],
+    # PATCH is here for editing an image's title, date and sensor. Leaving it
+    # out only fails cross-origin, so a dev server proxying /api never sees it.
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["*"],
 )
 app.include_router(tiles.router)

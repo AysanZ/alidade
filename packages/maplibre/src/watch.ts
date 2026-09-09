@@ -7,10 +7,8 @@ interface Watchable extends Renderer {
 }
 
 /**
- * Watch for the style being swapped underneath us and replay the project.
- *
- * This is the single most common complaint from MapLibre users, so it is handled
- * once here rather than worked around in every feature that adds a layer.
+ * Replay the project when the style is swapped underneath us. Handled once here
+ * rather than worked around in every feature that adds a layer.
  */
 export function watchStyleSwaps(map: Watchable, manager: MapManager): () => void {
   const sentinel = "basemap:background";

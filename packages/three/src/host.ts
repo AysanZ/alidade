@@ -59,11 +59,8 @@ export interface HostEvents {
   onGlobe?(hidden: boolean): void;
 }
 
-/**
- * The slice of the map a custom layer is handed. Declared here rather than
- * imported, so that this package does not depend on MapLibre's types for the
- * four methods it uses, and a test can pass a plain object.
- */
+/** The slice of the map a custom layer is handed. Declared, not imported, so this
+ * package needs no MapLibre types and a test can pass a plain object. */
 export interface HostMap {
   getCanvas(): HTMLCanvasElement;
   getCenter(): { lng: number; lat: number };
@@ -89,12 +86,8 @@ interface Loaded {
 }
 
 /**
- * How many overlapping models a hover will test the triangles of.
- *
- * Nearest box first, so this is a cap on effort and not on correctness in the
- * ordinary case: with one model under the pointer the first test answers. It
- * only bites where several boxes overlap one ray, and there the nearest three
- * are the ones a person could have been aiming at.
+ * How many overlapping models a hover tests the triangles of. Nearest box first,
+ * so this caps effort rather than correctness: it only bites where boxes overlap.
  */
 const HOVER_TESTS = 3;
 
@@ -124,15 +117,9 @@ const SELECTION = 0x4c8dff;
 /**
  * Draws glTF models into a MapLibre map with three.js.
  *
- * This is the one place that knows what a mesh is. It is given models as
- * placements — a position, a height, a bearing, a scale — and turns them into a
- * scene that the map draws as one of its own layers, sharing the map's camera
- * and depth buffer, so a model stands behind the building in front of it and
- * under the label above it.
- *
- * Files are loaded once per URL and cloned per placement, so a car park of
- * forty identical cars is one download. The scene is re-anchored at the map
- * centre every frame; see `frame.ts` for why.
+ * Given placements, it makes a scene the map draws as one of its own layers,
+ * sharing the map's camera and depth buffer. One download per URL, cloned per
+ * placement; re-anchored at the map centre every frame, for the reason in `frame.ts`.
  */
 export class ThreeModelHost implements ModelHost {
   #scene = new Scene();
@@ -146,19 +133,10 @@ export class ThreeModelHost implements ModelHost {
   #sky = new HemisphereLight(0xdfe8f5, 0x2a2a2e, 0.9);
   #sun = new DirectionalLight(0xffffff, 2.4);
   /**
-   * Something for a shadow to land on.
-   *
-   * A shadow is only ever seen on a surface, and the ground under this scene
-   * belongs to the map rather than to three.js: there is no geometry there to
-   * darken. This plane is that geometry. `ShadowMaterial` draws nothing except
-   * where it is shadowed, so the map shows through everywhere else and the
-   * only thing added to the picture is the shadow itself.
-   *
-   * It is a flat plane at the anchor's height, so over terrain a shadow falls
-   * where the ground would be if the hill were not there. Following the
-   * terrain would mean sampling elevation across the whole plane every frame,
-   * which is a great deal of work to improve something nobody looks at from an
-   * angle where it shows.
+   * Something for a shadow to land on: the ground belongs to the map, so there
+   * is no geometry there to darken. `ShadowMaterial` draws only where it is
+   * shadowed. Flat at the anchor height — following terrain costs a sample
+   * across the plane every frame to fix something nobody sees.
    */
   #ground = new Mesh(new PlaneGeometry(4000, 4000), new ShadowMaterial({ opacity: 0.32 }));
   #events: HostEvents;
@@ -175,28 +153,16 @@ export class ThreeModelHost implements ModelHost {
 
   constructor(events: HostEvents = {}) {
     this.#events = events;
-    /*
-     * The camera is a pair of matrices and nothing else. Its transform is
-     * written each frame from the map's, so three.js must not derive it from a
-     * position and a rotation it was never given.
-     */
+    // The camera is matrices only, written each frame from the map's, so
+    // three.js must not derive them from a position it was never given.
     this.#camera.matrixAutoUpdate = false;
     this.#camera.matrixWorldAutoUpdate = false;
-    /*
-     * The Draco decoder ships with three.js and is bundled with the studio, so
-     * a compressed file — which is what Blender and Sketchfab export by
-     * default — decodes without a request to anyone else's server. It is only
-     * fetched from the bundle when a file turns out to need it.
-     */
+    // Draco ships with three.js and is bundled, so a compressed file — what
+    // Blender exports by default — decodes without anyone else's server.
     this.#loader = new GLTFLoader();
     this.#loader.setDRACOLoader(new DRACOLoader());
-    /*
-     * The shadow camera is orthographic and has to be told how much world to
-     * cover: too small and shadows are clipped into squares, too large and the
-     * map's worth of depth texture is spread so thin that a lamp post's shadow
-     * lands a metre from the lamp post. Two hundred metres each way suits the
-     * scale these models are placed at — a street, not a county.
-     */
+    // Orthographic, so it must be told how much world to cover: too small
+    // clips shadows square, too large spreads the depth texture thin.
     this.#sun.castShadow = true;
     this.#sun.shadow.mapSize.set(2048, 2048);
     const frustum = this.#sun.shadow.camera;
@@ -249,23 +215,16 @@ export class ThreeModelHost implements ModelHost {
     this.#renderer = new WebGLRenderer({ canvas: map.getCanvas(), context: gl, antialias: true });
     // The map has already drawn this frame; clearing would wipe it.
     this.#renderer.autoClear = false;
-    /*
-     * Soft shadows. The map owns this canvas and its depth buffer, and the
-     * shadow pass renders to a target of its own before the scene is drawn, so
-     * enabling this does not disturb what MapLibre has already put down.
-     */
+    // Soft shadows. The pass renders to its own target before the scene, so it
+    // does not disturb what MapLibre has already drawn.
     this.#renderer.shadowMap.enabled = true;
     this.#renderer.shadowMap.type = PCFSoftShadowMap;
   }
 
   /**
-   * Something for a metallic surface to reflect.
-   *
-   * A physically based material with nothing around it is a dull grey, however
-   * good the file. A neutral room, filtered once and kept, gives chrome and
-   * glass something to be chrome and glass with. It is made inside a frame,
-   * not on attach, because it renders to textures of its own and the map only
-   * expects its state to be disturbed inside a frame.
+   * Something for a metallic surface to reflect: a PBR material with nothing
+   * around it is dull grey. Built inside a frame, because it renders to
+   * textures of its own and that is when the map expects its state disturbed.
    */
   #surround(renderer: WebGLRenderer): void {
     if (this.#environment) return;
@@ -286,11 +245,8 @@ export class ThreeModelHost implements ModelHost {
     const renderer = this.#renderer;
     if (!map || !renderer) return;
 
-    /*
-     * Under globe projection the map's matrix projects a sphere, and a mesh
-     * placed in mercator would be drawn floating beside the planet. Rather than
-     * draw something wrong, draw nothing and say why, once.
-     */
+    // Under a globe, a mesh placed in mercator floats beside the planet. Draw
+    // nothing, and say why once.
     const globe = args.defaultProjectionData.projectionTransition > 0;
     if (globe !== this.#onGlobe) {
       this.#onGlobe = globe;
@@ -303,11 +259,8 @@ export class ThreeModelHost implements ModelHost {
     const origin = { lon: centre.lng, lat: centre.lat };
     const now = performance.now();
 
-    /*
-     * The scene-to-clip matrix is built before the placements rather than after
-     * them, because the size floor needs to know how many pixels a metre is
-     * worth this frame, and that is the matrix's answer.
-     */
+    // Before the placements: the size floor needs what a metre is worth in
+    // pixels this frame, and that is this matrix's answer.
     cameraMatrix(args.defaultProjectionData.mainMatrix, origin, this.#matrix);
     this.#inverse.copy(this.#matrix).invert();
     const pixelsPerMetre = this.#pixelsPerMetre(map);
@@ -327,15 +280,9 @@ export class ThreeModelHost implements ModelHost {
     }
     if (drawn === 0) return;
 
-    /*
-     * The map's matrix is a projection and a view multiplied out, and the
-     * geometry only needs the product. Lighting needs the two apart: a specular
-     * highlight is drawn towards the eye, and with the product on the camera
-     * and nothing else three.js takes the eye to be at the scene's origin,
-     * which is on the ground at the map centre. The map passes the projection
-     * on its own, so the view is recovered from it — the product is unchanged,
-     * and the eye is where the camera is.
-     */
+    // Geometry needs only the product; lighting needs projection and view
+    // apart, or three.js puts the eye on the ground at the map centre and every
+    // highlight points at the wrong place. The view is recovered from the two.
     if (args.projectionMatrix) {
       this.#projection.fromArray(args.projectionMatrix);
       this.#view.copy(this.#projection).invert().multiply(this.#matrix);
@@ -430,21 +377,12 @@ export class ThreeModelHost implements ModelHost {
     );
   }
 
-  /**
-   * One download per URL, shared by every placement and kept for the session.
-   *
-   * A failed download is forgotten, so a file that was unreachable once is tried
-   * again when the next placement asks for it.
-   */
+  /** One download per URL, kept for the session. A failure is forgotten and retried. */
   #load(url: string): Promise<Loaded> {
     let pending = this.#files.get(url);
     if (!pending) {
-      /*
-       * A built-in is measured by the same code that measures a downloaded
-       * file, rather than declaring its own size. Two sources of truth for how
-       * tall a thing is means one of them is eventually wrong, and it is always
-       * the one nobody re-derived after moving a mesh half a metre.
-       */
+      // Measured by the same code that measures a downloaded file: two sources
+      // of truth for a height means one of them is eventually wrong.
       const arriving = isBuiltin(url)
         ? builtinScene(url)
         : this.#loader.loadAsync(url).then((gltf) => gltf.scene);
@@ -499,24 +437,14 @@ export class ThreeModelHost implements ModelHost {
   }
 
   /**
-   * How much bigger than life a placement has to be drawn to stay findable.
-   *
-   * One, almost always: at any zoom where the model covers more than its floor
-   * this returns exactly one and the size on the screen is the true one. It
-   * only departs from the truth when the alternative is drawing nothing a
-   * person can see, and it departs by the least that fixes that.
-   *
-   * The height is used rather than the longest side, because height is what a
-   * tilted view reads and what the eye measures a building by.
+   * How much bigger than life a placement is drawn to stay findable: one, unless
+   * the alternative is drawing nothing anyone can see. Height rather than the
+   * longest side, because height is what a tilted view reads.
    */
   /**
-   * How many pixels a metre at the scene's origin is worth this frame.
-   *
-   * Measured through the matrix rather than derived from the zoom, so it comes
-   * out right under pitch and under terrain without either being special-cased:
-   * a metre of height at the map centre is projected, and the answer is however
-   * far up the screen it went. `w` is kept and divided by, because a perspective
-   * matrix without its divide is not a screen position.
+   * Pixels per metre at the scene origin this frame. Measured through the matrix
+   * rather than from the zoom, so pitch and terrain need no special case, and
+   * divided by `w`, because a perspective matrix without its divide is not a screen position.
    */
   #pixelsPerMetre(map: HostMap): number {
     const canvas = map.getCanvas();
@@ -571,12 +499,8 @@ export class ThreeModelHost implements ModelHost {
   /* ---------------------------------------------------------- light */
 
   /**
-   * The map's light, on the scene.
-   *
-   * The map states a light as a colour, an intensity from 0 to 1, and where it
-   * comes from as a bearing and an angle off the vertical. The sun here is set
-   * the same way, and the sky light is dimmed with it, so Night in the scene
-   * panel darkens the buildings and the models together.
+   * The map's light, on the scene: same colour, intensity and bearing, with the
+   * sky light dimmed alongside, so Night darkens buildings and models together.
    */
   light(light: Light | null): void {
     const chosen = light ?? DEFAULT_LIGHT;
@@ -585,13 +509,8 @@ export class ThreeModelHost implements ModelHost {
     const p = (polar * Math.PI) / 180;
     // Towards the light, in a frame with x east, y up and z south.
     this.#sun.position.set(Math.sin(a) * Math.sin(p), Math.cos(p), -Math.cos(a) * Math.sin(p)).multiplyScalar(1000);
-    /*
-     * A directional light points from its position at its target, and the
-     * default target sits at the origin — which is also where the scene is
-     * re-anchored every frame, so this is already right. It is stated because
-     * a shadow camera is built around this axis, and a light whose target was
-     * never added to the scene casts shadows from a stale matrix.
-     */
+    // Stated rather than left at the default: the shadow camera is built around
+    // this axis, and a target never added to the scene casts from a stale matrix.
     this.#sun.target.position.set(0, 0, 0);
     this.#sun.target.updateMatrixWorld();
     // A sun below the horizon casts no shadow; leaving it on would throw one
@@ -609,21 +528,11 @@ export class ThreeModelHost implements ModelHost {
   /* ---------------------------------------------------------- picking */
 
   /**
-   * Which model is under a point on the canvas, if any.
-   *
-   * Two passes. The box test is a cheap reject that runs over every placement;
-   * the triangle test runs only on the handful the ray actually crossed, and
-   * decides. `precise` no longer means "test the triangles" — that is now
-   * always done — but "test all of the candidates rather than the nearest few",
-   * which is what a click deserves and a pointer at frame rate does not.
-   *
-   * The box test used to *be* the answer for a hover, and it was the wrong one.
-   * A `Box3` is axis aligned in world space, so the box around a rotated model
-   * is bigger than the model — up to half again on the diagonal — and a model
-   * held at a minimum pixel size at low zoom is scaled up, taking its box with
-   * it. The symptom was a tooltip naming an airliner that was nowhere near the
-   * pointer, and it got much worse when models started following a live feed,
-   * because then they rotate on every frame.
+   * Which model is under a point. Boxes reject cheaply, triangles decide;
+   * `precise` tests every candidate rather than the nearest few, which is what a
+   * click deserves and a pointer at frame rate does not. Boxes alone are not an
+   * answer: a `Box3` is axis aligned, so a rotated model's box is half again too
+   * big on the diagonal, and hovering named an airliner nowhere near the pointer.
    */
   pick(x: number, y: number, precise = false): string | null {
     const map = this.#map;
@@ -633,12 +542,8 @@ export class ThreeModelHost implements ModelHost {
     const height = canvas.clientHeight || canvas.height;
     if (!width || !height) return null;
 
-    /*
-     * A screen point is taken back into the scene through the inverse of the
-     * whole scene-to-clip matrix, at the near plane and at the far plane, and
-     * the ray runs between them. Nothing about a perspective camera's position
-     * is assumed; only the matrix is.
-     */
+    // Back through the inverse of the whole matrix, at the near and far planes.
+    // Nothing about a camera position is assumed; only the matrix is.
     const nx = (x / width) * 2 - 1;
     const ny = -(y / height) * 2 + 1;
     const inverse = this.#inverse;
@@ -661,15 +566,8 @@ export class ThreeModelHost implements ModelHost {
     if (candidates.length === 0) return null;
     candidates.sort((a, b) => a.distance - b.distance);
 
-    /*
-     * Then the triangles, nearest box first, stopping at the first real hit.
-     *
-     * Nearest first is what makes the cap safe: a box further away cannot
-     * contain a nearer surface, so testing them in order means the first hit is
-     * the right answer and the rest need not be tested at all. The cap only
-     * bites where many boxes overlap the same ray, and there the nearest few
-     * are the ones a person could plausibly have been aiming at.
-     */
+    // Triangles, nearest box first, stopping at the first hit: a further box
+    // cannot hold a nearer surface, which is what makes the cap safe.
     const limit = precise ? candidates.length : Math.min(candidates.length, HOVER_TESTS);
     for (let i = 0; i < limit; i++) {
       const entry = candidates[i]!.entry;

@@ -1,19 +1,9 @@
 /**
  * Models the application builds rather than downloads.
  *
- * The catalogue used to be somebody's renderer test assets: a fox, and a lorry
- * with the vendor's logo painted down the side. They load, which is all they
- * were ever meant to prove, and they are the wrong objects — placing forty of
- * them puts forty copies of another company's branding on your map, and none of
- * them is a thing anyone surveys.
- *
- * These are. Each one is built from primitives at its real size in metres, so
- * a turbine is eighty metres to the hub because that is what a turbine is, and
- * a scale of 1 is already right. Nothing is fetched, nothing can go stale, and
- * there is no texture to carry anyone's mark.
- *
- * They are deliberately plain. A model on a map is read at fifty metres on a
- * tilted view, where a silhouette and a size are everything and a bevel is
+ * Primitives at real sizes in metres, so a scale of 1 is already right: nothing
+ * is fetched, nothing goes stale, and no texture carries anyone else's mark.
+ * Deliberately plain — at map zoom a silhouette is everything and a bevel is
  * nothing. Bring a real file when you need a real building.
  */
 
@@ -37,24 +27,11 @@ const paint = (color: number, rough = 0.75) =>
   new MeshStandardMaterial({ color, roughness: rough, metalness: 0.05 });
 
 /**
- * Turn a body that was modelled nose-first along −z to face +z.
- *
- * glTF puts a model's front on +z, and `yawOf` in the core is written to that
- * convention: a heading of zero turns the mesh's +z to north. Every body in
- * this file was drawn the other way round — nose at −z, which is what you get
- * if you sketch a side elevation with the nose on the left — so every one of
- * them flew, drove and sailed backwards. It was invisible on a circuit, where
- * a shape going round a ring reads as going round a ring whichever end leads,
- * and unmissable the moment an aeroplane was pointed at a runway.
- *
- * They are turned once, here, rather than by renumbering every coordinate.
- * Renumbering means negating a z on every part and then negating the rotations
- * that go with them — six models, forty parts, and one sign wrong is a wing
- * mounted backwards that nobody notices for a month. This is one rotation with
- * one test on it.
- *
- * The turn is a half turn about the vertical, which also negates x. Every body
- * here is symmetric about its own centreline, so that is free.
+ * Turn a body modelled nose-first along −z to face +z, which is where glTF and
+ * `yawOf` put a front. Everything here was drawn nose-left, so everything moved
+ * backwards. One rotation with one test on it, rather than renumbering forty
+ * parts and getting one sign wrong. Every body is symmetric, so the half turn
+ * negating x is free.
  */
 function facingForward(built: Group): Group {
   const outer = new Group();
@@ -71,10 +48,8 @@ const ORANGE = 0xf07a1f;
 const GREEN = 0x4e7a44;
 
 /**
- * A survey marker: a pole you can see from a distance with a head you can aim at.
- *
- * Three metres, because that is tall enough to stand above a parked car and
- * short enough not to lie about the scale of what it marks.
+ * A survey marker: a pole with a head to aim at. Three metres — above a parked
+ * car, and not so tall it lies about the scale of what it marks.
  */
 function marker(): Group {
   const group = new Group();
@@ -87,11 +62,8 @@ function marker(): Group {
 }
 
 /**
- * A wind turbine, at the size they are actually built.
- *
- * Eighty metres to the hub and a forty metre blade. This is the one that shows
- * what placing a model from a layer is for: a wind farm is a point layer with a
- * bearing column, and this is what that column means.
+ * A wind turbine at the size they are built: 80 m to the hub, 40 m blade. A wind
+ * farm is a point layer with a bearing column, and this is what that column means.
  */
 function turbine(): Group {
   const group = new Group();
@@ -165,10 +137,8 @@ function cone(): Group {
 }
 
 /**
- * A massing block: ten by ten by twenty.
- *
- * For a proposal that has a footprint and a height and no design yet, which is
- * most of them. It is what a shadow study needs and what a render does not.
+ * A massing block, 10 × 10 × 20: a proposal with a footprint and a height and no
+ * design yet. What a shadow study needs and a render does not.
  */
 function block(): Group {
   const group = new Group();
@@ -193,35 +163,18 @@ function tree(): Group {
 }
 
 /**
- * An airliner, nose along the model's own -z.
- *
- * -z is north in the scene's frame, so a heading of zero points it up the map
- * and a track that turns it to face the way it is going turns it correctly.
- * A file that was authored facing some other way is what the heading offset on
- * a track is for; nothing built here needs one.
- *
- * Thirty-eight metres, which is a narrow-body. At cruise it is a speck, which
- * is what the on-screen size floor is for: a plane you have to zoom to street
- * level to see is not a plane on a map.
+ * An airliner, nose along −z, which is north in the scene's frame: a heading of
+ * zero points it up the map. A file authored facing elsewhere is what the
+ * heading offset is for. Thirty-eight metres, and a speck at cruise, which is
+ * what the on-screen size floor exists for.
  */
 /**
- * A narrowbody airliner, about the size of an A320.
+ * A narrowbody airliner, an A320 to within a metre.
  *
- * The first one was a tube with a plank through it, and it read as a tube with
- * a plank through it. What makes an aeroplane recognisable from above at map
- * zoom, in order: the sweep of the wing, the wing being further back than the
- * middle, the two engines slung under and ahead of it, and the fin. The
- * fuselage is the least of it — nobody identifies an aircraft by its tube.
- *
- * So the wings are swept, tapered and given winglets, the engines hang on
- * pylons ahead of the leading edge where they actually are, and the tailplane
- * is swept too. Thirty-seven metres long, thirty-five across, which is an A320
- * to within a metre.
- *
- * Everything is still primitives. A swept wing is a box turned about the
- * vertical and squeezed along its span; a taper is a second, smaller box
- * further out. At the size an aircraft is drawn on a map, an aerofoil section
- * is geometry spent on something no camera will ever resolve.
+ * What makes one recognisable from above, in order: the sweep of the wing, the
+ * wing sitting behind the middle, the engines ahead of the leading edge, the
+ * fin. Nobody identifies an aircraft by its fuselage. Still all primitives — an
+ * aerofoil section is geometry no camera at map zoom will resolve.
  */
 function aircraft(): Group {
   const group = new Group();
@@ -241,11 +194,8 @@ function aircraft(): Group {
   tailCone.position.set(0, 4.35, 16.2);
   group.add(fuselage, nose, tailCone);
 
-  /*
-   * Flight deck windows and a cabin band. Two thin dark boxes, and the only
-   * reason they are here: without something breaking the white, a fuselage at
-   * a distance is a chalk mark rather than an aircraft.
-   */
+  // Windows and a cabin band: without something breaking the white, a fuselage
+  // at a distance is a chalk mark rather than an aircraft.
   const windscreen = new Mesh(new BoxGeometry(2.1, 0.7, 1.5), paint(0x22262c, 0.15));
   windscreen.position.set(0, 4.55, -13.2);
   const band = new Mesh(new BoxGeometry(3.75, 0.42, 21), paint(0x39404a, 0.3));
@@ -335,11 +285,9 @@ function car(): Group {
 }
 
 /**
- * A delivery van. The shape most of a city fleet actually is.
- *
- * Five and a half metres, box body, flat front. Told apart from the car at a
- * hundred metres by height and by the fact that its roof runs the whole length,
- * which is the only distinction that survives at map zoom.
+ * A delivery van, which is most of a city fleet: 5.5 m, box body, flat front.
+ * Height and a roof running the whole length are what tell it from the car at
+ * a hundred metres, and they are the only distinctions that survive map zoom.
  */
 function van(): Group {
   const group = new Group();
@@ -366,11 +314,8 @@ function van(): Group {
 }
 
 /**
- * An articulated lorry: a cab and a trailer, drawn as one rigid thing.
- *
- * The trailer does not hinge. A real one does, and following the hinge means
- * knowing where the cab was a moment ago as well as where it is — a second
- * history, for an articulation nobody can see from above at map zoom.
+ * An articulated lorry, rigid. Hinging the trailer would mean keeping a second
+ * history of where the cab was, for something nobody sees from above.
  */
 function truck(): Group {
   const group = new Group();
@@ -398,24 +343,16 @@ function truck(): Group {
 }
 
 /**
- * A small vessel. For a feed of harbour traffic or a river patrol.
- *
- * The hull is a box with a raked bow rather than a curve: at the zoom a vessel
- * is looked at on a map, the thing that reads is the long axis and the wake it
- * is pointing along, and a hull form costs geometry to say something nobody can
- * see.
+ * A small vessel, for harbour traffic. A box with a raked bow rather than a hull
+ * form: what reads at map zoom is the long axis and where it points.
  */
 function boat(): Group {
   const group = new Group();
   const hull = new Mesh(new BoxGeometry(3.4, 1.5, 11), paint(WHITE, 0.4));
   hull.position.y = 0.75;
   const bow = new Mesh(new CylinderGeometry(0.1, 1.7, 3.4, 4), paint(WHITE, 0.4));
-  /*
-   * Laid along -Z and then squashed, so the taper is in plan and not in
-   * section. A cone of radius 1.7 lying on its side is 3.4 metres tall, which
-   * put the bow a metre under the waterline and the vessel's stated height a
-   * metre out — the size test caught it before anything was ever drawn.
-   */
+  // Laid along -Z then squashed, so the taper is in plan. Upright, a cone of
+  // radius 1.7 is 3.4 m tall and put the bow under the waterline.
   bow.rotation.x = -Math.PI / 2;
   bow.scale.set(1, 1, 0.42);
   bow.position.set(0, 0.75, -6.4);
@@ -428,12 +365,8 @@ function boat(): Group {
 }
 
 /**
- * A quadcopter, at the size a survey drone actually is.
- *
- * Under a metre across, which makes it the one built-in that is genuinely too
- * small to see at map zoom without `minPixels` doing its job — which is a
- * useful thing to have in the catalogue, because that is the setting people do
- * not believe they need until something is invisible.
+ * A quadcopter at the size a survey drone is: under a metre, and so the one
+ * built-in that is invisible at map zoom unless `minPixels` is doing its job.
  */
 function drone(): Group {
   const group = new Group();
@@ -463,12 +396,8 @@ function drone(): Group {
 }
 
 /**
- * A bird, wings out, for a tracked-animal feed.
- *
- * A metre and a half across, which is a large gull or a small raptor. The wings
- * are flat plates swept back rather than aerofoils: what a moving dot on a map
- * needs is a silhouette with an obvious front, and this is the smallest amount
- * of geometry that has one.
+ * A bird for a tracked-animal feed, 1.5 m across. Flat swept plates rather than
+ * aerofoils: the smallest geometry that still has an obvious front.
  */
 function bird(): Group {
   const group = new Group();
@@ -529,11 +458,8 @@ export const BUILTIN_HEIGHTS: Record<string, number> = {
 };
 
 /**
- * Build one, or nothing if the name is not known.
- *
- * A fresh object each time rather than a shared one: the host clones a loaded
- * template per placement, and handing it the same instance twice would put one
- * mesh in two places, which three.js resolves by drawing it in the second.
+ * Build one, or nothing if the name is unknown. A fresh object each time: one
+ * mesh in two places is drawn by three.js in the second of them.
  */
 export function buildBuiltin(url: string): Group | null {
   const name = url.slice(BUILTIN_PREFIX.length);

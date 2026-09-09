@@ -1,9 +1,6 @@
 import type { EngineLayer, Light, Model3D } from "@alidade/core";
 
-/**
- * The slice of the MapLibre map this adapter uses. Declaring it means the tests can
- * pass a recorder instead of a real map, and the core never needs a browser.
- */
+/** The slice of MapLibre this adapter uses. Declared so a test can pass a recorder. */
 export interface Renderer {
   addSource(id: string, source: unknown): void;
   removeSource(id: string): void;
@@ -26,30 +23,16 @@ export interface Renderer {
   setSky?(value: unknown): void;
   setProjection?(value: unknown): void;
   getLayer(id: string): unknown;
-  /**
-   * Optional so an old fake in a test still satisfies the interface, but every
-   * real engine has it, and without it the adapter cannot tell an operation that
-   * would fail from one that would work.
-   */
+  /** Optional for older fakes. Without it the adapter cannot check an op would work. */
   getSource?(id: string): unknown;
 }
 
 /**
- * Something that draws 3D models into the map.
- *
- * The adapter knows that models exist and where the scene sits in the draw
- * order; it does not know how to fetch a glTF or what a scene graph is. That is
- * behind this interface, and behind it in another package, so this one stays
- * testable in Node and three.js is a dependency of exactly the folder that
- * draws with it. A test can pass a recorder here the same way it passes one as
- * the renderer.
+ * Draws the 3D models. Behind an interface so three.js stays a dependency of the
+ * one package that needs it and this one stays testable in Node.
  */
 export interface ModelHost {
-  /**
-   * The custom layer the engine is asked to add, built fresh each time the
-   * scene layer goes up, because the engine calls `onAdd` on whatever object it
-   * was given and a basemap swap gives it a new one.
-   */
+  /** Built fresh each time: the engine calls `onAdd` on the object it was given. */
   layer(id: string): Record<string, unknown>;
   add(model: Model3D): void;
   update(model: Model3D): void;

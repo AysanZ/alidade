@@ -8,14 +8,8 @@ export type Warn = (message: string) => void;
 const NO_HOST = "This map has no 3D host, so models cannot be drawn.";
 
 /**
- * Operations in, engine calls out.
- *
- * Every operation is run on its own. A batch used to be one `switch` inside one
- * loop, so a single failure — a source that was already there after a style
- * swap, a layer whose data had gone, a paint key the engine did not know — threw
- * out of the loop and silently dropped every remaining operation. The symptom
- * was importing a layer and watching nothing appear, with no error anywhere,
- * because the `layer.add` was the operation after the one that threw.
+ * Operations in, engine calls out. Each runs on its own: one failure used to
+ * throw out of the loop and drop every operation after it, silently.
  */
 export function apply(renderer: Renderer, ops: Op[], warn?: Warn, host?: ModelHost): void {
   for (const op of ops) {
@@ -59,13 +53,8 @@ function run(renderer: Renderer, op: Op, warn?: Warn, host?: ModelHost): void {
         renderer.addLayer(toSpec(op.spec), before);
         break;
       }
-      /*
-       * A custom layer is code, not a description, and the engine wants the
-       * code. It comes from the host, which is the one thing that knows what
-       * the scene looks like. The engine ignores `layout` on a custom layer at
-       * construction and honours it afterwards, so a scene that should start
-       * hidden is hidden in a second call.
-       */
+      // A custom layer is code rather than a description, so it comes from the
+      // host. Layout is ignored at construction, hence the second call.
       if (!host) {
         warn?.(NO_HOST);
         break;
@@ -124,12 +113,8 @@ function run(renderer: Renderer, op: Op, warn?: Warn, host?: ModelHost): void {
 }
 
 /**
- * Point a raster source at different tiles without taking it down.
- *
- * `setTiles` is MapLibre's own method for this and it is the whole reason the
- * operation exists: the engine keeps the tiles it already has on screen until
- * the replacements have decoded, so changing which image is drawn crossfades
- * rather than blinking through empty.
+ * New tiles without taking the source down. The engine holds the old ones until
+ * the replacements decode, so changing image crossfades rather than blinks.
  */
 function setTiles(renderer: Renderer, id: string, tiles: string[], warn?: Warn): void {
   const source = renderer.getSource?.(id) as { setTiles?: (t: string[]) => void } | undefined;
@@ -149,44 +134,22 @@ function setData(renderer: Renderer, id: string, data: unknown, warn?: Warn): vo
   source.setData(data);
 }
 
-/**
- * A clear day at altitude.
- *
- * `atmosphere-blend` is what draws the halo around a globe, faded out by the
- * zoom you stop being able to see one from. Without it the sky is on, the
- * projection is a sphere, and the sphere sits in a flat void looking like a bug
- * rather than a planet.
- */
+/** A clear day at altitude. Without the halo a globe sits in a flat void. */
 const SKY = {
-  /*
-   * Space, then the edge of the atmosphere, then the air you are standing in.
-   *
-   * `sky-color` is what fills the frame around a globe, so it is the colour of
-   * space rather than of a sky: near black, but blue rather than neutral,
-   * because a true #000 reads as a hole in the page and every photograph of the
-   * earth from orbit has some blue in the dark. The horizon is the thin bright
-   * band the atmosphere makes when you look along it, which is what tells the
-   * eye the sphere has air on it.
-   */
+  // Space, its edge, then the air: near-black but blue, because #000 reads as
+  // a hole rather than as space.
   "sky-color": "#070b18",
   "horizon-color": "#3f6d9e",
   "fog-color": "#9fb8d4",
   "sky-horizon-blend": 0.75,
   "horizon-fog-blend": 0.55,
   "fog-ground-blend": 0.1,
-  /*
-   * The halo, faded out by the zoom you stop being able to see a globe from.
-   * Without it the sky is on, the projection is a sphere, and the sphere sits
-   * in a flat void looking like a bug rather than a planet.
-   */
+  // The halo, faded out by the zoom you stop seeing a globe from.
   "atmosphere-blend": ["interpolate", ["linear"], ["zoom"], 0, 1, 5, 1, 7, 0],
 };
 
 function applyEnvironment(renderer: Renderer, key: string, value: unknown, warn?: Warn): void {
-  /**
-   * Optional methods were being called with `?.`, which meant an engine too old to
-   * support globe or sky produced no error, no log and no globe. Say it out loud.
-   */
+  // Said out loud: `?.` on an old engine gave no globe, no error and no log.
   const call = (method: keyof Renderer, argument: unknown, needs: string) => {
     const fn = renderer[method];
     if (typeof fn !== "function") {

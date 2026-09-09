@@ -3,19 +3,20 @@
 Why each part of Alidade is built the way it is. The README is the short version;
 this is the argument.
 
-An open-source Web-GIS platform. PostGIS vector tiles, OGC services, full symbology,
-3D models on the terrain, and a real-time asset layer.
+An open-source Web-GIS platform. PostGIS vector tiles, satellite imagery, full
+symbology, 3D models on the terrain, and a real-time asset layer.
 
-This repository is at **phase 3**. The map is described by a single project object.
+The map is described by a single project object.
 The core diffs two versions of it and emits a list of operations; the adapter applies
 those operations to MapLibre. Editing the project changes the map, and swapping the
 basemap does not destroy the layers.
 
 Working now: a table of contents grouped by slot, a basemap gallery on open tiles,
 2D, 2.5D and 3D views, three projections including a real globe, terrain and
-hillshade from open elevation tiles, glTF models placed on the map and standing on
-the terrain, a graticule, UTM and metric reference grids, an overview map, drawing
-and geodesic measurement with buffers, camera bookmarks, a scale bar in three unit
+hillshade from open elevation tiles, a GeoTIFF catalogue mosaicked on demand, glTF
+models placed on the map and standing on the terrain, identify and an attribute
+table, a graticule, UTM and metric reference grids, an overview map, drawing and
+geodesic measurement with buffers, camera bookmarks, a scale bar in three unit
 systems, a coordinate readout in decimal degrees, DMS or UTM, and a live asset
 layer fed over a WebSocket.
 
@@ -53,6 +54,39 @@ three points and a line will not go below two.
 None of that live feedback is in the document. The rubber band is a function of
 where the mouse is, and the mouse is not part of the map: it is drawn as an
 overlay above the canvas, so it costs no operations and cannot be undone into.
+
+### Imagery
+
+A folder of GeoTIFFs is not a layer, and the interesting question about it is never
+"show me the file" — it is "of the six files over this ground, which one am I
+looking at, and why that one".
+
+So each file is converted once to a Cloud-Optimised GeoTIFF in web mercator and
+indexed by its **real footprint**, which is a rotated quadrilateral with nodata in
+the corners and not a bounding box; a box claims ground the file has no pixels for,
+and a registry that stores one will report covering a view it does not cover. Tiles
+are then mosaicked on demand under a rule the user picks — newest, closest to a
+date, sharpest, best covering, or one locked image — with band selection, the
+stretch and band maths as query parameters rather than as decisions frozen at
+import. `(b8-b4)/(b8+b4)` is NDVI and costs nothing on disk; precomputing an index
+raster per index per date is how a folder of four files becomes a folder of forty.
+
+The catalogue is not in the document. What is saved is the rule and the rendering,
+the same way the live layer saves the address of its feed and not the positions that
+arrived from it: the settings are the map, and what happens to be in the registry is
+not. A project reopened next month shows what is there then rather than a frozen
+list of filenames.
+
+An image with no date is drawn, listed and searched like any other and sorts last,
+because STAC allows a null `datetime` and a great many exported GeoTIFFs have no
+acquisition tag at all. Where a date did come from is recorded beside it, so one
+somebody typed is never mistaken for one the file stated — and the file's
+modification time is never used, because an upload date presented as a capture date
+is a wrong map that looks like a right one.
+
+The whole argument, including the two things that were tried and reverted, is in
+[imagery](imagery.md); the reading behind it is in
+[imagery prior art](imagery-prior-art.md).
 
 ### 3D buildings
 
@@ -310,11 +344,20 @@ nothing on the screen changes. `Sphere` is `vertical-perspective`: round at ever
 zoom. Choosing either of the round ones from close in takes the camera out to
 where the choice is visible.
 
-Data goes in three ways. Upload a GeoJSON, zipped Shapefile, GeoPackage, KML or GPX
-and it is reprojected by ogr2ogr, written to PostGIS and served back as vector tiles
-in the same request. Paste a link and GDAL reads it over HTTP without it ever
-touching your disk. Or point Alidade at a WMS and pick a layer, style and format
-from what the server advertises in GetCapabilities.
+Vector data goes in three ways. Upload a GeoJSON, zipped Shapefile, GeoPackage, KML
+or GPX and it is reprojected by ogr2ogr, written to PostGIS and served back as vector
+tiles in the same request. Paste a link and GDAL reads it over HTTP without it ever
+touching your disk. Or point Alidade at a WMS and pick a layer, style and format from
+what the server advertises in GetCapabilities. Imagery goes in its own way, because a
+GeoTIFF is a file rather than a table: it is warped once and kept on a volume, and the
+registry holds what it is of.
+
+Once it is in, it can be asked questions. Clicking a feature says what it is without
+making you find it in a table of nine thousand rows first — and then offers to do
+exactly that, for when you do want the table, which pages, searches, sorts, hides
+columns and highlights on the map whatever you select in it. Clicking the imagery
+answers with the pixel values under the cursor, from whichever image the rule put on
+top.
 
 Nothing here needs an API key, and that is a constraint rather than a boast: a
 demo that dies when someone's free tier changes is worse than a demo with fewer
@@ -346,12 +389,13 @@ that has nothing in it look like it already has data.
 |---|---|
 | `data/init/` | Schema and layer registry, run once on first start |
 | `data/seed.sh` | ogr2ogr loader, for data you would rather not upload |
-| `services/api/` | FastAPI: tiles today, ingest and features next |
+| `services/api/` | FastAPI: ingest, vector tiles, imagery, WMS, the live feed |
 | `apps/studio/` | React client |
 | `deploy/` | Compose stack and Nginx |
 | `packages/core/` | Project model, reconciler, symbology, filter compiler |
 | `packages/maplibre/` | The only folder that knows MapLibre exists |
 | `packages/three/` | The only folder that knows three.js exists: the 3D model host |
+| `docs/*.html` | Interface mockups the panels were drawn from, kept for reference |
 
 `packages/core` is internally named **layersync**. It is a folder in this repository,
 not a published package.
