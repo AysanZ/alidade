@@ -51,8 +51,16 @@ services:
 
   nginx:
     image: nginx:1.27-alpine
+    environment:
+      # The conf is a template with ${ALIDADE_*} in it, so it goes to templates/
+      # and not to conf.d: mounted straight into conf.d nothing substitutes them
+      # and nginx refuses to start.
+      NGINX_ENVSUBST_FILTER: "^ALIDADE_"
+      ALIDADE_WRITE_TOKEN: ${WRITE_TOKEN-}
+      ALIDADE_RASTER_BODY: ${RASTER_BODY:-512m}
+      ALIDADE_UPLOAD_BODY: ${UPLOAD_BODY:-80m}
     volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/default.conf:/etc/nginx/templates/default.conf.template:ro
       - ../apps/studio/dist:/usr/share/nginx/html:ro
     depends_on:
       - api

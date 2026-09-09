@@ -27,6 +27,13 @@ FROM nginx:1.27-alpine
 COPY --from=build /repo/apps/studio/dist /usr/share/nginx/html
 # A template, not conf.d: the entrypoint runs envsubst over it at startup.
 COPY deploy/nginx/default.conf /etc/nginx/templates/default.conf.template
+# Defaults for every variable the template substitutes. envsubst replaces an
+# unset variable with nothing, so a compose file that predates one of these
+# leaves nginx reading `client_max_body_size ;` and the container will not
+# start — a stale file on the server taking the whole site down with it.
+ENV ALIDADE_WRITE_TOKEN="" \
+    ALIDADE_RASTER_BODY=512m \
+    ALIDADE_UPLOAD_BODY=80m
 RUN mkdir -p /var/cache/nginx/tiles
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

@@ -244,6 +244,13 @@ docker compose --env-file .env -f docker-compose.prod.yml up -d
 Images stay in the registry under their commit SHA, and a week of them stay on the
 server.
 
+**The workflow deploys images and nothing else.** `docker-compose.prod.yml`, the `.env`
+and `init/` were put there by hand and stay as you left them, so a commit that adds an
+environment variable is a commit that needs one `scp` as well. The image carries
+defaults for everything the nginx template substitutes, which turns that mistake from an
+outage into a setting that quietly stayed at its default — but the `scp` is still the
+thing that makes it take effect.
+
 ## 9 · Maintenance
 
 ```cron
@@ -280,6 +287,7 @@ Weekly rather than nightly, because it is large and it changes rarely.
 | Deleting one particular layer returns 403 | It is in `PROTECTED_LAYERS` |
 | A GeoTIFF upload dies at the same size every time | `client_max_body_size`, `MAX_RASTER_MB`, or the disk. The first is refused before the API sees it, so look in the web container's log rather than the API's |
 | Imagery draws nothing and the tiles are 503 | The API image was built without `rio-tiler` |
+| `web` restarts, `nginx: [emerg] ... invalid value` in its log | A variable the nginx template substitutes is not in the container's environment, so envsubst left a blank. Copy the current `docker-compose.prod.yml` up: the deploy workflow pulls images and never touches that file |
 | Postgres restarting | `mem_limit` too tight, or `init/` was empty when the volume was created. `down -v` re-runs it and destroys the data |
 
 ## 11 · What it costs
