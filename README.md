@@ -10,6 +10,7 @@ and a real-time asset layer. No API keys anywhere.
 [![licence](https://img.shields.io/badge/licence-Apache--2.0-blue.svg)](LICENSE)
 [![no api keys](https://img.shields.io/badge/API%20keys-none-brightgreen.svg)](#no-api-keys)
 
+**[▶ Live demo](https://alidade.aysanz.dev)** — no signup, no API key, real data.
 <img src="docs/images/hero.jpg" alt="Terrain from SRTM under a night sky, with the scene pane open" width="900">
 
 </div>
