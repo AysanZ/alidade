@@ -79,7 +79,7 @@ export function Catalogue({ project, edit, onAdded, onFlyTo, onImport, compact,
           one, or bring in your own.
         </p>
       )}
-      <ul className="picker">
+      <ul className={compact ? "picker inset" : "picker"}>
         {layers.map((layer) => {
           const on = alreadyAdded(project, layer);
           return (
@@ -101,7 +101,7 @@ export function Catalogue({ project, edit, onAdded, onFlyTo, onImport, compact,
         })}
       </ul>
       {onImport && (
-        <div className="row buttons">
+        <div className={compact ? "row buttons inset" : "row buttons"}>
           <button className="primary" onClick={onImport}>
             Add data
           </button>
