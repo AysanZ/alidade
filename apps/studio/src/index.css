@@ -640,22 +640,50 @@ input, select, textarea { font: inherit; color: inherit; }
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 6px 9px;
+  padding: 7px 10px;
   border-bottom: 1px solid var(--line-soft);
   cursor: pointer;
   font-size: 11px;
 }
+.picker li:last-child { border-bottom: none; }
+/*
+ * In the table of contents this list is one item among several, so it takes the
+ * pane's own inset. Flush to the edges it was the only thing in the panel that
+ * did not line up with anything above it.
+ */
+.picker.inset { margin: 0 11px; }
+.row.buttons.inset { padding: 8px 11px 2px; }
 .picker li:hover { background: var(--raise); }
 .picker li.on { background: rgba(76, 141, 255, 0.13); }
-.picker b { font-weight: 500; color: var(--txt-2); }
+/*
+ * The title gives up space last. It used to be the first thing to collapse —
+ * a layer called Airports read as "Airp…" beside a full line of geometry type,
+ * feature count and CRS, which is the wrong way round: the name is what
+ * somebody is looking for and the rest is what they read once they found it.
+ */
+.picker b {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--txt-2);
+}
 .picker li.on b { color: var(--txt); }
 .picker span {
+  flex: 1 1 auto;
+  min-width: 0;
   margin-inline-start: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: end;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 9.5px;
   color: var(--txt-3);
 }
-.picker em { font-style: normal; font-size: 9px; color: var(--accent); }
+.picker em { flex: none; font-style: normal; font-size: 9px; color: var(--accent); }
 .mfoot { display: flex; justify-content: flex-end; padding-top: 12px; }
 
 .warn {
