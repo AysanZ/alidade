@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     db_pool_max: int = 10
     cors_origins: str = "http://localhost:5173"
     max_upload_mb: int = 200
+    # Layers a delete request will not touch. On a public instance this is what
+    # keeps the map you curated from being cleared by the first visitor who
+    # finds the button.
+    protected_layers: str = ""
     # Where uploaded 3D models are kept. A volume in the compose stack.
     models_dir: str = "./models"
     # Where converted imagery is kept. A volume too: these are files, not rows,
@@ -59,6 +63,10 @@ class Settings(BaseSettings):
             f"dbname={self.postgres_db} user={self.postgres_user} "
             f"password={self.postgres_password}"
         )
+
+    @property
+    def protected(self) -> set[str]:
+        return {p.strip() for p in self.protected_layers.split(",") if p.strip()}
 
     @property
     def origins(self) -> list[str]:

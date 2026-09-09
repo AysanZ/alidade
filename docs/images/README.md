@@ -8,11 +8,11 @@ folder.
 | `architecture.svg` | How the pieces fit: studio, core, adapters, API. Hand-written SVG, edited as text |
 | `imagery.svg` | How an imagery layer chooses what to draw: the catalogue, the footprints over the view, the rule, the tile |
 | `hero.jpg` | Terrain from SRTM under a night sky, scene pane open |
-| `studio.png` | A fresh install: the table of contents with nothing in it, and the suggestions that say what to do about that |
+| `layers.png` | Two layers with symbology and a legend, over Natural Earth data |
+| `attributes.png` | Identify, and the attribute table finding the same feature |
 | `basemaps.jpg` | The basemap gallery |
 | `globe.jpg` | The globe projection, zoomed out |
 | `buildings.png` | OpenStreetMap footprints raised to their real height |
-| `models.png` | The model catalogue, and a van placed on a street |
 | `approach.png` | An airliner on final, banking into the turn |
 | `live.png` | The live asset layer, with the feed's own panel |
 

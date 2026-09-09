@@ -15,8 +15,12 @@ services:
     image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER in .env}/alidade-web:${TAG:-latest}
     restart: unless-stopped
     environment:
-      # Writes need this in an X-Alidade-Write header. Reads are open.
-      ALIDADE_WRITE_TOKEN: ${WRITE_TOKEN:?set WRITE_TOKEN in .env}
+      # Writes need this in an X-Alidade-Write header. Empty means every write
+      # is open, which is what a public demo with a nightly reset wants.
+      ALIDADE_WRITE_TOKEN: ${WRITE_TOKEN-}
+      # The body limit on an imagery upload. A 50 GB disk is the real ceiling.
+      ALIDADE_RASTER_BODY: ${RASTER_BODY:-512m}
+      ALIDADE_UPLOAD_BODY: ${UPLOAD_BODY:-80m}
       # Without the filter, envsubst would eat $host and every other nginx var.
       NGINX_ENVSUBST_FILTER: "^ALIDADE_"
     depends_on:
@@ -43,8 +47,9 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:?set CORS_ORIGINS in .env}
       MODELS_DIR: /srv/models
       RASTERS_DIR: /srv/rasters
-      MAX_RASTER_MB: ${MAX_RASTER_MB:-4096}
-      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
+      MAX_RASTER_MB: ${MAX_RASTER_MB:-512}
+      PROTECTED_LAYERS: ${PROTECTED_LAYERS-}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-64}
       LIVE_FLEET_SIZE: ${LIVE_FLEET_SIZE:-60}
       LIVE_CENTRE_LON: ${LIVE_CENTRE_LON:-51.39}
       LIVE_CENTRE_LAT: ${LIVE_CENTRE_LAT:-35.69}

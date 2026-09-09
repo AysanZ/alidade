@@ -172,3 +172,24 @@ async def register(
     layer = await get(layer_id)
     assert layer is not None
     return layer
+
+
+async def remove(layer_id: str) -> str | None:
+    """
+    Forget a layer and drop the table under it, or nothing if there is no such id.
+
+    Both in one transaction: a registry row without its table is a layer the map
+    lists, draws nothing for, and 500s on, and it is not recoverable from the
+    interface because there is nothing left to point at.
+    """
+    async with pool().acquire() as conn:
+        async with conn.transaction():
+            row = await conn.fetchrow("SELECT table_name FROM layers WHERE id = $1", layer_id)
+            if row is None:
+                return None
+            table = check_identifier(row["table_name"])
+            await conn.execute("DELETE FROM layers WHERE id = $1", layer_id)
+            # The table name comes from the registry rather than the request, and
+            # is checked again on the way out of it.
+            await conn.execute(f'DROP TABLE IF EXISTS "{table}"')
+    return table

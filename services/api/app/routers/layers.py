@@ -287,6 +287,22 @@ async def stats(layer_id: str, field: str) -> dict:
     }
 
 
+@router.delete("/{layer_id}")
+async def delete_layer(layer_id: str) -> dict:
+    """
+    Remove a layer and the table under it.
+
+    Protected ids are refused with a 403 rather than quietly ignored: a delete
+    that answers 200 and changes nothing is worse than one that says no.
+    """
+    if layer_id in settings.protected:
+        raise HTTPException(403, f"{layer_id} is protected on this server.")
+    table = await registry.remove(layer_id)
+    if table is None:
+        raise HTTPException(404, f"No layer named {layer_id}.")
+    return {"removed": layer_id, "table": table}
+
+
 # Declared last on purpose: a wildcard above the fixed paths swallows them, and a
 # POST to a path this route matches answers 405 rather than 404.
 @router.get("/{layer_id}")

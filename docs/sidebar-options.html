@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Alidade — sidebar, three ways</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:#050505; --shell:#0A0A0B; --panel:#0E0E10; --raise:#161618; --raise-2:#1D1D20;
+  --line:#252528; --line-soft:#1A1A1C;
+  --txt:#E4E4E6; --txt-2:#9A9AA0; --txt-3:#66666D;
+  --accent:#4C8DFF; --signal:#38D6C0; --warn:#E8B14C; --alert:#F0616B;
+  --sans:"IBM Plex Sans",system-ui,sans-serif;
+  --cond:"IBM Plex Sans Condensed",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,monospace;
+  --ease:cubic-bezier(.22,.8,.26,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#08080a;color:var(--txt);font-family:var(--sans);font-size:12px;line-height:1.45;-webkit-font-smoothing:antialiased;padding:26px}
+button{background:none;border:0;cursor:pointer;color:inherit;font:inherit}
+.cap{font-family:var(--cond);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--txt-3)}
+.mono{font-family:var(--mono)}
+
+h1{font-size:15px;font-weight:600;letter-spacing:.02em;margin-bottom:4px}
+.lede{color:var(--txt-3);font-size:12px;max-width:900px;margin-bottom:22px;line-height:1.6}
+.row{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
+.opt{width:300px;flex:none}
+.opt > h2{font-size:12.5px;font-weight:600;margin-bottom:3px}
+.opt > .why{font-size:10.5px;color:var(--txt-3);line-height:1.55;margin-bottom:10px;min-height:52px}
+.frame{background:var(--panel);border:1px solid var(--line);border-radius:4px;overflow:hidden;height:560px;display:flex;flex-direction:column}
+.verdict{margin-top:9px;font-size:10.5px;line-height:1.55;color:var(--txt-2)}
+.verdict b{color:var(--txt)}
+
+/* shared atoms */
+.ph{height:30px;display:flex;align-items:center;gap:8px;padding-inline:10px;border-bottom:1px solid var(--line);flex:none}
+.ph .cap{color:var(--txt-2)}
+.ph .n{margin-inline-start:auto;font-family:var(--mono);font-size:9px;color:var(--txt-3);background:var(--raise);border-radius:2px;padding:0 4px}
+.body{flex:1;overflow:auto;min-height:0}
+.slot{display:flex;align-items:center;gap:8px;padding:7px 10px 4px}
+.slot i{flex:1;height:1px;background:var(--line);display:block}
+.sw{position:relative;width:22px;height:12px;border-radius:7px;background:#2A2A2E;flex:none}
+.sw.on{background:rgba(76,141,255,.35)}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:8px;height:8px;border-radius:50%;background:#7A7A82;transition:.15s}
+.sw.on::after{background:var(--accent);transform:translateX(10px)}
+.chip{font-family:var(--mono);font-size:9px;color:var(--txt-3);border:1px solid var(--line);border-radius:2px;padding:0 4px}
+
+/* ============ A: dense rows ============ */
+.a .r{display:flex;align-items:center;gap:7px;height:26px;padding-inline:8px;color:var(--txt-2)}
+.a .r:hover{background:var(--raise)}
+.a .r.sel{background:rgba(76,141,255,.13);color:var(--txt);box-shadow:inset 2px 0 0 var(--accent)}
+.a .grip{color:#3A3A40;font-size:9px}
+.a .sym{width:13px;height:13px;border-radius:2px;flex:none}
+.a .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px}
+.a .eye{color:var(--txt-3);font-size:10px}
+.a .r.sel .eye{color:var(--accent)}
+.a .kid{padding-inline-start:22px}
+
+/* ============ B: cards with a swatch strip ============ */
+.b .card{margin:6px 8px;border:1px solid var(--line);border-radius:3px;background:var(--void);overflow:hidden}
+.b .card.sel{border-color:var(--accent);box-shadow:0 0 0 1px rgba(76,141,255,.25)}
+.b .top{display:flex;align-items:center;gap:8px;padding:7px 9px}
+.b .top .nm{flex:1;font-size:11.5px;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.b .strip{display:flex;height:4px}
+.b .strip i{flex:1}
+.b .meta{display:flex;align-items:center;gap:6px;padding:0 9px 8px}
+.b .meta .k{font-family:var(--mono);font-size:9px;color:var(--txt-3)}
+.b .bar{flex:1;height:2px;background:#1e1e22;border-radius:2px;overflow:hidden}
+.b .bar u{display:block;height:100%;background:#3a3a44}
+.b .acts{display:flex;gap:4px;padding:0 9px 8px}
+.b .acts button{height:19px;padding-inline:7px;border:1px solid var(--line);border-radius:2px;color:var(--txt-3);font-size:10px}
+.b .acts button:hover{color:var(--txt);border-color:#3a3a40}
+
+/* ============ C: two-line rows with a rail ============ */
+.c .r{display:grid;grid-template-columns:18px 3px 1fr auto;align-items:center;gap:8px;padding:7px 9px;position:relative}
+.c .r:hover{background:var(--raise)}
+.c .r.sel{background:rgba(56,214,192,.07)}
+.c .rail{width:3px;height:100%;border-radius:2px;background:#2a2a30}
+.c .r.sel .rail{background:var(--signal)}
+.c .sym{width:18px;height:18px;border-radius:3px;flex:none}
+.c .txt{min-width:0}
+.c .nm{font-size:11.5px;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.c .sub{font-family:var(--mono);font-size:9.5px;color:var(--txt-3);margin-top:1px;display:flex;gap:6px}
+.c .right{display:flex;align-items:center;gap:6px;color:var(--txt-3);font-size:10px}
+.c .grouphead{display:flex;align-items:center;gap:7px;padding:8px 9px 4px}
+.c .grouphead .cap{color:var(--txt-3)}
+.c .grouphead i{flex:1;height:1px;background:var(--line-soft)}
+
+footer{margin-top:26px;color:var(--txt-3);font-size:11px;line-height:1.7;max-width:900px}
+footer b{color:var(--txt-2)}
+</style>
+</head>
+<body>
+
+<h1>The layers sidebar, three ways</h1>
+<p class="lede">
+  Same map in each: two data layers, one of them a group, an imagery layer, the live feed and the
+  basemap. The question each one answers differently is how much a row should tell you before you
+  click it — and what the panel does when there are thirty rows rather than five.
+</p>
+
+<div class="row">
+
+  <!-- ================= A ================= -->
+  <section class="opt a">
+    <h2>A · Dense rows</h2>
+    <p class="why">
+      What is there now, tightened. One line per layer, 26 pixels, everything else behind selection.
+      The most rows per screen and the least said about any of them.
+    </p>
+    <div class="frame">
+      <div class="ph"><span class="cap">Table of contents</span><span class="n">6</span></div>
+      <div class="body">
+        <div class="slot"><span class="cap">Overlay</span><i></i></div>
+        <div class="r"><span class="grip">⋮⋮</span><span class="sym" style="background:rgba(76,141,255,.25);border:1px solid var(--accent)"></span><span class="nm">Drawings</span><span class="eye">◉</span></div>
+
+        <div class="slot"><span class="cap">Data</span><i></i></div>
+        <div class="r"><span class="grip">⋮⋮</span><span class="sym" style="background:#2a2a30;border:1px solid #3a3a44"></span><span class="nm">▾ Administrative</span><span class="eye">◉</span></div>
+        <div class="r kid"><span class="sym" style="background:#4c8dff33;border:1px solid #4c8dff"></span><span class="nm">Countries</span><span class="eye">◉</span></div>
+        <div class="r kid"><span class="sym" style="background:#38d6c033;border:1px solid #38d6c0"></span><span class="nm">Provinces</span><span class="eye">○</span></div>
+        <div class="r sel"><span class="grip">⋮⋮</span><span class="sym" style="background:linear-gradient(135deg,#3d5a3a,#7a6a4a)"></span><span class="nm">Imagery</span><span class="chip">23</span><span class="eye">◉</span></div>
+        <div class="r"><span class="grip">⋮⋮</span><span class="sym" style="background:#e8b14c33;border:1px solid #e8b14c"></span><span class="nm">Populated places</span><span class="eye">◉</span></div>
+
+        <div class="slot"><span class="cap">Live</span><i></i></div>
+        <div class="r"><span class="grip">⋮⋮</span><span class="sym" style="background:#38d6c0;border-radius:50%"></span><span class="nm">Live assets</span><span class="chip">off</span><span class="eye">○</span></div>
+
+        <div class="slot"><span class="cap">Base</span><i></i></div>
+        <div class="r"><span class="sym" style="background:#1a1a1e;border:1px solid var(--line)"></span><span class="nm">Dark canvas</span><span class="chip">locked</span></div>
+      </div>
+    </div>
+    <p class="verdict">
+      <b>For:</b> thirty layers fit without scrolling. <b>Against:</b> a row says almost nothing —
+      you cannot tell a graduated choropleth from a single colour, or which layers are filtered,
+      without selecting each one in turn.
+    </p>
+  </section>
+
+  <!-- ================= B ================= -->
+  <section class="opt b">
+    <h2>B · Cards with a legend strip</h2>
+    <p class="why">
+      One card per layer carrying its actual symbology: the colour ramp for a graduated layer, the
+      feature count, whether a filter is on. The panel becomes the legend.
+    </p>
+    <div class="frame">
+      <div class="ph"><span class="cap">Table of contents</span><span class="n">6</span></div>
+      <div class="body">
+        <div class="slot"><span class="cap">Data</span><i></i></div>
+
+        <div class="card">
+          <div class="top"><span class="sw on"></span><span class="nm">Population density</span><span class="chip">42</span></div>
+          <div class="strip">
+            <i style="background:#f7fbff"></i><i style="background:#c6dbef"></i><i style="background:#6baed6"></i><i style="background:#2171b5"></i><i style="background:#08306b"></i>
+          </div>
+          <div class="meta"><span class="k">graduated · 5 classes</span><span class="bar"><u style="width:62%"></u></span></div>
+          <div class="acts"><button>Style</button><button>Filter</button><button>Table</button></div>
+        </div>
+
+        <div class="card sel">
+          <div class="top"><span class="sw on"></span><span class="nm">Imagery</span><span class="chip">23</span></div>
+          <div class="strip">
+            <i style="background:#3d5a3a"></i><i style="background:#6a6a4a"></i><i style="background:#7a6a4a"></i><i style="background:#4a5568"></i><i style="background:#5a5344"></i>
+          </div>
+          <div class="meta"><span class="k">raster · 2010–2018 · 63 cm</span></div>
+          <div class="acts"><button>Browse</button><button>Rule</button><button>Attributes</button></div>
+        </div>
+
+        <div class="card">
+          <div class="top"><span class="sw"></span><span class="nm">Populated places</span><span class="chip">1 249</span></div>
+          <div class="strip"><i style="background:#e8b14c"></i></div>
+          <div class="meta"><span class="k">point · filtered</span></div>
+          <div class="acts"><button>Style</button><button>Filter</button><button>Table</button></div>
+        </div>
+      </div>
+    </div>
+    <p class="verdict">
+      <b>For:</b> the panel answers "what am I looking at" without a click; the ramp is right there.
+      <b>Against:</b> three layers fill the screen. Anyone with twenty is scrolling constantly, and
+      that is the common case once a database has real data in it.
+    </p>
+  </section>
+
+  <!-- ================= C ================= -->
+  <section class="opt c">
+    <h2>C · Two-line rows</h2>
+    <p class="why">
+      A middle: the name on one line and what the layer <em>is</em> on the second — geometry, count,
+      date span, whether a filter is on — with the symbol carrying the ramp.
+    </p>
+    <div class="frame">
+      <div class="ph"><span class="cap">Table of contents</span><span class="n">6</span></div>
+      <div class="body">
+        <div class="grouphead"><span class="cap">Data</span><i></i></div>
+
+        <div class="r">
+          <span class="sym" style="background:linear-gradient(180deg,#08306b,#6baed6,#f7fbff)"></span>
+          <span class="rail"></span>
+          <span class="txt">
+            <span class="nm">Population density</span>
+            <span class="sub"><span>polygon</span><span>42</span><span>graduated ×5</span></span>
+          </span>
+          <span class="right">◉</span>
+        </div>
+
+        <div class="r sel">
+          <span class="sym" style="background:linear-gradient(135deg,#3d5a3a,#7a6a4a,#4a5568)"></span>
+          <span class="rail"></span>
+          <span class="txt">
+            <span class="nm">Imagery</span>
+            <span class="sub"><span>raster</span><span>23</span><span>2010–2018</span></span>
+          </span>
+          <span class="right">◉</span>
+        </div>
+
+        <div class="r">
+          <span class="sym" style="background:#e8b14c33;border:1px solid #e8b14c"></span>
+          <span class="rail"></span>
+          <span class="txt">
+            <span class="nm">Populated places</span>
+            <span class="sub"><span>point</span><span>1 249</span><span style="color:var(--warn)">filtered</span></span>
+          </span>
+          <span class="right">◉</span>
+        </div>
+
+        <div class="grouphead"><span class="cap">Live</span><i></i></div>
+        <div class="r">
+          <span class="sym" style="background:#38d6c0;border-radius:50%"></span>
+          <span class="rail"></span>
+          <span class="txt">
+            <span class="nm">Live assets</span>
+            <span class="sub"><span>websocket</span><span style="color:var(--txt-3)">off</span></span>
+          </span>
+          <span class="right">○</span>
+        </div>
+
+        <div class="grouphead"><span class="cap">Base</span><i></i></div>
+        <div class="r">
+          <span class="sym" style="background:#1a1a1e;border:1px solid var(--line)"></span>
+          <span class="rail"></span>
+          <span class="txt">
+            <span class="nm">Dark canvas</span>
+            <span class="sub"><span>raster</span><span>OpenFreeMap</span></span>
+          </span>
+          <span class="right">🔒</span>
+        </div>
+      </div>
+    </div>
+    <p class="verdict">
+      <b>For:</b> twice the information of A for 1.6× the height, and the second line is where the
+      things you actually search for live — the count, the filter, the date span.
+      <b>Against:</b> more visual noise than A when every layer is the same kind.
+    </p>
+  </section>
+
+</div>
+
+<footer>
+  <p style="margin-bottom:10px">
+    <b>My recommendation is C.</b> The reason is what you have been running into all afternoon: with
+    A you cannot tell from the panel whether a layer is filtered, how many features it has, or what
+    the imagery layer's date span is — you have to select each one and read the inspector, which is
+    four clicks to answer a question the panel could have answered by existing. B answers all of it
+    and then fits three layers on a screen, which is worse than the problem.
+  </p>
+  <p>
+    C also has room for the thing A has nowhere to put: a <b>state line</b>. A layer whose tiles are
+    failing, whose filter matches nothing, or whose source is a WMS that has stopped answering can
+    say so on its second line, in colour, without a dialog. That is most of the difference between
+    software that feels finished and software that goes quiet when something breaks.
+  </p>
+</footer>
+
+</body>
+</html>

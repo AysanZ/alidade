@@ -54,20 +54,20 @@ services/api         FastAPI: ingest, vector tiles, imagery, WMS, live feed
 
 <table>
 <tr>
-<td width="50%"><img src="docs/images/studio.png" alt="The table of contents on a fresh install"><br><sub><b>A fresh install.</b> The database ships empty, and the panel says what to do about it rather than hiding it.</sub></td>
-<td width="50%"><img src="docs/images/basemaps.jpg" alt="The basemap gallery"><br><sub><b>Basemaps, none of which need a key.</b> Swapping one does not disturb your layers.</sub></td>
+<td width="50%"><img src="docs/images/layers.png" alt="Two layers, symbology and the legend"><br><sub><b>Layers, styled.</b> Markers, outlines and a legend that follows what you set, over data loaded from a link a minute earlier.</sub></td>
+<td width="50%"><img src="docs/images/attributes.png" alt="Identify and the attribute table"><br><sub><b>Ask it things.</b> Click a feature for what it is; the table pages, searches and finds the same row.</sub></td>
 </tr>
 <tr>
 <td><img src="docs/images/globe.jpg" alt="The globe projection"><br><sub><b>A real globe</b>, not a picture of one — and a sphere at every zoom if you ask for one.</sub></td>
-<td><img src="docs/images/buildings.png" alt="OpenStreetMap buildings raised to their height"><br><sub><b>Footprints raised to their real height</b>, lit from where the sun actually was.</sub></td>
+<td><img src="docs/images/buildings.png" alt="OpenStreetMap buildings raised to their height"><br><sub><b>3D buildings from OpenStreetMap.</b> Footprints extruded to their real height, lit from where the sun actually was.</sub></td>
 </tr>
 <tr>
-<td><img src="docs/images/models.png" alt="The 3D model catalogue and a van placed on a street"><br><sub><b>glTF on the map</b>, sized in metres, standing on the terrain and sharing the map's depth buffer.</sub></td>
 <td><img src="docs/images/approach.png" alt="An airliner on final approach"><br><sub><b>Fly a landing.</b> The aircraft banks because it is turning, not because a keyframe said so.</sub></td>
+<td><img src="docs/images/live.png" alt="The live asset layer"><br><sub><b>A live fleet over a WebSocket</b>, with a connection light, because a stopped feed and a still fleet look identical.</sub></td>
 </tr>
 <tr>
-<td><img src="docs/images/live.png" alt="The live asset layer"><br><sub><b>A live fleet over a WebSocket</b>, with a connection light, because a stopped feed and a still fleet look identical.</sub></td>
 <td><img src="docs/images/imagery.svg" alt="How the imagery layer chooses what to draw"><br><sub><b>Imagery.</b> A schematic rather than a screenshot: what is on the map is whatever you loaded. See <a href="docs/imagery.md">the imagery notes</a>.</sub></td>
+<td><img src="docs/images/basemaps.jpg" alt="The basemap gallery"><br><sub><b>Basemaps, none of which need a key.</b> Swapping one does not disturb your layers.</sub></td>
 </tr>
 </table>
 

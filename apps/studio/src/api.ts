@@ -24,6 +24,23 @@ export interface ReadOptions {
   signal?: AbortSignal;
 }
 
+/**
+ * What the server said, as something a person can act on.
+ *
+ * The status codes that reach a user here come from nginx rather than from the
+ * API — a body too large, or too many writes in a minute — and nginx answers
+ * them with an HTML page. Parsing that fails, so without this the interface
+ * reported "The server answered 413", which reads as a fault in Alidade rather
+ * than as a limit somebody set on purpose.
+ */
+const REFUSALS: Record<number, string> = {
+  413: "That file is larger than this server accepts. Try a smaller one, or run Alidade yourself, where the limit is yours to set.",
+  429: "That is more uploads than this server allows in a minute. Wait a moment and try again.",
+  502: "The server is not answering. It may be restarting.",
+  503: "The server is busy. If it was converting a large image, give it a minute.",
+  504: "The server took too long to answer. A large file can outlast the gateway's patience.",
+};
+
 async function json<T>(response: Response): Promise<T> {
   if (!response.ok) {
     if (response.status === 405 || response.status === 404) {
@@ -31,8 +48,12 @@ async function json<T>(response: Response): Promise<T> {
         "The API does not have this endpoint. Rebuild it: docker compose -f deploy/docker-compose.yml up -d --build api",
       );
     }
+    // The API's own detail first: it knows which limit was hit and by how much,
+    // which no message written here can.
     const body = (await response.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(body?.detail ?? `The server answered ${response.status}.`);
+    throw new Error(
+      body?.detail ?? REFUSALS[response.status] ?? `The server answered ${response.status}.`,
+    );
   }
   return (await response.json()) as T;
 }
