@@ -1,0 +1,9 @@
+# Alidade — https://github.com/AysanZ/alidade
+#
+# The studio is one page. /api/ is a tile and feature surface whose URL space is
+# effectively unbounded: every zoom, column and row is its own address, and a
+# raster tile is rendered from a COG on request. Crawling it costs this server
+# real work and returns nothing an index can use.
+
+User-agent: *
+Disallow: /api/
