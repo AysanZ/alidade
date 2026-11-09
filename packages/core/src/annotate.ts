@@ -165,6 +165,11 @@ export function bufferGeoJSON(
   return { type: "FeatureCollection", features };
 }
 
+
+export function buffer () {
+  re
+}
+
 /** A circle of the given radius, as a ring of 48 positions. */
 export function disc(centre: [number, number], metres: number, steps = 48): [number, number][] {
   const ring: [number, number][] = [];
